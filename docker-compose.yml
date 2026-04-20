@@ -1,0 +1,22 @@
+services:
+  auth-server-db:
+    image: mysql:8
+    container_name: auth-server-db
+    ports:
+      - "3307:3307"
+    expose:
+      - "3307"
+    deploy:
+      resources:
+        limits:
+          memory: 500m
+    networks:
+      - roots_backend
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
+      MYSQL_TCP_PORT: 3307
+      MYSQL_DATABASE: auth-server-db
+
+networks:
+  roots_backend:
+    driver: bridge
