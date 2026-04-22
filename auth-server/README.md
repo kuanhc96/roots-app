@@ -8,7 +8,7 @@ A fullstack Spring Boot + Nuxt/Vue application that handles authentication for t
 |---|---|---|---|
 | `MYSQL_AUTH_SERVER_ROOT_USERNAME` | Yes | — | MySQL username |
 | `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | Yes | — | MySQL password |
-| `DB_URL` | No | `jdbc:mysql://localhost:3307/auth-server-db` | JDBC connection URL |
+| `MYSQL_AUTH_SERVER_DB_URL` | No | `jdbc:mysql://localhost:3307/auth-server-db` | JDBC connection URL |
 | `SERVER_PORT` | No | `9000` | HTTP port the server listens on |
 
 `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` must be provided as JVM arguments (or environment variables) at startup, for example:
