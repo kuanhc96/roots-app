@@ -5,6 +5,12 @@ export default defineNuxtConfig({
   // Generate a fully static site that Spring Boot can serve
   ssr: true,
 
+  modules: ['vuetify-nuxt-module'],
+
+  routeRules: {
+    '/': { redirect: '/login' },
+  },
+
   app: {
     head: {
       title: 'Auth Server',
