@@ -8,6 +8,10 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview"
   },
+  "dependencies": {
+    "vuetify": "^4.0.5",
+    "vuetify-nuxt-module": "^0.19.5"
+  },
   "devDependencies": {
     "nuxt": "^3.11.2",
     "vue": "^3.4.21",
