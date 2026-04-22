@@ -16,5 +16,10 @@
         <HomeCard title="My Profile" />
       </v-col>
     </v-row>
+    <v-row justify="center" class="mb-4">
+      <v-col cols="10" md="8">
+        <RoleApiCard />
+      </v-col>
+    </v-row>
   </v-container>
 </template>
