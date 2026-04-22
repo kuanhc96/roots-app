@@ -6,4 +6,9 @@ export default defineNuxtConfig({
   routeRules: {
     '/': { redirect: '/home' },
   },
+  runtimeConfig: {
+    public: {
+      simpleResourceServerUrl: 'http://localhost:8081',
+    },
+  },
 })
