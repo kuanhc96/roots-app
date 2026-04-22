@@ -34,6 +34,22 @@ The `auth-server-db` MySQL instance runs on port **3307** (not the default 3306)
 - `web-client/` — standalone Nuxt 4 app, developed and deployed independently
 - `auth-server/frontend/` — Nuxt app embedded inside auth-server's Spring Boot JAR via Maven build
 
+### auth-server/frontend structure
+
+```
+auth-server/frontend/
+├── app.vue                          # root layout wrapper
+├── components/
+│   └── LoginForm.vue                # Vuetify card: email + password fields, login button
+├── pages/
+│   ├── login.vue                    # /login — mounts LoginForm centered on page
+│   └── about.vue                    # /about
+├── nuxt.config.ts
+└── package.json
+```
+
+UI uses **Vuetify 4** (`vuetify-nuxt-module`). `/` redirects to `/login` via `routeRules`.
+
 ### web-client structure
 
 ```
