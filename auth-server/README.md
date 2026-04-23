@@ -4,12 +4,13 @@ A fullstack Spring Boot + Nuxt/Vue application that handles authentication for t
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `MYSQL_AUTH_SERVER_ROOT_USERNAME` | Yes | — | MySQL username |
-| `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | Yes | — | MySQL password |
-| `MYSQL_AUTH_SERVER_DB_URL` | No | `jdbc:mysql://localhost:3307/auth-server-db` | JDBC connection URL |
-| `SERVER_PORT` | No | `9000` | HTTP port the server listens on |
+| Variable                          | Required | Default | Description                     |
+|-----------------------------------|---|---|---------------------------------|
+| `MYSQL_AUTH_SERVER_ROOT_USERNAME` | Yes | — | MySQL username                  |
+| `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | Yes | — | MySQL password                  |
+| `WEB_CLIENT_SECRET`               | Yes | — | client secret of web-client     |
+| `MYSQL_AUTH_SERVER_DB_URL`        | No | `jdbc:mysql://localhost:3307/auth-server-db` | JDBC connection URL             |
+| `SERVER_PORT`                     | No | `9000` | HTTP port the server listens on |
 
 `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` must be provided as JVM arguments (or environment variables) at startup, for example:
 
