@@ -1,3 +1,15 @@
+<script setup lang="ts">
+const config = useRuntimeConfig()
+
+onBeforeMount(() => {
+  const userGUID = sessionStorage.getItem('userGUID')
+  const email = sessionStorage.getItem('email')
+  if (!userGUID?.trim() || !email?.trim()) {
+    window.location.href = `${config.public.authServerUrl}/login`
+  }
+})
+</script>
+
 <template>
   <v-container class="px-6">
     <v-row justify="center" class="mb-4">
