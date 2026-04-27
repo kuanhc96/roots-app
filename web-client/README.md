@@ -1,75 +1,22 @@
-# Nuxt Minimal Starter
+# web-client
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+Standalone Nuxt 4 / Vue 3 frontend for roots-app.
 
-## Setup
+## Environment Variables
 
-Make sure to install dependencies:
+All public runtime config variables follow Nuxt's `NUXT_PUBLIC_*` naming convention and can be set as environment variables before starting the app.
 
-```bash
-# npm
-npm install
+| Environment Variable | Default | Description |
+|---|---|---|
+| `NUXT_PUBLIC_SIMPLE_RESOURCE_SERVER_URL` | `http://localhost:8081` | Base URL of `simple-resource-server` |
+| `NUXT_PUBLIC_AUTH_SERVER_URL` | `http://localhost:9000` | Base URL of `auth-server`; used to redirect unauthenticated users to the login page |
 
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
-```
-
-## Development Server
-
-Start the development server on `http://localhost:3000`:
+## Commands
 
 ```bash
-# npm
-npm run dev
-
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
+npm install         # install dependencies
+npm run dev         # dev server on :3000
+npm run build       # SSR build
+npm run generate    # static export
+npm run preview     # preview production build locally
 ```
-
-## Production
-
-Build the application for production:
-
-```bash
-# npm
-npm run build
-
-# pnpm
-pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
-```
-
-Locally preview production build:
-
-```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
