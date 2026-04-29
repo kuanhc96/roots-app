@@ -12,11 +12,15 @@
       <v-alert v-if="response" type="success" variant="tonal">{{ response }}</v-alert>
       <v-alert v-if="error" type="error" variant="tonal">{{ error }}</v-alert>
     </v-card-text>
+    <v-card-actions>
+      <v-btn @click="authorize">authorize</v-btn>
+    </v-card-actions>
   </v-card>
 </template>
 
 <script setup lang="ts">
 const client = useSimpleResourceClient()
+const config = useRuntimeConfig()
 
 const response = ref<string>('')
 const error = ref<string>('')
@@ -45,5 +49,24 @@ async function callRole(method: RoleMethod) {
   } finally {
     loading.value = false
   }
+}
+
+function authorize() {
+  const accessToken = sessionStorage.getItem('access_token')
+  if (!accessToken?.trim()) {
+    const state = crypto.randomUUID()
+    sessionStorage.setItem('oauth_state', state)
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: config.public.webClientId,
+      redirect_uri: `${window.location.origin}/callback`,
+      scope: 'openid WEB_CLIENT_READ',
+      state,
+    })
+
+    window.location.href = `${config.public.authServerUrl}/oauth2/authorize?${params.toString()}`
+  }
+
 }
 </script>
