@@ -87,6 +87,7 @@ public class SecurityConfig {
         RegisteredClient webClient = RegisteredClient.withId(UUID.randomUUID().toString())
                 .clientId("WEB_CLIENT")
                 .clientSecret("{noop}" + webClientSecret)
+                .clientSettings(ClientSettings.builder().requireProofKey(false).build())
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
