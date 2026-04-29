@@ -55,7 +55,6 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
-import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -112,6 +111,8 @@ public class SecurityConfig {
         return http.build();
     }
 
+    // TODO: this is a temporary measure. The frontend client should not be able to
+    // call the auth-server's /token endpoint directly
     @Bean
     public FilterRegistrationBean<CorsFilter> corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
