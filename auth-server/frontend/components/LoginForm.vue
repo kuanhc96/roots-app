@@ -14,7 +14,4 @@
 </template>
 
 <script setup lang="ts">
-const email = ref('')
-const password = ref('')
-function login() {}
 </script>
