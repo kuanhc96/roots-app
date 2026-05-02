@@ -58,6 +58,7 @@ onMounted(async () => {
 
     sessionStorage.setItem('access_token', tokenData.access_token)
     if (tokenData.id_token) sessionStorage.setItem('id_token', tokenData.id_token)
+    if (tokenData.refresh_token) sessionStorage.setItem('refresh_token', tokenData.refresh_token)
 
     router.replace('/home')
   } catch (e) {
