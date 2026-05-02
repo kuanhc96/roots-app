@@ -3,8 +3,11 @@ import axios, { type AxiosInstance } from 'axios'
 export class SimpleResourceClient {
   private readonly http: AxiosInstance
 
-  constructor(baseUrl: string) {
-    this.http = axios.create({ baseURL: baseUrl })
+  constructor(baseUrl: string, accessToken?: string) {
+    this.http = axios.create({
+      baseURL: baseUrl,
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    })
   }
 
   getPastor() {

@@ -1,3 +1,10 @@
+<script setup lang="ts">
+const config = useRuntimeConfig()
+
+onBeforeMount(() => {
+})
+</script>
+
 <template>
   <v-container class="px-6">
     <v-row justify="center" class="mb-4">
