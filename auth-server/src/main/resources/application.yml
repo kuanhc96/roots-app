@@ -21,3 +21,7 @@ management:
   endpoint:
     health:
       show-details: always
+
+web-client:
+  client-secret: ${WEB_CLIENT_SECRET}
+  redirect-uri: ${WEB_CLIENT_REDIRECT_URI:http://localhost:3000/callback}

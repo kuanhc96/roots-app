@@ -4,12 +4,14 @@ A fullstack Spring Boot + Nuxt/Vue application that handles authentication for t
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `MYSQL_AUTH_SERVER_ROOT_USERNAME` | Yes | — | MySQL username |
-| `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | Yes | — | MySQL password |
-| `MYSQL_AUTH_SERVER_DB_URL` | No | `jdbc:mysql://localhost:3307/auth-server-db` | JDBC connection URL |
-| `SERVER_PORT` | No | `9000` | HTTP port the server listens on |
+| Variable                          | Required | Default | Description                     |
+|-----------------------------------|---|---|---------------------------------|
+| `MYSQL_AUTH_SERVER_ROOT_USERNAME` | Yes | — | MySQL username                  |
+| `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | Yes | — | MySQL password                  |
+| `WEB_CLIENT_SECRET`               | Yes | — | OAuth2 client secret for the registered `WEB_CLIENT`; must match `NUXT_PUBLIC_WEB_CLIENT_SECRET` in web-client |
+| `MYSQL_AUTH_SERVER_DB_URL`        | No | `jdbc:mysql://localhost:3307/auth-server-db` | JDBC connection URL             |
+| `SERVER_PORT`                     | No | `9000` | HTTP port the server listens on |
+| `WEB_CLIENT_REDIRECT_URI`         | No | `http://localhost:3000/callback` | OAuth2 redirect URI registered for `WEB_CLIENT`; must match the callback page URL in web-client |
 
 `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` must be provided as JVM arguments (or environment variables) at startup, for example:
 
