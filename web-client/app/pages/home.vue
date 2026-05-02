@@ -2,11 +2,6 @@
 const config = useRuntimeConfig()
 
 onBeforeMount(() => {
-  const userGUID = sessionStorage.getItem('userGUID')
-  const email = sessionStorage.getItem('email')
-  if (!userGUID?.trim() || !email?.trim()) {
-    window.location.href = `${config.public.authServerUrl}/login`
-  }
 })
 </script>
 
