@@ -1,4 +1,5 @@
 export const useSimpleResourceClient = () => {
   const config = useRuntimeConfig()
-  return new SimpleResourceClient(config.public.simpleResourceServerUrl)
+  const accessToken = import.meta.client ? (sessionStorage.getItem('access_token') ?? undefined) : undefined
+  return new SimpleResourceClient(config.public.simpleResourceServerUrl, accessToken)
 }

@@ -10,6 +10,8 @@ export default defineNuxtConfig({
     public: {
       simpleResourceServerUrl: 'http://localhost:8081',
       authServerUrl: 'http://localhost:9000',
+      webClientId: 'WEB_CLIENT',
+      webClientSecret: '',
     },
   },
 })
