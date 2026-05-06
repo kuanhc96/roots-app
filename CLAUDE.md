@@ -27,7 +27,7 @@ It bundles a Nuxt frontend via Maven. The Maven build:
 
 The `auth-server-db` MySQL instance runs on port **3307** (not the default 3306) and is defined in `docker-compose.yml`. DB schema is in `auth-server/src/main/resources/initialize_db/`.
 
-**Required env vars at startup:** `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` (no defaults). `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`. `SERVER_PORT` defaults to `9000`. `WEB_CLIENT_REDIRECT_URI` defaults to `http://localhost:3000/callback`.
+**Required env vars at startup:** `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` (no defaults). `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`. `SERVER_PORT` defaults to `9000`. `WEB_CLIENT_REDIRECT_URI` defaults to `http://localhost:3000/callback`. `REMEMBER_ME_KEY` defaults to `dev-remember-me-key-change-in-prod` (change in production). `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` defaults to `1209600` (14 days).
 
 ### Spring Security / OAuth2 Authorization Server
 
@@ -76,7 +76,7 @@ GET http://localhost:9000/oauth2/authorize?response_type=code&client_id=WEB_CLIE
 auth-server/frontend/
 ├── app.vue                          # root layout wrapper
 ├── components/
-│   └── LoginForm.vue                # Vuetify card: email + password fields, login button
+│   └── LoginForm.vue                # native HTML form (POST /login); email + password fields intercepted by Spring Security's UsernamePasswordAuthenticationFilter
 ├── pages/
 │   ├── login.vue                    # /login — mounts LoginForm centered on page
 │   └── about.vue                    # /about
@@ -94,7 +94,7 @@ web-client/
 │   ├── app.vue                          # root layout wrapper
 │   ├── components/
 │   │   ├── HomeCard.vue                 # reusable card (title, lorem ipsum, disabled button)
-│   │   └── RoleApiCard.vue              # wide card with 6 role API buttons + response display
+│   │   └── RoleApiCard.vue              # wide card with 6 role API buttons + response display; authorize button triggers OAuth2 Authorization Code flow if no valid access token
 │   ├── composables/
 │   │   └── useSimpleResourceClient.ts   # instantiates SimpleResourceClient from runtimeConfig
 │   ├── pages/
