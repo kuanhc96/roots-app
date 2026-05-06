@@ -37,6 +37,7 @@ Auth-server runs as an **OAuth2 Authorization Server** (Spring Authorization Ser
 - CORS and CSRF are disabled globally
 - `SpaController` and Spring Security coexist on `/login`: GET `/login` is permitted through to the controller (forwards to Nuxt page); POST `/login` is intercepted by Spring Security's filter before MVC for credential processing
 - `UserDetailsService` uses `JdbcUserDetailsManager` with custom queries against the `user_credential`/`role` schema; `email` is the lookup key
+- Remember-me is opt-in: the login form posts `remember-me=true` when the checkbox is checked; `TokenBasedRememberMeServices` (SHA-256, `alwaysRemember=false`) only issues the cookie when that parameter is present
 - JWK key pair is generated in-memory at startup (dev/test only — tokens are invalidated on restart)
 
 **OAuth2 protocol endpoints:**
@@ -76,7 +77,7 @@ GET http://localhost:9000/oauth2/authorize?response_type=code&client_id=WEB_CLIE
 auth-server/frontend/
 ├── app.vue                          # root layout wrapper
 ├── components/
-│   └── LoginForm.vue                # native HTML form (POST /login); email + password fields intercepted by Spring Security's UsernamePasswordAuthenticationFilter
+│   └── LoginForm.vue                # native HTML form (POST /login); email, password, and optional remember-me checkbox; intercepted by Spring Security's UsernamePasswordAuthenticationFilter
 ├── pages/
 │   ├── login.vue                    # /login — mounts LoginForm centered on page
 │   └── about.vue                    # /about
