@@ -21,7 +21,6 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -43,8 +42,6 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
-import org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat;
-import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.security.provisioning.JdbcUserDetailsManager;
@@ -221,7 +218,7 @@ public class SecurityConfig {
     public TokenBasedRememberMeServices rememberMeServices(UserDetailsService userDetailsService) {
         TokenBasedRememberMeServices services = new TokenBasedRememberMeServices(
                 rememberMeKey, userDetailsService, RememberMeTokenAlgorithm.SHA256);
-        services.setAlwaysRemember(true);
+        services.setAlwaysRemember(false);
         services.setTokenValiditySeconds(rememberMeTokenValiditySeconds);
         return services;
     }
@@ -241,12 +238,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    public AuthenticationSuccessHandler successHandler(TokenBasedRememberMeServices rememberMeServices) {
-        return (request, response, authentication) -> {
-            rememberMeServices.loginSuccess(request, response, authentication);
-            new SavedRequestAwareAuthenticationSuccessHandler()
-                    .onAuthenticationSuccess(request, response, authentication);
-        };
+    public AuthenticationSuccessHandler successHandler() {
+        return new SavedRequestAwareAuthenticationSuccessHandler();
     }
 
     @Bean
