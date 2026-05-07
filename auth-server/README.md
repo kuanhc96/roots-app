@@ -34,6 +34,12 @@ mvn spring-boot:run
 mvn test
 ```
 
+## Remember Me
+
+The login form includes an optional "Remember Me?" checkbox. When checked, Spring Security sets a `remember-me` cookie (SHA-256 token, valid for `REMEMBER_ME_TOKEN_VALIDITY_SECONDS`) that automatically re-authenticates the user on their next visit. When the box is unchecked, no cookie is issued and the session ends when the browser closes.
+
+`REMEMBER_ME_KEY` should be a stable secret in production — changing it invalidates all existing remember-me cookies.
+
 ## Database
 
 Connects to a MySQL 8 instance on port **3307** by default. The schema is defined in `src/main/resources/initialize_db/`. Hibernate is set to `validate` mode — it checks that the schema matches the JPA entities on startup but makes no changes to the database.
