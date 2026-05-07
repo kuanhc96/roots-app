@@ -12,6 +12,8 @@ A fullstack Spring Boot + Nuxt/Vue application that handles authentication for t
 | `MYSQL_AUTH_SERVER_DB_URL`        | No | `jdbc:mysql://localhost:3307/auth-server-db` | JDBC connection URL             |
 | `SERVER_PORT`                     | No | `9000` | HTTP port the server listens on |
 | `WEB_CLIENT_REDIRECT_URI`         | No | `http://localhost:3000/callback` | OAuth2 redirect URI registered for `WEB_CLIENT`; must match the callback page URL in web-client |
+| `REMEMBER_ME_KEY`                 | No | `dev-remember-me-key-change-in-prod` | Secret key used to sign remember-me cookies; change in production |
+| `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` | No | `1209600` (14 days) | Lifetime of the remember-me cookie in seconds |
 
 `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` must be provided as JVM arguments (or environment variables) at startup, for example:
 
@@ -31,6 +33,12 @@ mvn spring-boot:run
 # Run tests only
 mvn test
 ```
+
+## Remember Me
+
+The login form includes an optional "Remember Me?" checkbox. When checked, Spring Security sets a `remember-me` cookie (SHA-256 token, valid for `REMEMBER_ME_TOKEN_VALIDITY_SECONDS`) that automatically re-authenticates the user on their next visit. When the box is unchecked, no cookie is issued and the session ends when the browser closes.
+
+`REMEMBER_ME_KEY` should be a stable secret in production — changing it invalidates all existing remember-me cookies.
 
 ## Database
 

@@ -15,6 +15,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authentication.RememberMeAuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -23,6 +24,11 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.web.authentication.RememberMeServices;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.rememberme.RememberMeAuthenticationFilter;
+import org.springframework.security.web.authentication.rememberme.TokenBasedRememberMeServices;
+import org.springframework.security.web.authentication.rememberme.TokenBasedRememberMeServices.RememberMeTokenAlgorithm;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
@@ -36,8 +42,6 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
-import org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat;
-import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.security.provisioning.JdbcUserDetailsManager;
@@ -70,6 +74,12 @@ public class SecurityConfig {
     @Value("${web-client.redirect-uri}")
     private String webClientRedirectUri;
 
+    @Value("${remember-me.key}")
+    private String rememberMeKey;
+
+    @Value("${remember-me.token-validity-seconds}")
+    private int rememberMeTokenValiditySeconds;
+
     @Bean
     @Order(1)
     public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
@@ -94,12 +104,16 @@ public class SecurityConfig {
     public SecurityFilterChain defaultSecurityFilterChain(
             HttpSecurity http,
             AuthenticationManager authenticationManager,
-            AuthenticationSuccessHandler successHandler) throws Exception {
+            AuthenticationSuccessHandler successHandler,
+            TokenBasedRememberMeServices rememberMeServices,
+            RememberMeAuthenticationFilter rememberMeAuthenticationFilter) throws Exception {
         http
                 .authenticationManager(authenticationManager)
                 .authorizeHttpRequests(auth -> auth
                         .anyRequest().permitAll()
                 )
+                .rememberMe(rm -> rm.rememberMeServices(rememberMeServices))
+                .addFilterAfter(rememberMeAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .formLogin(form -> form
                         .loginPage("/login")
                         .loginProcessingUrl("/login")
@@ -175,8 +189,38 @@ public class SecurityConfig {
     }
 
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationProvider authenticationProvider) {
-        return new ProviderManager(authenticationProvider);
+    public UsernamePasswordAuthenticationFilter usernamePasswordAuthenticationFilter(AuthenticationManager authenticationManager, RememberMeServices rememberMeServices) {
+        UsernamePasswordAuthenticationFilter usernamePasswordAuthenticationFilter = new UsernamePasswordAuthenticationFilter(authenticationManager);
+        usernamePasswordAuthenticationFilter.setRememberMeServices(rememberMeServices);
+        return usernamePasswordAuthenticationFilter;
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(
+            AuthenticationProvider authenticationProvider,
+            RememberMeAuthenticationProvider rememberMeAuthenticationProvider) {
+        return new ProviderManager(authenticationProvider, rememberMeAuthenticationProvider);
+    }
+
+    @Bean
+    public RememberMeAuthenticationProvider rememberMeAuthenticationProvider() {
+        return new RememberMeAuthenticationProvider(rememberMeKey);
+    }
+
+    @Bean
+    public RememberMeAuthenticationFilter rememberMeAuthenticationFilter(AuthenticationManager authenticationManager, TokenBasedRememberMeServices rememberMeServices) {
+        RememberMeAuthenticationFilter rememberMeAuthenticationFilter = new RememberMeAuthenticationFilter(authenticationManager, rememberMeServices);
+        rememberMeAuthenticationFilter.setAuthenticationSuccessHandler(new SavedRequestAwareAuthenticationSuccessHandler());
+        return rememberMeAuthenticationFilter;
+    }
+
+    @Bean
+    public TokenBasedRememberMeServices rememberMeServices(UserDetailsService userDetailsService) {
+        TokenBasedRememberMeServices services = new TokenBasedRememberMeServices(
+                rememberMeKey, userDetailsService, RememberMeTokenAlgorithm.SHA256);
+        services.setAlwaysRemember(false);
+        services.setTokenValiditySeconds(rememberMeTokenValiditySeconds);
+        return services;
     }
 
     @Bean

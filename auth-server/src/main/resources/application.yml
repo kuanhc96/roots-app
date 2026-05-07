@@ -25,3 +25,7 @@ management:
 web-client:
   client-secret: ${WEB_CLIENT_SECRET}
   redirect-uri: ${WEB_CLIENT_REDIRECT_URI:http://localhost:3000/callback}
+
+remember-me:
+  key: ${REMEMBER_ME_KEY:dev-remember-me-key-change-in-prod}
+  token-validity-seconds: ${REMEMBER_ME_TOKEN_VALIDITY_SECONDS:1209600}
