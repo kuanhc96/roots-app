@@ -19,4 +19,9 @@ public class SpaController {
     public String forwardLogin() {
         return "forward:/login/index.html";
     }
+
+    @GetMapping("/ott/sent")
+    public String forwardOttSent() {
+        return "forward:/ott/sent/index.html";
+    }
 }
