@@ -34,9 +34,40 @@ mvn spring-boot:run
 mvn test
 ```
 
+## Multi-Factor Authentication (MFA)
+
+Every login — whether via username/password or a remember-me cookie — requires a one-time token (OTT) second factor before a fully authenticated session is established.
+
+### Flow
+
+1. User submits credentials on `/login` (or browser sends a remember-me cookie automatically).
+2. Spring Security validates the first factor. On success, the session holds a `MfaPendingAuthenticationToken` — the user is **not yet authenticated** and has no granted authorities.
+3. The `MfaRedirectAuthenticationSuccessHandler` detects the pending token and redirects to `/ott/login`.
+4. The `/ott/login` Nuxt page loads and immediately calls `POST /ott/generate`. This generates a one-time token and **prints it to the server console** (dev mode — no email or SMS delivery yet).
+5. The user copies the token from the console, enters it in the OTT form, and submits `POST /ott/login`.
+6. `SpaController` verifies the token, upgrades the session to a fully authenticated `MfaAuthenticationToken`, and redirects back to the original OAuth2 authorization request.
+
+### Key classes
+
+| Class | Package | Role |
+|---|---|---|
+| `MfaPendingAuthenticationToken` | `principal/` | Represents a session that has passed the first factor but not yet MFA; `isAuthenticated() = false` |
+| `MfaAuthenticationToken` | `principal/` | Represents a fully authenticated session after OTT verification |
+| `MfaAwareDaoAuthenticationProvider` | `component/` | Replaces `DaoAuthenticationProvider`; returns `MfaPendingAuthenticationToken` on password success |
+| `MfaAwareRememberMeAuthenticationProvider` | `component/` | Extends `RememberMeAuthenticationProvider`; returns `MfaPendingAuthenticationToken` on cookie success |
+| `MfaRedirectAuthenticationSuccessHandler` | `component/` | Redirects to `/ott/login` when the result is a pending token; wired into both form-login and remember-me filters |
+| `MfaController` | `controller/` | `POST /ott/generate` — generates the OTT and logs it to stdout |
+| `SpaController` | `controller/` | `GET /ott/login` (forward to Nuxt page) + `POST /ott/login` (verify OTT and upgrade session) |
+
+### OTT storage
+
+`InMemoryOneTimeTokenService` (Spring Security built-in) is used. Tokens are lost on server restart — **dev/test only**. A persistent token store should be wired in for production.
+
 ## Remember Me
 
 The login form includes an optional "Remember Me?" checkbox. When checked, Spring Security sets a `remember-me` cookie (SHA-256 token, valid for `REMEMBER_ME_TOKEN_VALIDITY_SECONDS`) that automatically re-authenticates the user on their next visit. When the box is unchecked, no cookie is issued and the session ends when the browser closes.
+
+Remember-me re-authentication also goes through the full MFA flow — `MfaAwareRememberMeAuthenticationProvider` issues a `MfaPendingAuthenticationToken` and the user is redirected to `/ott/login` to complete the second factor.
 
 `REMEMBER_ME_KEY` should be a stable secret in production — changing it invalidates all existing remember-me cookies.
 
