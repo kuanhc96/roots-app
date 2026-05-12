@@ -6,6 +6,7 @@ import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.roots.authserver.component.MfaAwareDaoAuthenticationProvider;
+import com.roots.authserver.component.MfaAwareRememberMeAuthenticationProvider;
 import com.roots.authserver.component.MfaRedirectAuthenticationSuccessHandler;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -198,14 +199,19 @@ public class SecurityConfig {
     }
 
     @Bean
-    public RememberMeAuthenticationProvider rememberMeAuthenticationProvider() {
-        return new RememberMeAuthenticationProvider(rememberMeKey);
+    public RememberMeAuthenticationProvider rememberMeAuthenticationProvider(UserDetailsService userDetailsService) {
+        return new MfaAwareRememberMeAuthenticationProvider(rememberMeKey, userDetailsService);
     }
 
     @Bean
-    public RememberMeAuthenticationFilter rememberMeAuthenticationFilter(AuthenticationManager authenticationManager, TokenBasedRememberMeServices rememberMeServices) {
+    public RememberMeAuthenticationFilter rememberMeAuthenticationFilter(
+            AuthenticationManager authenticationManager,
+            TokenBasedRememberMeServices rememberMeServices,
+            MfaRedirectAuthenticationSuccessHandler successHandler
+    ) {
         RememberMeAuthenticationFilter rememberMeAuthenticationFilter = new RememberMeAuthenticationFilter(authenticationManager, rememberMeServices);
         rememberMeAuthenticationFilter.setAuthenticationSuccessHandler(new SavedRequestAwareAuthenticationSuccessHandler());
+        rememberMeAuthenticationFilter.setAuthenticationSuccessHandler(successHandler);
         return rememberMeAuthenticationFilter;
     }
 
