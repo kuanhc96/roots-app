@@ -5,6 +5,9 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.roots.authserver.component.MfaAwareDaoAuthenticationProvider;
+import com.roots.authserver.component.MfaRedirectAuthenticationSuccessHandler;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -17,6 +20,7 @@ import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.RememberMeAuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.authentication.ott.InMemoryOneTimeTokenService;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -104,7 +108,7 @@ public class SecurityConfig {
     public SecurityFilterChain defaultSecurityFilterChain(
             HttpSecurity http,
             AuthenticationManager authenticationManager,
-            AuthenticationSuccessHandler successHandler,
+            MfaRedirectAuthenticationSuccessHandler successHandler,
             TokenBasedRememberMeServices rememberMeServices,
             RememberMeAuthenticationFilter rememberMeAuthenticationFilter) throws Exception {
         http
@@ -180,15 +184,6 @@ public class SecurityConfig {
     }
 
     @Bean
-    public DaoAuthenticationProvider authenticationProvider(
-            UserDetailsService userDetailsService,
-            PasswordEncoder passwordEncoder) {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
-        provider.setPasswordEncoder(passwordEncoder);
-        return provider;
-    }
-
-    @Bean
     public UsernamePasswordAuthenticationFilter usernamePasswordAuthenticationFilter(AuthenticationManager authenticationManager, RememberMeServices rememberMeServices) {
         UsernamePasswordAuthenticationFilter usernamePasswordAuthenticationFilter = new UsernamePasswordAuthenticationFilter(authenticationManager);
         usernamePasswordAuthenticationFilter.setRememberMeServices(rememberMeServices);
@@ -197,7 +192,7 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationManager authenticationManager(
-            AuthenticationProvider authenticationProvider,
+            MfaAwareDaoAuthenticationProvider authenticationProvider,
             RememberMeAuthenticationProvider rememberMeAuthenticationProvider) {
         return new ProviderManager(authenticationProvider, rememberMeAuthenticationProvider);
     }
@@ -238,11 +233,6 @@ public class SecurityConfig {
     }
 
     @Bean
-    public AuthenticationSuccessHandler successHandler() {
-        return new SavedRequestAwareAuthenticationSuccessHandler();
-    }
-
-    @Bean
     public JWKSource<SecurityContext> jwkSource() throws Exception {
         KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
         generator.initialize(2048);
@@ -268,5 +258,10 @@ public class SecurityConfig {
     public AuthorizationServerSettings authorizationServerSettings() {
         return AuthorizationServerSettings.builder()
                 .build();
+    }
+
+    @Bean
+    public InMemoryOneTimeTokenService oneTimeTokenService() {
+        return new InMemoryOneTimeTokenService();
     }
 }
