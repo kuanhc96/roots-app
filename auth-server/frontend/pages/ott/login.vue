@@ -1,9 +1,27 @@
 <script setup lang="ts">
+import OttLoginForm from "~/components/OttLoginForm.vue";
 
+onBeforeMount(() => {
+  fetch('/ott/generate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  }).then(response => {
+    if (!response.ok) {
+      console.log("Failed to generate OTT token")
+    } else {
+      console.log("generated OTT token successfully")
+    }
+  })
+
+})
 </script>
 
 <template>
-<div class="">OTT SENT</div>
+  <v-container class="fill-height d-flex align-center justify-center">
+    <OttLoginForm />
+  </v-container>
 </template>
 
 <style scoped>
