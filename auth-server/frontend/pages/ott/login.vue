@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import OttLoginForm from "~/components/OttLoginForm.vue";
 
+const router = useRouter()
+
 onBeforeMount(() => {
   fetch('/ott/generate', {
     method: 'POST',
@@ -8,13 +10,14 @@ onBeforeMount(() => {
       'Content-Type': 'application/json'
     }
   }).then(response => {
-    if (!response.ok) {
+    if (response.status === 403) {
+      router.replace('/login?error=noMfaPending')
+    } else if (!response.ok) {
       console.log("Failed to generate OTT token")
     } else {
       console.log("generated OTT token successfully")
     }
   })
-
 })
 </script>
 

@@ -54,7 +54,8 @@ public class SpaController {
         }
 
         UserDetails user = (UserDetails) pending.getPrincipal();
-        if (null == oneTimeTokenService.consume(new OneTimeTokenAuthenticationToken(ott))) {
+        var consumedToken = oneTimeTokenService.consume(new OneTimeTokenAuthenticationToken(ott));
+        if (consumedToken == null || !consumedToken.getUsername().equals(user.getUsername())) {
             return "redirect:/ott/login?error=invalidToken";
         } else {
             MfaAuthenticationToken full = new MfaAuthenticationToken(user, user.getAuthorities());
