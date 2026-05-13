@@ -210,7 +210,6 @@ public class SecurityConfig {
             MfaRedirectAuthenticationSuccessHandler successHandler
     ) {
         RememberMeAuthenticationFilter rememberMeAuthenticationFilter = new RememberMeAuthenticationFilter(authenticationManager, rememberMeServices);
-        rememberMeAuthenticationFilter.setAuthenticationSuccessHandler(new SavedRequestAwareAuthenticationSuccessHandler());
         rememberMeAuthenticationFilter.setAuthenticationSuccessHandler(successHandler);
         return rememberMeAuthenticationFilter;
     }
