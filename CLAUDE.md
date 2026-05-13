@@ -23,7 +23,7 @@ This is a Spring Cloud microservices application called **roots-app**. The servi
 It bundles a Nuxt frontend via Maven. The Maven build:
 1. Installs Node.js and runs `npm install` + `npm run generate` in `frontend/`
 2. Copies `frontend/.output/public` into Spring Boot's `src/main/resources/static`
-3. `SpaController` forwards `/` to `index.html` for client-side routing
+3. `SpaController` (in `controller/`) forwards `/`, `/login`, and `/ott/login` to `index.html` for client-side routing
 
 The `auth-server-db` MySQL instance runs on port **3307** (not the default 3306) and is defined in `docker-compose.yml`. DB schema is in `auth-server/src/main/resources/initialize_db/`.
 
@@ -39,6 +39,46 @@ Auth-server runs as an **OAuth2 Authorization Server** (Spring Authorization Ser
 - `UserDetailsService` uses `JdbcUserDetailsManager` with custom queries against the `user_credential`/`role` schema; `email` is the lookup key
 - Remember-me is opt-in: the login form posts `remember-me=true` when the checkbox is checked; `TokenBasedRememberMeServices` (SHA-256, `alwaysRemember=false`) only issues the cookie when that parameter is present
 - JWK key pair is generated in-memory at startup (dev/test only — tokens are invalidated on restart)
+- All requests use `anyRequest().permitAll()` at the filter chain level; MFA step enforcement is handled implicitly by requiring a `MfaPendingAuthenticationToken` in the session for OTT generation and verification
+
+#### MFA Flow
+
+Every login — whether via username/password or remember-me cookie — requires a one-time token (OTT) second factor before a fully authenticated session is established.
+
+**Authentication tokens (`principal/`):**
+
+| Class | Purpose |
+|---|---|
+| `MfaPendingAuthenticationToken` | Issued after first-factor success; `isAuthenticated() = false`, no granted authorities; held in the HTTP session until OTT is verified |
+| `MfaAuthenticationToken` | Issued after OTT verification; extends `UsernamePasswordAuthenticationToken` with full authorities; replaces the pending token in the session |
+
+**Authentication providers (`component/`):**
+
+| Class | Replaces | Behaviour |
+|---|---|---|
+| `MfaAwareDaoAuthenticationProvider` | `DaoAuthenticationProvider` | Validates username/password; on success returns `MfaPendingAuthenticationToken` instead of a fully authenticated token |
+| `MfaAwareRememberMeAuthenticationProvider` | `RememberMeAuthenticationProvider` | Delegates to the parent to validate the remember-me cookie; on success returns `MfaPendingAuthenticationToken` |
+
+**Success handler (`component/MfaRedirectAuthenticationSuccessHandler`):**  
+Extends `SavedRequestAwareAuthenticationSuccessHandler`. If the resulting token is a `MfaPendingAuthenticationToken`, redirects to `/ott/login`; otherwise falls through to the standard saved-request redirect. Wired into both `UsernamePasswordAuthenticationFilter` and `RememberMeAuthenticationFilter`.
+
+**MFA endpoints:**
+
+| Endpoint | Handler | Purpose |
+|---|---|---|
+| `GET /ott/login` | `SpaController` | Forwards to the Nuxt OTT login page |
+| `POST /ott/generate` | `MfaController` | Generates a one-time token for the pending user and logs it to stdout (dev — no email/SMS yet) |
+| `POST /ott/login` | `SpaController` | Verifies the submitted OTT; on success upgrades the session to `MfaAuthenticationToken` and redirects to the original OAuth2 request |
+
+**OTT storage:** `InMemoryOneTimeTokenService` (Spring Security built-in). Tokens are lost on restart — dev/test only.
+
+**Full MFA flow:**
+1. User submits credentials or browser sends remember-me cookie.
+2. The appropriate MFA-aware provider validates the first factor and stores a `MfaPendingAuthenticationToken` in the session.
+3. `MfaRedirectAuthenticationSuccessHandler` detects the pending token and redirects to `/ott/login`.
+4. The Nuxt `/ott/login` page mounts and immediately calls `POST /ott/generate`, which prints the OTT to the server console.
+5. User enters the OTT and submits the form (`POST /ott/login`).
+6. `SpaController.verifyOtt()` consumes the token via `InMemoryOneTimeTokenService`, upgrades the session to `MfaAuthenticationToken`, and redirects to the saved OAuth2 authorization request.
 
 **OAuth2 protocol endpoints:**
 
@@ -77,10 +117,13 @@ GET http://localhost:9000/oauth2/authorize?response_type=code&client_id=WEB_CLIE
 auth-server/frontend/
 ├── app.vue                          # root layout wrapper
 ├── components/
-│   └── LoginForm.vue                # native HTML form (POST /login); email, password, and optional remember-me checkbox; intercepted by Spring Security's UsernamePasswordAuthenticationFilter
+│   ├── LoginForm.vue                # native HTML form (POST /login); email, password, and optional remember-me checkbox; intercepted by Spring Security's UsernamePasswordAuthenticationFilter
+│   └── OttLoginForm.vue             # native HTML form (POST /ott/login); single OTT text field; submitted after user receives their one-time token
 ├── pages/
 │   ├── login.vue                    # /login — mounts LoginForm centered on page
-│   └── about.vue                    # /about
+│   ├── about.vue                    # /about
+│   └── ott/
+│       └── login.vue                # /ott/login — on mount calls POST /ott/generate to trigger OTT delivery; mounts OttLoginForm centered on page
 ├── nuxt.config.ts
 └── package.json
 ```
