@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import com.roots.authserver.principal.MfaAuthenticationToken;
 import com.roots.authserver.principal.MfaPendingAuthenticationToken;
+import com.roots.authserver.service.UserCredentialService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class SpaController {
     private final OneTimeTokenService oneTimeTokenService;
+    private final UserCredentialService userCredentialService;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
     @GetMapping("/")
@@ -47,7 +49,11 @@ public class SpaController {
     }
 
     @PostMapping("/ott/login")
-    public String verifyOtt(@RequestParam String ott, HttpServletRequest request, HttpServletResponse response) {
+    public String verifyOtt(
+            @RequestParam String ott,
+            @RequestParam(required = false, defaultValue = "false") boolean rememberBrowser,
+            HttpServletRequest request,
+            HttpServletResponse response) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if(!(authentication instanceof MfaPendingAuthenticationToken pending)) {
             return "redirect:/login";
@@ -58,6 +64,10 @@ public class SpaController {
         if (consumedToken == null || !consumedToken.getUsername().equals(user.getUsername())) {
             return "redirect:/ott/login?error=invalidToken";
         } else {
+            if (rememberBrowser) {
+                userCredentialService.disableMfa(user.getUsername());
+            }
+
             MfaAuthenticationToken full = new MfaAuthenticationToken(user, user.getAuthorities());
             SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
             securityContext.setAuthentication(full);

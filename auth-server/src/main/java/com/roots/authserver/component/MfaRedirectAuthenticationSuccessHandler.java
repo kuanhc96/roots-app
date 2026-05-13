@@ -7,6 +7,7 @@ import org.springframework.security.web.authentication.SavedRequestAwareAuthenti
 import org.springframework.stereotype.Component;
 
 import com.roots.authserver.principal.MfaPendingAuthenticationToken;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -14,11 +15,11 @@ import jakarta.servlet.http.HttpServletResponse;
 public class MfaRedirectAuthenticationSuccessHandler extends SavedRequestAwareAuthenticationSuccessHandler {
 
     @Override
-    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication auth) throws IOException {
+    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication auth) throws IOException, ServletException {
         if (auth instanceof MfaPendingAuthenticationToken) {
             response.sendRedirect("/ott/login");
         } else {
-            onAuthenticationSuccess(request, response, auth);
+            super.onAuthenticationSuccess(request, response, auth);
         }
     }
 }

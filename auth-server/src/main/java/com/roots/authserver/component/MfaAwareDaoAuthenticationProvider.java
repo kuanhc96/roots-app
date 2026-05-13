@@ -9,7 +9,9 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import com.roots.authserver.principal.MfaAuthenticationToken;
 import com.roots.authserver.principal.MfaPendingAuthenticationToken;
+import com.roots.authserver.service.UserCredentialService;
 import lombok.RequiredArgsConstructor;
 
 @Component
@@ -17,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 public class MfaAwareDaoAuthenticationProvider implements AuthenticationProvider {
     private final UserDetailsService userDetailsService;
     private final PasswordEncoder passwordEncoder;
+    private final UserCredentialService userCredentialService;
 
     @Override
     public Authentication authenticate(Authentication authentication) {
@@ -28,7 +31,10 @@ public class MfaAwareDaoAuthenticationProvider implements AuthenticationProvider
             throw new BadCredentialsException("Invalid credentials");
         }
 
-        return new MfaPendingAuthenticationToken(user);
+        if (userCredentialService.isMfaEnabled(username)) {
+            return new MfaPendingAuthenticationToken(user);
+        }
+        return new MfaAuthenticationToken(user, user.getAuthorities());
     }
 
     @Override
