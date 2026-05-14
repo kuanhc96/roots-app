@@ -27,7 +27,7 @@ It bundles a Nuxt frontend via Maven. The Maven build:
 
 The `auth-server-db` MySQL instance runs on port **3307** (not the default 3306) and is defined in `docker-compose.yml`. DB schema is in `auth-server/src/main/resources/initialize_db/`.
 
-**Required env vars at startup:** `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` (no defaults). `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`. `SERVER_PORT` defaults to `9000`. `WEB_CLIENT_REDIRECT_URI` defaults to `http://localhost:3000/callback`. `REMEMBER_ME_KEY` defaults to `dev-remember-me-key-change-in-prod` (change in production). `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` defaults to `1209600` (14 days).
+**Required env vars at startup:** `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` (no defaults). `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`. `SERVER_PORT` defaults to `9000`. `WEB_CLIENT_REDIRECT_URI` defaults to `http://localhost:3000/callback`. `REMEMBER_ME_KEY` defaults to `dev-remember-me-key-change-in-prod` (change in production). `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` defaults to `1209600` (14 days). `SPRING_MAIL_USERNAME` and `SPRING_MAIL_PASSWORD` are required for Gmail OTP delivery (no defaults); use a Gmail App Password, not the account password.
 
 ### Spring Security / OAuth2 Authorization Server
 
@@ -67,7 +67,7 @@ Extends `SavedRequestAwareAuthenticationSuccessHandler`. If the resulting token 
 | Endpoint | Handler | Purpose |
 |---|---|---|
 | `GET /ott/login` | `SpaController` | Forwards to the Nuxt OTT login page |
-| `POST /ott/generate` | `MfaController` | Generates a one-time token for the pending user and logs it to stdout (dev — no email/SMS yet) |
+| `POST /ott/generate` | `MfaController` | Generates a one-time token for the pending user, logs it to stdout, and emails it to the user via `EmailService` |
 | `POST /ott/login` | `SpaController` | Verifies the submitted OTT; if `rememberBrowser=true` is posted, disables MFA for the user; upgrades the session to `MfaAuthenticationToken` and redirects to the original OAuth2 request |
 
 **OTT storage:** `InMemoryOneTimeTokenService` (Spring Security built-in). Tokens are lost on restart — dev/test only.
@@ -79,12 +79,13 @@ Extends `SavedRequestAwareAuthenticationSuccessHandler`. If the resulting token 
 | `UserCredential` | Record mapping a `user_credential` row |
 | `UserCredentialRepository` | JdbcTemplate-based repo; `findByEmail` and `setMfaEnabled` |
 | `UserCredentialService` | `isMfaEnabled(email)` and `disableMfa(email)`; injected into both auth providers and `SpaController` |
+| `EmailService` | `sendOTTEmail(to, ott)` — sends the OTT to the user's email via Gmail SMTP (`JavaMailSender`); injected into `MfaController` |
 
 **Full MFA flow (MFA enabled):**
 1. User submits credentials or browser sends remember-me cookie.
 2. The appropriate MFA-aware provider validates the first factor, checks `is_mfa_enabled = true`, and stores a `MfaPendingAuthenticationToken` in the session.
 3. `MfaRedirectAuthenticationSuccessHandler` detects the pending token and redirects to `/ott/login`.
-4. The Nuxt `/ott/login` page mounts and immediately calls `POST /ott/generate`, which prints the OTT to the server console.
+4. The Nuxt `/ott/login` page mounts and immediately calls `POST /ott/generate`, which prints the OTT to the server console and emails it to the user via `EmailService`.
 5. User enters the OTT and optionally checks "Remember this browser?", then submits `POST /ott/login`.
 6. `SpaController.verifyOtt()` consumes the token. If `rememberBrowser=true`, it calls `UserCredentialService.disableMfa()` to set `is_mfa_enabled = false`. The session is upgraded to `MfaAuthenticationToken` and redirected to the saved OAuth2 authorization request.
 
@@ -249,7 +250,7 @@ docker compose up -d auth-server-db
 
 ## Key Configuration
 
-- `auth-server/src/main/resources/application.yml` — server port defaults to `${SERVER_PORT:9000}`; `WEB_CLIENT_SECRET`, `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` are required with no fallback; `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`; `web-client.client-secret` is a placeholder secret for the registered OAuth2 client; `web-client.redirect-uri` defaults to `http://localhost:3000/callback` (override with `WEB_CLIENT_REDIRECT_URI`)
+- `auth-server/src/main/resources/application.yml` — server port defaults to `${SERVER_PORT:9000}`; `WEB_CLIENT_SECRET`, `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` are required with no fallback; `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`; `web-client.client-secret` is a placeholder secret for the registered OAuth2 client; `web-client.redirect-uri` defaults to `http://localhost:3000/callback` (override with `WEB_CLIENT_REDIRECT_URI`); Gmail SMTP is configured under `spring.mail` — `SPRING_MAIL_USERNAME` and `SPRING_MAIL_PASSWORD` are required (no defaults); uses `smtp.gmail.com:587` with STARTTLS
 - `simple-resource-server/src/main/resources/application.yml` — port defaults to `8081` (override: `SERVER_PORT`); JWK URI defaults to `http://localhost:9000/oauth2/jwks` (override: `AUTH_SERVER_JWK_URI`); CORS origin defaults to `http://localhost:3000` (override: `WEB_CLIENT_ORIGIN` via `web.client.origin` property)
 - `web-client/nuxt.config.ts` — `runtimeConfig.public.simpleResourceServerUrl` defaults to `http://localhost:8081` (override: `NUXT_PUBLIC_SIMPLE_RESOURCE_SERVER_URL`); `runtimeConfig.public.authServerUrl` defaults to `http://localhost:9000` (override: `NUXT_PUBLIC_AUTH_SERVER_URL`); `runtimeConfig.public.webClientId` defaults to `WEB_CLIENT` (override: `NUXT_PUBLIC_WEB_CLIENT_ID`); `runtimeConfig.public.webClientSecret` has no default and **must** be set via `NUXT_PUBLIC_WEB_CLIENT_SECRET` (same value as auth-server's `WEB_CLIENT_SECRET`)
 - All other services use `application.properties` with minimal config; most config is expected to come from `config-server`

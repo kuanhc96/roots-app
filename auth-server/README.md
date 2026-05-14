@@ -14,6 +14,8 @@ A fullstack Spring Boot + Nuxt/Vue application that handles authentication for t
 | `WEB_CLIENT_REDIRECT_URI`         | No | `http://localhost:3000/callback` | OAuth2 redirect URI registered for `WEB_CLIENT`; must match the callback page URL in web-client |
 | `REMEMBER_ME_KEY`                 | No | `dev-remember-me-key-change-in-prod` | Secret key used to sign remember-me cookies; change in production |
 | `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` | No | `1209600` (14 days) | Lifetime of the remember-me cookie in seconds |
+| `SPRING_MAIL_USERNAME`              | Yes | — | Gmail address used to send OTP emails |
+| `SPRING_MAIL_PASSWORD`              | Yes | — | Gmail App Password for the above account (not the account password; requires 2FA + App Password in Google Account settings) |
 
 `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` must be provided as JVM arguments (or environment variables) at startup, for example:
 
@@ -43,7 +45,7 @@ MFA is **optional per user**, controlled by the `is_mfa_enabled` column in `user
 1. User submits credentials on `/login` (or browser sends a remember-me cookie automatically).
 2. Spring Security validates the first factor. Because `is_mfa_enabled = true`, the session holds a `MfaPendingAuthenticationToken` — the user is **not yet authenticated** and has no granted authorities.
 3. The `MfaRedirectAuthenticationSuccessHandler` detects the pending token and redirects to `/ott/login`.
-4. The `/ott/login` Nuxt page loads and immediately calls `POST /ott/generate`. This generates a one-time token and **prints it to the server console** (dev mode — no email or SMS delivery yet).
+4. The `/ott/login` Nuxt page loads and immediately calls `POST /ott/generate`. This generates a one-time token, **prints it to the server console** (for debugging), and **emails it to the user** via `EmailService` (Gmail SMTP).
 5. The user copies the token from the console, enters it in the OTT form, and submits `POST /ott/login`. The form also includes a "Remember this browser?" checkbox.
 6. `SpaController` verifies the token. If "Remember this browser?" was checked, it sets `is_mfa_enabled = false` for the user in the database. The session is upgraded to a fully authenticated `MfaAuthenticationToken` and the user is redirected back to the original OAuth2 authorization request.
 
@@ -62,11 +64,12 @@ MFA is **optional per user**, controlled by the `is_mfa_enabled` column in `user
 | `MfaAwareDaoAuthenticationProvider` | `component/` | Validates password; checks `is_mfa_enabled` and returns either `MfaPendingAuthenticationToken` or `MfaAuthenticationToken` |
 | `MfaAwareRememberMeAuthenticationProvider` | `component/` | Validates remember-me cookie; same conditional MFA logic |
 | `MfaRedirectAuthenticationSuccessHandler` | `component/` | Redirects to `/ott/login` when the result is a pending token; falls through to saved-request redirect otherwise |
-| `MfaController` | `controller/` | `POST /ott/generate` — generates the OTT and logs it to stdout |
+| `MfaController` | `controller/` | `POST /ott/generate` — generates the OTT, logs it to stdout, and calls `EmailService.sendOTTEmail` |
 | `SpaController` | `controller/` | `GET /ott/login` (forward to Nuxt page) + `POST /ott/login` (verify OTT, optionally disable MFA, and upgrade session) |
 | `UserCredential` | `model/` | Record representing a row from `user_credential` |
 | `UserCredentialRepository` | `repository/` | JdbcTemplate-based repo; `findByEmail` and `setMfaEnabled` |
 | `UserCredentialService` | `service/` | `isMfaEnabled(email)` and `disableMfa(email)`; injected into both authentication providers and `SpaController` |
+| `EmailService` | `service/` | `sendOTTEmail(to, ott)` — sends the OTT to the user's email via Gmail SMTP using `JavaMailSender` |
 
 ### OTT storage
 
