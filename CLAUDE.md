@@ -246,7 +246,7 @@ docker compose up -d auth-server-db
 ## Database
 
 Auth-server DB schema (MySQL 8, port 3307):
-- `user_credential` — stores email, bcrypt password, and a `user_guid` UUID
+- `user_credential` — stores `email`, bcrypt `password`, `user_guid` UUID, `is_mfa_enabled` (boolean, default `true`), and `is_email_verified` (boolean, default `false`)
 - `role` — many roles per credential, linked by `credential_id`
 
 SQL scripts to create tables and seed test data are in `auth-server/src/main/resources/initialize_db/`.

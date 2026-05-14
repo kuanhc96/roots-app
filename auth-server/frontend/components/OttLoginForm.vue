@@ -8,6 +8,7 @@
       <v-card-title>OTT Login</v-card-title>
       <v-card-text>
         <v-text-field name="ott" label="One Time Token" type="text" />
+        <v-checkbox name="rememberBrowser" value="true" label="Remember this browser?" />
       </v-card-text>
       <v-card-actions>
         <v-btn type="submit">Verify</v-btn>

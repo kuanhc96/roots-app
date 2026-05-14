@@ -8,6 +8,7 @@ import com.nimbusds.jose.proc.SecurityContext;
 import com.roots.authserver.component.MfaAwareDaoAuthenticationProvider;
 import com.roots.authserver.component.MfaAwareRememberMeAuthenticationProvider;
 import com.roots.authserver.component.MfaRedirectAuthenticationSuccessHandler;
+import com.roots.authserver.service.UserCredentialService;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -199,8 +200,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    public RememberMeAuthenticationProvider rememberMeAuthenticationProvider(UserDetailsService userDetailsService) {
-        return new MfaAwareRememberMeAuthenticationProvider(rememberMeKey, userDetailsService);
+    public RememberMeAuthenticationProvider rememberMeAuthenticationProvider(UserDetailsService userDetailsService, UserCredentialService userCredentialService) {
+        return new MfaAwareRememberMeAuthenticationProvider(rememberMeKey, userDetailsService, userCredentialService);
     }
 
     @Bean
