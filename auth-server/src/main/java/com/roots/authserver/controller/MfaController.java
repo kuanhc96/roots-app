@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.roots.authserver.principal.MfaPendingAuthenticationToken;
+import com.roots.authserver.service.EmailService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -18,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class MfaController {
     private final InMemoryOneTimeTokenService oneTimeTokenService;
+    private final EmailService emailService;
 
     @PostMapping("/ott/generate")
     public ResponseEntity<Void> generateOneTimeToken() {
@@ -28,6 +30,7 @@ public class MfaController {
         GenerateOneTimeTokenRequest generateOneTimeTokenRequest = new GenerateOneTimeTokenRequest(authentication.getName());
         OneTimeToken oneTimeToken = oneTimeTokenService.generate(generateOneTimeTokenRequest);
         System.out.println("OTT: " + oneTimeToken.getTokenValue());
+        emailService.sendOTTEmail(authentication.getName(), oneTimeToken.getTokenValue());
         return ResponseEntity.ok().build();
     }
 }
