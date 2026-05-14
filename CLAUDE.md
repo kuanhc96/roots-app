@@ -43,24 +43,24 @@ Auth-server runs as an **OAuth2 Authorization Server** (Spring Authorization Ser
 
 #### MFA Flow
 
-Every login — whether via username/password or remember-me cookie — requires a one-time token (OTT) second factor before a fully authenticated session is established.
+MFA is **optional per user**, controlled by `is_mfa_enabled` in the `user_credential` table (default `true`). Each authentication provider checks this flag after validating the first factor and returns either a pending or fully authenticated token accordingly.
 
 **Authentication tokens (`principal/`):**
 
 | Class | Purpose |
 |---|---|
-| `MfaPendingAuthenticationToken` | Issued after first-factor success; `isAuthenticated() = false`, no granted authorities; held in the HTTP session until OTT is verified |
-| `MfaAuthenticationToken` | Issued after OTT verification; extends `UsernamePasswordAuthenticationToken` with full authorities; replaces the pending token in the session |
+| `MfaPendingAuthenticationToken` | Issued after first-factor success when MFA is enabled; `isAuthenticated() = false`, no granted authorities; held in the HTTP session until OTT is verified |
+| `MfaAuthenticationToken` | Fully authenticated token; issued directly when MFA is disabled, or after OTT verification when MFA is enabled |
 
 **Authentication providers (`component/`):**
 
 | Class | Replaces | Behaviour |
 |---|---|---|
-| `MfaAwareDaoAuthenticationProvider` | `DaoAuthenticationProvider` | Validates username/password; on success returns `MfaPendingAuthenticationToken` instead of a fully authenticated token |
-| `MfaAwareRememberMeAuthenticationProvider` | `RememberMeAuthenticationProvider` | Delegates to the parent to validate the remember-me cookie; on success returns `MfaPendingAuthenticationToken` |
+| `MfaAwareDaoAuthenticationProvider` | `DaoAuthenticationProvider` | Validates username/password; checks `UserCredentialService.isMfaEnabled()` — returns `MfaPendingAuthenticationToken` if MFA is on, `MfaAuthenticationToken` if off |
+| `MfaAwareRememberMeAuthenticationProvider` | `RememberMeAuthenticationProvider` | Delegates to the parent to validate the remember-me cookie; same conditional MFA logic |
 
 **Success handler (`component/MfaRedirectAuthenticationSuccessHandler`):**  
-Extends `SavedRequestAwareAuthenticationSuccessHandler`. If the resulting token is a `MfaPendingAuthenticationToken`, redirects to `/ott/login`; otherwise falls through to the standard saved-request redirect. Wired into both `UsernamePasswordAuthenticationFilter` and `RememberMeAuthenticationFilter`.
+Extends `SavedRequestAwareAuthenticationSuccessHandler`. If the resulting token is a `MfaPendingAuthenticationToken`, redirects to `/ott/login`; otherwise calls `super.onAuthenticationSuccess()` for the standard saved-request redirect. Wired into both `UsernamePasswordAuthenticationFilter` and `RememberMeAuthenticationFilter`.
 
 **MFA endpoints:**
 
@@ -68,17 +68,29 @@ Extends `SavedRequestAwareAuthenticationSuccessHandler`. If the resulting token 
 |---|---|---|
 | `GET /ott/login` | `SpaController` | Forwards to the Nuxt OTT login page |
 | `POST /ott/generate` | `MfaController` | Generates a one-time token for the pending user and logs it to stdout (dev — no email/SMS yet) |
-| `POST /ott/login` | `SpaController` | Verifies the submitted OTT; on success upgrades the session to `MfaAuthenticationToken` and redirects to the original OAuth2 request |
+| `POST /ott/login` | `SpaController` | Verifies the submitted OTT; if `rememberBrowser=true` is posted, disables MFA for the user; upgrades the session to `MfaAuthenticationToken` and redirects to the original OAuth2 request |
 
 **OTT storage:** `InMemoryOneTimeTokenService` (Spring Security built-in). Tokens are lost on restart — dev/test only.
 
-**Full MFA flow:**
+**Supporting classes (`model/`, `repository/`, `service/`):**
+
+| Class | Role |
+|---|---|
+| `UserCredential` | Record mapping a `user_credential` row |
+| `UserCredentialRepository` | JdbcTemplate-based repo; `findByEmail` and `setMfaEnabled` |
+| `UserCredentialService` | `isMfaEnabled(email)` and `disableMfa(email)`; injected into both auth providers and `SpaController` |
+
+**Full MFA flow (MFA enabled):**
 1. User submits credentials or browser sends remember-me cookie.
-2. The appropriate MFA-aware provider validates the first factor and stores a `MfaPendingAuthenticationToken` in the session.
+2. The appropriate MFA-aware provider validates the first factor, checks `is_mfa_enabled = true`, and stores a `MfaPendingAuthenticationToken` in the session.
 3. `MfaRedirectAuthenticationSuccessHandler` detects the pending token and redirects to `/ott/login`.
 4. The Nuxt `/ott/login` page mounts and immediately calls `POST /ott/generate`, which prints the OTT to the server console.
-5. User enters the OTT and submits the form (`POST /ott/login`).
-6. `SpaController.verifyOtt()` consumes the token via `InMemoryOneTimeTokenService`, upgrades the session to `MfaAuthenticationToken`, and redirects to the saved OAuth2 authorization request.
+5. User enters the OTT and optionally checks "Remember this browser?", then submits `POST /ott/login`.
+6. `SpaController.verifyOtt()` consumes the token. If `rememberBrowser=true`, it calls `UserCredentialService.disableMfa()` to set `is_mfa_enabled = false`. The session is upgraded to `MfaAuthenticationToken` and redirected to the saved OAuth2 authorization request.
+
+**MFA disabled flow:**
+1. Provider validates first factor, checks `is_mfa_enabled = false`, and returns `MfaAuthenticationToken` directly.
+2. `MfaRedirectAuthenticationSuccessHandler` sees a non-pending token and falls through to the saved-request redirect — no OTT step.
 
 **OAuth2 protocol endpoints:**
 
@@ -118,7 +130,7 @@ auth-server/frontend/
 ├── app.vue                          # root layout wrapper
 ├── components/
 │   ├── LoginForm.vue                # native HTML form (POST /login); email, password, and optional remember-me checkbox; intercepted by Spring Security's UsernamePasswordAuthenticationFilter
-│   └── OttLoginForm.vue             # native HTML form (POST /ott/login); single OTT text field; submitted after user receives their one-time token
+│   └── OttLoginForm.vue             # native HTML form (POST /ott/login); OTT text field + "Remember this browser?" checkbox (posts rememberBrowser=true); submitted after user receives their one-time token
 ├── pages/
 │   ├── login.vue                    # /login — mounts LoginForm centered on page
 │   ├── about.vue                    # /about

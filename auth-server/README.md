@@ -36,28 +36,37 @@ mvn test
 
 ## Multi-Factor Authentication (MFA)
 
-Every login — whether via username/password or a remember-me cookie — requires a one-time token (OTT) second factor before a fully authenticated session is established.
+MFA is **optional per user**, controlled by the `is_mfa_enabled` column in `user_credential` (default `true`). Users whose `is_mfa_enabled` is `false` are fully authenticated immediately after the first factor and skip the OTT step entirely.
 
-### Flow
+### Flow (MFA enabled)
 
 1. User submits credentials on `/login` (or browser sends a remember-me cookie automatically).
-2. Spring Security validates the first factor. On success, the session holds a `MfaPendingAuthenticationToken` — the user is **not yet authenticated** and has no granted authorities.
+2. Spring Security validates the first factor. Because `is_mfa_enabled = true`, the session holds a `MfaPendingAuthenticationToken` — the user is **not yet authenticated** and has no granted authorities.
 3. The `MfaRedirectAuthenticationSuccessHandler` detects the pending token and redirects to `/ott/login`.
 4. The `/ott/login` Nuxt page loads and immediately calls `POST /ott/generate`. This generates a one-time token and **prints it to the server console** (dev mode — no email or SMS delivery yet).
-5. The user copies the token from the console, enters it in the OTT form, and submits `POST /ott/login`.
-6. `SpaController` verifies the token, upgrades the session to a fully authenticated `MfaAuthenticationToken`, and redirects back to the original OAuth2 authorization request.
+5. The user copies the token from the console, enters it in the OTT form, and submits `POST /ott/login`. The form also includes a "Remember this browser?" checkbox.
+6. `SpaController` verifies the token. If "Remember this browser?" was checked, it sets `is_mfa_enabled = false` for the user in the database. The session is upgraded to a fully authenticated `MfaAuthenticationToken` and the user is redirected back to the original OAuth2 authorization request.
+
+### Flow (MFA disabled)
+
+1. User submits credentials or browser sends a remember-me cookie.
+2. The authentication provider checks `is_mfa_enabled`. Because it is `false`, a fully authenticated `MfaAuthenticationToken` is returned directly — no `MfaPendingAuthenticationToken` is created.
+3. `MfaRedirectAuthenticationSuccessHandler` sees a non-pending token and falls through to the standard saved-request redirect (the OAuth2 flow).
 
 ### Key classes
 
 | Class | Package | Role |
 |---|---|---|
 | `MfaPendingAuthenticationToken` | `principal/` | Represents a session that has passed the first factor but not yet MFA; `isAuthenticated() = false` |
-| `MfaAuthenticationToken` | `principal/` | Represents a fully authenticated session after OTT verification |
-| `MfaAwareDaoAuthenticationProvider` | `component/` | Replaces `DaoAuthenticationProvider`; returns `MfaPendingAuthenticationToken` on password success |
-| `MfaAwareRememberMeAuthenticationProvider` | `component/` | Extends `RememberMeAuthenticationProvider`; returns `MfaPendingAuthenticationToken` on cookie success |
-| `MfaRedirectAuthenticationSuccessHandler` | `component/` | Redirects to `/ott/login` when the result is a pending token; wired into both form-login and remember-me filters |
+| `MfaAuthenticationToken` | `principal/` | Represents a fully authenticated session |
+| `MfaAwareDaoAuthenticationProvider` | `component/` | Validates password; checks `is_mfa_enabled` and returns either `MfaPendingAuthenticationToken` or `MfaAuthenticationToken` |
+| `MfaAwareRememberMeAuthenticationProvider` | `component/` | Validates remember-me cookie; same conditional MFA logic |
+| `MfaRedirectAuthenticationSuccessHandler` | `component/` | Redirects to `/ott/login` when the result is a pending token; falls through to saved-request redirect otherwise |
 | `MfaController` | `controller/` | `POST /ott/generate` — generates the OTT and logs it to stdout |
-| `SpaController` | `controller/` | `GET /ott/login` (forward to Nuxt page) + `POST /ott/login` (verify OTT and upgrade session) |
+| `SpaController` | `controller/` | `GET /ott/login` (forward to Nuxt page) + `POST /ott/login` (verify OTT, optionally disable MFA, and upgrade session) |
+| `UserCredential` | `model/` | Record representing a row from `user_credential` |
+| `UserCredentialRepository` | `repository/` | JdbcTemplate-based repo; `findByEmail` and `setMfaEnabled` |
+| `UserCredentialService` | `service/` | `isMfaEnabled(email)` and `disableMfa(email)`; injected into both authentication providers and `SpaController` |
 
 ### OTT storage
 
@@ -67,7 +76,7 @@ Every login — whether via username/password or a remember-me cookie — requir
 
 The login form includes an optional "Remember Me?" checkbox. When checked, Spring Security sets a `remember-me` cookie (SHA-256 token, valid for `REMEMBER_ME_TOKEN_VALIDITY_SECONDS`) that automatically re-authenticates the user on their next visit. When the box is unchecked, no cookie is issued and the session ends when the browser closes.
 
-Remember-me re-authentication also goes through the full MFA flow — `MfaAwareRememberMeAuthenticationProvider` issues a `MfaPendingAuthenticationToken` and the user is redirected to `/ott/login` to complete the second factor.
+If a user has MFA enabled, remember-me re-authentication still goes through the OTT flow — `MfaAwareRememberMeAuthenticationProvider` issues a `MfaPendingAuthenticationToken` and the user is redirected to `/ott/login`. If the user has previously checked "Remember this browser?", `is_mfa_enabled` will be `false` and the OTT step is skipped entirely.
 
 `REMEMBER_ME_KEY` should be a stable secret in production — changing it invalidates all existing remember-me cookies.
 
