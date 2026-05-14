@@ -22,7 +22,7 @@ import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.RememberMeAuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.authentication.ott.InMemoryOneTimeTokenService;
+import com.roots.authserver.service.InMemoryOneTimePinService;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -267,7 +267,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    public InMemoryOneTimeTokenService oneTimeTokenService() {
-        return new InMemoryOneTimeTokenService();
+    public InMemoryOneTimePinService oneTimeTokenService() {
+        return new InMemoryOneTimePinService();
     }
 }
