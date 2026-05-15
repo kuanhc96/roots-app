@@ -5,6 +5,7 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.roots.authserver.component.GuestAuthenticationProvider;
 import com.roots.authserver.component.MfaAwareDaoAuthenticationProvider;
 import com.roots.authserver.component.MfaAwareRememberMeAuthenticationProvider;
 import com.roots.authserver.component.MfaRedirectAuthenticationSuccessHandler;
@@ -195,8 +196,9 @@ public class SecurityConfig {
     @Bean
     public AuthenticationManager authenticationManager(
             MfaAwareDaoAuthenticationProvider authenticationProvider,
-            RememberMeAuthenticationProvider rememberMeAuthenticationProvider) {
-        return new ProviderManager(authenticationProvider, rememberMeAuthenticationProvider);
+            RememberMeAuthenticationProvider rememberMeAuthenticationProvider,
+            GuestAuthenticationProvider guestAuthenticationProvider) {
+        return new ProviderManager(authenticationProvider, rememberMeAuthenticationProvider, guestAuthenticationProvider);
     }
 
     @Bean
