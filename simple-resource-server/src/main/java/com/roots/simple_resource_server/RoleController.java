@@ -41,6 +41,7 @@ public class RoleController {
         return "I am a member";
     }
 
+    @PreAuthorize("hasAuthority('WEB_CLIENT_READ')")
     @GetMapping("/guest")
     public String guest() {
         return "I am a guest";

@@ -1,5 +1,6 @@
 package com.roots.authserver.controller;
 
+import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ott.OneTimeTokenAuthenticationToken;
 import org.springframework.security.authentication.ott.OneTimeTokenService;
 import org.springframework.security.core.Authentication;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import com.roots.authserver.principal.GuestAuthenticationToken;
 import com.roots.authserver.principal.MfaAuthenticationToken;
 import com.roots.authserver.principal.MfaPendingAuthenticationToken;
 import com.roots.authserver.service.UserCredentialService;
@@ -31,6 +33,7 @@ import lombok.RequiredArgsConstructor;
 public class SpaController {
     private final OneTimeTokenService oneTimeTokenService;
     private final UserCredentialService userCredentialService;
+    private final AuthenticationManager authenticationManager;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
     @GetMapping("/")
@@ -80,6 +83,22 @@ public class SpaController {
             } else {
                 return "redirect:/ott/login?error=oauthRedirectFailed";
             }
+        }
+    }
+
+    @PostMapping("/login/guest")
+    public String loginAsGuest(HttpServletRequest request, HttpServletResponse response) {
+        Authentication guestAuth = authenticationManager.authenticate(new GuestAuthenticationToken());
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(guestAuth);
+        SecurityContextHolder.setContext(securityContext);
+        securityContextRepository.saveContext(securityContext, request, response);
+
+        SavedRequest savedRequest = new HttpSessionRequestCache().getRequest(request, response);
+        if (savedRequest != null) {
+            return "redirect:" + savedRequest.getRedirectUrl();
+        } else {
+            return "redirect:/login?error=oauthRedirectFailed";
         }
     }
 }
