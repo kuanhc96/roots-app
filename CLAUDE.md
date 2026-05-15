@@ -51,6 +51,7 @@ MFA is **optional per user**, controlled by `is_mfa_enabled` in the `user_creden
 |---|---|
 | `MfaPendingAuthenticationToken` | Issued after first-factor success when MFA is enabled; `isAuthenticated() = false`, no granted authorities; held in the HTTP session until OTT is verified |
 | `MfaAuthenticationToken` | Fully authenticated token; issued directly when MFA is disabled, or after OTT verification when MFA is enabled |
+| `GuestAuthenticationToken` | Unauthenticated marker token submitted by `POST /login/guest`; no credentials or authorities; consumed by `GuestAuthenticationProvider` |
 
 **Authentication providers (`component/`):**
 
@@ -58,6 +59,7 @@ MFA is **optional per user**, controlled by `is_mfa_enabled` in the `user_creden
 |---|---|---|
 | `MfaAwareDaoAuthenticationProvider` | `DaoAuthenticationProvider` | Validates username/password; checks `UserCredentialService.isMfaEnabled()` — returns `MfaPendingAuthenticationToken` if MFA is on, `MfaAuthenticationToken` if off |
 | `MfaAwareRememberMeAuthenticationProvider` | `RememberMeAuthenticationProvider` | Delegates to the parent to validate the remember-me cookie; same conditional MFA logic |
+| `GuestAuthenticationProvider` | _(new)_ | Supports `GuestAuthenticationToken`; creates a synthetic `UserDetails` with username `"guest"` and authority `"GUEST"`; returns a fully authenticated `MfaAuthenticationToken` — no password or MFA check |
 
 **Success handler (`component/MfaRedirectAuthenticationSuccessHandler`):**  
 Extends `SavedRequestAwareAuthenticationSuccessHandler`. If the resulting token is a `MfaPendingAuthenticationToken`, redirects to `/ott/login`; otherwise calls `super.onAuthenticationSuccess()` for the standard saved-request redirect. Wired into both `UsernamePasswordAuthenticationFilter` and `RememberMeAuthenticationFilter`.
@@ -69,6 +71,12 @@ Extends `SavedRequestAwareAuthenticationSuccessHandler`. If the resulting token 
 | `GET /ott/login` | `SpaController` | Forwards to the Nuxt OTT login page |
 | `POST /ott/generate` | `MfaController` | Generates a one-time token for the pending user, logs it to stdout, and emails it to the user via `EmailService` |
 | `POST /ott/login` | `SpaController` | Verifies the submitted OTT; if `rememberBrowser=true` is posted, disables MFA for the user; upgrades the session to `MfaAuthenticationToken` and redirects to the original OAuth2 request |
+
+**Guest login endpoint:**
+
+| Endpoint | Handler | Purpose |
+|---|---|---|
+| `POST /login/guest` | `SpaController` | Authenticates the user as guest (no credentials required); creates a `GuestAuthenticationToken`, delegates to `GuestAuthenticationProvider` via `AuthenticationManager`, saves the resulting `MfaAuthenticationToken` to the session, and redirects to the saved OAuth2 request |
 
 **OTT storage:** `InMemoryOneTimeTokenService` (Spring Security built-in). Tokens are lost on restart — dev/test only.
 
@@ -130,7 +138,7 @@ GET http://localhost:9000/oauth2/authorize?response_type=code&client_id=WEB_CLIE
 auth-server/frontend/
 ├── app.vue                          # root layout wrapper
 ├── components/
-│   ├── LoginForm.vue                # native HTML form (POST /login); email, password, and optional remember-me checkbox; intercepted by Spring Security's UsernamePasswordAuthenticationFilter
+│   ├── LoginForm.vue                # contains two forms: #login-form (POST /login — email, password, remember-me; intercepted by Spring Security's UsernamePasswordAuthenticationFilter) and #guest-form (POST /login/guest — no fields); Vuetify inputs use the HTML `form` attribute to bind to the correct form; "Continue as Guest" button submits #guest-form
 │   └── OttLoginForm.vue             # native HTML form (POST /ott/login); OTT text field + "Remember this browser?" checkbox (posts rememberBrowser=true); submitted after user receives their one-time token
 ├── pages/
 │   ├── login.vue                    # /login — mounts LoginForm centered on page
@@ -197,7 +205,7 @@ simple-resource-server is an **OAuth2 Resource Server** (Spring Security 7.x). I
 | `/api/role/small-group-leader` | `ROLE_SMALL_GROUP_LEADER` |
 | `/api/role/vice-small-group-leader` | `ROLE_VICE_SMALL_GROUP_LEADER` |
 | `/api/role/member` | `ROLE_MEMBER` |
-| `/api/role/guest` | _(none — public)_ |
+| `/api/role/guest` | `WEB_CLIENT_READ` scope (no role required) |
 
 The auth-server must include a `roles` claim in issued JWTs (uppercase values, e.g. `PASTOR`) for role checks to pass. This is implemented via `OAuth2TokenCustomizer` in `config/SecurityConfig.java`.
 
