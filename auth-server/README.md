@@ -8,10 +8,8 @@ A fullstack Spring Boot + Nuxt/Vue application that handles authentication for t
 |-----------------------------------|---|---|---------------------------------|
 | `MYSQL_AUTH_SERVER_ROOT_USERNAME` | Yes | — | MySQL username                  |
 | `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | Yes | — | MySQL password                  |
-| `WEB_CLIENT_SECRET`               | Yes | — | OAuth2 client secret for the registered `WEB_CLIENT`; must match `NUXT_PUBLIC_WEB_CLIENT_SECRET` in web-client |
 | `MYSQL_AUTH_SERVER_DB_URL`        | No | `jdbc:mysql://localhost:3307/auth-server-db` | JDBC connection URL             |
 | `SERVER_PORT`                     | No | `9000` | HTTP port the server listens on |
-| `WEB_CLIENT_REDIRECT_URI`         | No | `http://localhost:3000/callback` | OAuth2 redirect URI registered for `WEB_CLIENT`; must match the callback page URL in web-client |
 | `REMEMBER_ME_KEY`                 | No | `dev-remember-me-key-change-in-prod` | Secret key used to sign remember-me cookies; change in production |
 | `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` | No | `1209600` (14 days) | Lifetime of the remember-me cookie in seconds |
 | `SPRING_MAIL_USERNAME`              | Yes | — | Gmail address used to send OTP emails |
@@ -115,3 +113,4 @@ Connects to a MySQL 8 instance on port **3307** by default. The schema is define
 |---|---|
 | `user_credential` | `id`, `user_guid`, `email`, `password`, `is_mfa_enabled` (default `true`), `is_email_verified` (default `false`), `creation_date`, `update_date` |
 | `role` | `id`, `role_guid`, `credential_id` (FK → `user_credential`), `role_name`, `creation_date`, `update_date` |
+| `oauth2_registered_client` | `id`, `client_id`, `client_id_issued_at`, `client_secret`, `client_secret_expires_at`, `client_name`, `client_authentication_methods`, `authorization_grant_types`, `redirect_uris`, `post_logout_redirect_uris`, `scopes`, `client_settings`, `token_settings` |
