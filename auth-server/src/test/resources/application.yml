@@ -1,0 +1,3 @@
+auth-server-location: http://localhost:9000
+web-client-location: http://localhost:3000
+web-client-secret: secret
