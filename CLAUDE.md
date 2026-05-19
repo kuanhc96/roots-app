@@ -239,6 +239,17 @@ npm run dev                # Nuxt dev server on :3000
 npm run generate           # static export consumed by Maven
 ```
 
+#### Integration tests (require live auth-server)
+
+Integration tests under `src/test/java/com/roots/authserver/integration/` hit a running auth-server at `localhost:9000`. Start MySQL and auth-server first, then:
+
+```bash
+mvn test -Dtest="GuestLoginIntegrationTest"   # guest login OAuth2 flow
+mvn test -Dtest="*IntegrationTest"            # all integration tests
+```
+
+Connection targets are configured in `src/test/resources/application.yml` (`auth-server-location`, `web-client-location`, `web-client-secret`). Override on the command line with `-D<property>=<value>`.
+
 ### web-client (Nuxt 4)
 
 ```bash

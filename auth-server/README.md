@@ -34,6 +34,53 @@ mvn spring-boot:run
 mvn test
 ```
 
+## Integration Tests
+
+Integration tests in `src/test/java/com/roots/authserver/integration/` hit a **live running** auth-server rather than spinning up a Spring context. They require MySQL and auth-server to already be up before the test is executed.
+
+### Prerequisites
+
+1. Start the database:
+   ```bash
+   docker compose up -d auth-server-db
+   ```
+2. Start auth-server (from the project root or the `auth-server/` directory):
+   ```bash
+   mvn spring-boot:run -Dspring-boot.run.jvmArguments="-DMYSQL_AUTH_SERVER_ROOT_USERNAME=root -DMYSQL_AUTH_SERVER_ROOT_PASSWORD=<password> -DSPRING_MAIL_USERNAME=<email> -DSPRING_MAIL_PASSWORD=<app-password>"
+   ```
+
+### Test properties
+
+Default connection targets are declared in `src/test/resources/application.yml`:
+
+| Property | Default | Description |
+|---|---|---|
+| `auth-server-location` | `http://localhost:9000` | Base URL of the running auth-server |
+| `web-client-location` | `http://localhost:3000` | Base URL used as the OAuth2 redirect URI origin |
+| `web-client-secret` | `secret` | Plaintext value of `WEB_CLIENT` client secret (must match `oauth2_registered_client` table) |
+
+Override any of these on the command line with `-D<property>=<value>`.
+
+### Running
+
+```bash
+# All integration tests
+mvn test -Dtest="*IntegrationTest"
+
+# Guest login integration test only
+mvn test -Dtest="GuestLoginIntegrationTest"
+```
+
+### GuestLoginIntegrationTest
+
+`GuestLoginIntegrationTest` verifies the complete guest login OAuth2 Authorization Code flow end-to-end:
+
+1. Starts an OAuth2 authorization request (`GET /oauth2/authorize`) to seed the session with the saved request.
+2. Authenticates as guest (`POST /login/guest`) and follows the redirect chain to the callback URI, extracting the authorization code.
+3. Exchanges the code for tokens (`POST /oauth2/token`) and asserts that `access_token`, `token_type` (`Bearer`), `refresh_token`, and `id_token` are all present.
+
+The `AuthServerClient` helper class manages session cookies via `java.net.CookieManager` and manually follows redirects so the code can be captured before the browser would be sent to `web-client-location/callback`.
+
 ## Multi-Factor Authentication (MFA)
 
 MFA is **optional per user**, controlled by the `is_mfa_enabled` column in `user_credential` (default `true`). Users whose `is_mfa_enabled` is `false` are fully authenticated immediately after the first factor and skip the OTT step entirely.
