@@ -19,11 +19,11 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.RememberMeAuthenticationProvider;
-import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import com.roots.authserver.service.InMemoryOneTimePinService;
+
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -80,20 +80,11 @@ public class SecurityConfig {
 
     @Bean
     @Order(1)
-    public SecurityFilterChain authorizationServerSecurityFilterChain(
-            HttpSecurity http,
-            TokenBasedRememberMeServices rememberMeServices) throws Exception {
+    public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
         http
                 .oauth2AuthorizationServer((authorizationServer) -> {
                     http.securityMatcher(authorizationServer.getEndpointsMatcher());
-                    authorizationServer.oidc(oidc -> oidc
-                            .logoutEndpoint(logout -> logout
-                                    .logoutSuccessHandler(new CompositeLogoutHandler(
-                                            new SecurityContextLogoutHandler(),
-                                            rememberMeServices
-                                    ))
-                            )
-                    );
+                    authorizationServer.oidc(Customizer.withDefaults());
                 })
                 .authorizeHttpRequests((authorize) -> authorize.anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions

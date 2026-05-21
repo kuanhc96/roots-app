@@ -60,11 +60,6 @@ function logout() {
   sessionStorage.removeItem('refresh_token')
   sessionStorage.removeItem('oauth_state')
 
-  const params = new URLSearchParams({
-    post_logout_redirect_uri: `${window.location.origin}/logout`,
-  })
-  if (idToken) params.set('id_token_hint', idToken)
-
-  window.location.href = `${config.public.authServerUrl}/connect/logout?${params.toString()}`
+  window.location.href = `${config.public.authServerUrl}/logout`
 }
 </script>
