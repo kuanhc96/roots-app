@@ -9,8 +9,10 @@ import com.roots.authserver.component.GuestAuthenticationProvider;
 import com.roots.authserver.component.MfaAwareDaoAuthenticationProvider;
 import com.roots.authserver.component.MfaAwareRememberMeAuthenticationProvider;
 import com.roots.authserver.component.MfaRedirectAuthenticationSuccessHandler;
+import com.roots.authserver.component.RememberMeOidcLogoutAuthenticationSuccessHandler;
 import com.roots.authserver.service.UserCredentialService;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -30,6 +32,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.oauth2.server.authorization.oidc.web.authentication.OidcLogoutAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.RememberMeServices;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.rememberme.RememberMeAuthenticationFilter;
@@ -84,7 +87,7 @@ public class SecurityConfig {
         http
                 .oauth2AuthorizationServer((authorizationServer) -> {
                     http.securityMatcher(authorizationServer.getEndpointsMatcher());
-                    authorizationServer.oidc(Customizer.withDefaults());
+                    authorizationServer.oidc(oidc -> oidc.logoutEndpoint(logout -> logout.logoutResponseHandler(rememberMeOidcLogoutAuthenticationSuccessHandler())));
                 })
                 .authorizeHttpRequests((authorize) -> authorize.anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions
@@ -250,5 +253,10 @@ public class SecurityConfig {
     @Bean
     public InMemoryOneTimePinService oneTimeTokenService() {
         return new InMemoryOneTimePinService();
+    }
+
+    @Bean
+    public RememberMeOidcLogoutAuthenticationSuccessHandler rememberMeOidcLogoutAuthenticationSuccessHandler() {
+        return new RememberMeOidcLogoutAuthenticationSuccessHandler(new OidcLogoutAuthenticationSuccessHandler());
     }
 }
