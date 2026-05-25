@@ -103,6 +103,31 @@ If a user has MFA enabled, remember-me re-authentication still goes through the 
 
 `REMEMBER_ME_KEY` should be a stable secret in production — changing it invalidates all existing remember-me cookies.
 
+## Logout
+
+Auth-server implements **OIDC RP-Initiated Logout** (`GET /connect/logout`). The client initiates logout by redirecting the user to this endpoint with an `id_token_hint` and a `post_logout_redirect_uri`. The server invalidates the session and redirects back to the specified URI.
+
+### Flow
+
+1. The user clicks "logout" in `web-client`. The client clears its sessionStorage tokens and redirects to `GET /connect/logout?post_logout_redirect_uri=http://localhost:3000/logout&id_token_hint=<id_token>`.
+2. Auth-server validates the `id_token_hint` against the active session and confirms the `post_logout_redirect_uri` matches a registered value for the client.
+3. `RememberMeOidcLogoutAuthenticationSuccessHandler` clears the `remember-me` cookie (setting `Max-Age=0`), then delegates to the standard `OidcLogoutAuthenticationSuccessHandler`, which invalidates the server-side session and redirects to `post_logout_redirect_uri`.
+4. The user lands on `web-client`'s `/logout` page, which clears any remaining sessionStorage tokens and offers a button to re-authorize.
+
+### Key class
+
+| Class | Package | Role |
+|---|---|---|
+| `RememberMeOidcLogoutAuthenticationSuccessHandler` | `component/` | Wraps `OidcLogoutAuthenticationSuccessHandler`; clears the `remember-me` cookie before delegating to the standard OIDC logout response |
+
+### Registered `post_logout_redirect_uri`
+
+The `WEB_CLIENT` seed in `create_client_table.sql` sets `post_logout_redirect_uris` to `http://localhost:3000/logout`. Logout requests specifying any other URI are rejected.
+
+### `MfaAuthenticationToken` and `FactorGrantedAuthority`
+
+Spring Security 7's OIDC logout validation requires that authorities on the session's `Authentication` are `FactorGrantedAuthority` instances (carrying an `issuedAt` timestamp). `MfaAuthenticationToken` wraps each authority using `FactorGrantedAuthority.withAuthority(...).issuedAt(Instant.now()).build()` to satisfy this requirement.
+
 ## Database
 
 Connects to a MySQL 8 instance on port **3307** by default. The schema is defined in `src/main/resources/initialize_db/`. Hibernate is set to `validate` mode — it checks that the schema matches the JPA entities on startup but makes no changes to the database.
