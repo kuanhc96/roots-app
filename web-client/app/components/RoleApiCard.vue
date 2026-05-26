@@ -21,8 +21,7 @@
 
 <script setup lang="ts">
 const client = useSimpleResourceClient()
-const config = useRuntimeConfig()
-const { authorize } = useOAuth()
+const { authorize, logout } = useOAuth()
 
 const response = ref<string>('')
 const error = ref<string>('')
@@ -53,18 +52,4 @@ async function callRole(method: RoleMethod) {
   }
 }
 
-function logout() {
-  const idToken = sessionStorage.getItem('id_token')
-  sessionStorage.removeItem('access_token')
-  sessionStorage.removeItem('id_token')
-  sessionStorage.removeItem('refresh_token')
-  sessionStorage.removeItem('oauth_state')
-
-  const params = new URLSearchParams({
-    post_logout_redirect_uri: `${window.location.origin}/logout`,
-  })
-  if (idToken) params.set('id_token_hint', idToken)
-
-  window.location.href = `${config.public.authServerUrl}/connect/logout?${params.toString()}`
-}
 </script>

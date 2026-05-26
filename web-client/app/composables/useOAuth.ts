@@ -38,7 +38,22 @@ export function useOAuth() {
     window.location.href = `${config.public.authServerUrl}/oauth2/authorize?${params.toString()}`
   }
 
-  return { authorize }
+  function logout() {
+    const idToken = sessionStorage.getItem('id_token')
+    sessionStorage.removeItem('access_token')
+    sessionStorage.removeItem('id_token')
+    sessionStorage.removeItem('refresh_token')
+    sessionStorage.removeItem('oauth_state')
+
+    const params = new URLSearchParams({
+      post_logout_redirect_uri: `${window.location.origin}/logout`,
+    })
+    if (idToken) params.set('id_token_hint', idToken)
+
+    window.location.href = `${config.public.authServerUrl}/connect/logout?${params.toString()}`
+  }
+
+  return { authorize, logout }
 }
 
 function isTokenExpired(token: string): boolean {
