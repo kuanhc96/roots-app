@@ -9,8 +9,10 @@ import com.roots.authserver.component.GuestAuthenticationProvider;
 import com.roots.authserver.component.MfaAwareDaoAuthenticationProvider;
 import com.roots.authserver.component.MfaAwareRememberMeAuthenticationProvider;
 import com.roots.authserver.component.MfaRedirectAuthenticationSuccessHandler;
+import com.roots.authserver.component.RememberMeOidcLogoutAuthenticationSuccessHandler;
 import com.roots.authserver.service.UserCredentialService;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -19,11 +21,10 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.RememberMeAuthenticationProvider;
-import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import com.roots.authserver.service.InMemoryOneTimePinService;
+
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -31,6 +32,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.oauth2.server.authorization.oidc.web.authentication.OidcLogoutAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.RememberMeServices;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.rememberme.RememberMeAuthenticationFilter;
@@ -50,6 +52,8 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
 import org.springframework.security.provisioning.JdbcUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.web.authentication.logout.CompositeLogoutHandler;
+import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
@@ -83,7 +87,7 @@ public class SecurityConfig {
         http
                 .oauth2AuthorizationServer((authorizationServer) -> {
                     http.securityMatcher(authorizationServer.getEndpointsMatcher());
-                    authorizationServer.oidc(Customizer.withDefaults());
+                    authorizationServer.oidc(oidc -> oidc.logoutEndpoint(logout -> logout.logoutResponseHandler(rememberMeOidcLogoutAuthenticationSuccessHandler())));
                 })
                 .authorizeHttpRequests((authorize) -> authorize.anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions
@@ -249,5 +253,10 @@ public class SecurityConfig {
     @Bean
     public InMemoryOneTimePinService oneTimeTokenService() {
         return new InMemoryOneTimePinService();
+    }
+
+    @Bean
+    public RememberMeOidcLogoutAuthenticationSuccessHandler rememberMeOidcLogoutAuthenticationSuccessHandler() {
+        return new RememberMeOidcLogoutAuthenticationSuccessHandler(new OidcLogoutAuthenticationSuccessHandler());
     }
 }

@@ -50,7 +50,7 @@ MFA is **optional per user**, controlled by `is_mfa_enabled` in the `user_creden
 | Class | Purpose |
 |---|---|
 | `MfaPendingAuthenticationToken` | Issued after first-factor success when MFA is enabled; `isAuthenticated() = false`, no granted authorities; held in the HTTP session until OTT is verified |
-| `MfaAuthenticationToken` | Fully authenticated token; issued directly when MFA is disabled, or after OTT verification when MFA is enabled |
+| `MfaAuthenticationToken` | Fully authenticated token; issued directly when MFA is disabled, or after OTT verification when MFA is enabled; authorities are wrapped in `FactorGrantedAuthority` (required for OIDC logout in Spring Security 7) |
 | `GuestAuthenticationToken` | Unauthenticated marker token submitted by `POST /login/guest`; no credentials or authorities; consumed by `GuestAuthenticationProvider` |
 
 **Authentication providers (`component/`):**
@@ -63,6 +63,9 @@ MFA is **optional per user**, controlled by `is_mfa_enabled` in the `user_creden
 
 **Success handler (`component/MfaRedirectAuthenticationSuccessHandler`):**  
 Extends `SavedRequestAwareAuthenticationSuccessHandler`. If the resulting token is a `MfaPendingAuthenticationToken`, redirects to `/ott/login`; otherwise calls `super.onAuthenticationSuccess()` for the standard saved-request redirect. Wired into both `UsernamePasswordAuthenticationFilter` and `RememberMeAuthenticationFilter`.
+
+**Logout handler (`component/RememberMeOidcLogoutAuthenticationSuccessHandler`):**  
+Implements `AuthenticationSuccessHandler`. Clears the `remember-me` cookie (setting `Max-Age=0`) before delegating to `OidcLogoutAuthenticationSuccessHandler`. Wired into the authorization server's OIDC logout endpoint via `SecurityConfig`.
 
 **MFA endpoints:**
 
@@ -110,6 +113,7 @@ Extends `SavedRequestAwareAuthenticationSuccessHandler`. If the resulting token 
 | `GET /oauth2/jwks` | Public keys for token verification |
 | `POST /oauth2/revoke` | Token revocation |
 | `GET /connect/userinfo` | OIDC UserInfo |
+| `GET /connect/logout` | OIDC RP-Initiated Logout |
 | `GET /.well-known/openid-configuration` | OIDC discovery |
 
 **Registered client — WEB_CLIENT:**
@@ -119,6 +123,7 @@ Extends `SavedRequestAwareAuthenticationSuccessHandler`. If the resulting token 
 | `clientId` | `WEB_CLIENT` |
 | `clientSecret` | stored in `oauth2_registered_client` DB table |
 | `redirectUri` | stored in `oauth2_registered_client` DB table (default seed: `http://localhost:3000/callback`) |
+| `post_logout_redirect_uri` | stored in `oauth2_registered_client` DB table (default seed: `http://localhost:3000/logout`) |
 | `scopes` | `openid`, `WEB_CLIENT_READ` |
 | `grantTypes` | `authorization_code`, `refresh_token` |
 
@@ -159,12 +164,14 @@ web-client/
 │   ├── app.vue                          # root layout wrapper
 │   ├── components/
 │   │   ├── HomeCard.vue                 # reusable card (title, lorem ipsum, disabled button)
-│   │   └── RoleApiCard.vue              # wide card with 6 role API buttons + response display; authorize button triggers OAuth2 Authorization Code flow if no valid access token
+│   │   └── RoleApiCard.vue              # wide card with 6 role API buttons + response display; authorize button triggers OAuth2 Authorization Code flow if no valid access token; logout button triggers OIDC RP-Initiated Logout (clears sessionStorage, redirects to /connect/logout with id_token_hint and post_logout_redirect_uri)
 │   ├── composables/
+│   │   ├── useOAuth.ts                  # authorize() — refreshes existing tokens or initiates a new Authorization Code flow; extracted from RoleApiCard.vue for reuse across pages
 │   │   └── useSimpleResourceClient.ts   # instantiates SimpleResourceClient from runtimeConfig
 │   ├── pages/
 │   │   ├── home.vue                     # 2×2 card grid + 5th wide card (md="8"); redirects unauthenticated users to /oauth2/authorize
-│   │   └── callback.vue                 # OAuth2 callback; exchanges auth code for access token, stores in sessionStorage
+│   │   ├── callback.vue                 # OAuth2 callback; exchanges auth code for access token, stores in sessionStorage
+│   │   └── logout.vue                   # post-logout landing page; clears sessionStorage tokens on mount; shows authorize button to re-authenticate
 │   └── utils/
 │       └── SimpleResourceClient.ts      # axios-based client class for simple-resource-server
 ├── nuxt.config.ts
