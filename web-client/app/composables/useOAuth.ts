@@ -1,6 +1,9 @@
 export function useOAuth() {
   const config = useRuntimeConfig()
 
+  const existingToken = import.meta.client ? sessionStorage.getItem('access_token') : null
+  const isLoggedIn = ref(!!(existingToken?.trim() && !isTokenExpired(existingToken)))
+
   async function authorize() {
     const accessToken = sessionStorage.getItem('access_token')
     if (accessToken?.trim() && !isTokenExpired(accessToken)) return
@@ -21,6 +24,7 @@ export function useOAuth() {
         sessionStorage.setItem('access_token', data.access_token)
         if (data.refresh_token) sessionStorage.setItem('refresh_token', data.refresh_token)
         if (data.id_token) sessionStorage.setItem('id_token', data.id_token)
+        isLoggedIn.value = true
         return
       }
       sessionStorage.removeItem('refresh_token')
@@ -53,7 +57,7 @@ export function useOAuth() {
     window.location.href = `${config.public.authServerUrl}/connect/logout?${params.toString()}`
   }
 
-  return { authorize, logout }
+  return { authorize, logout, isLoggedIn }
 }
 
 function isTokenExpired(token: string): boolean {

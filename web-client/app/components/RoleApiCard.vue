@@ -13,15 +13,15 @@
       <v-alert v-if="error" type="error" variant="tonal">{{ error }}</v-alert>
     </v-card-text>
     <v-card-actions>
-      <v-btn @click="authorize">authorize</v-btn>
-      <v-btn @click="logout">logout</v-btn>
+      <v-btn :disabled="isLoggedIn" @click="authorize">authorize</v-btn>
+      <v-btn :disabled="!isLoggedIn" @click="logout">logout</v-btn>
     </v-card-actions>
   </v-card>
 </template>
 
 <script setup lang="ts">
 const client = useSimpleResourceClient()
-const { authorize, logout } = useOAuth()
+const { authorize, logout, isLoggedIn } = useOAuth()
 
 const response = ref<string>('')
 const error = ref<string>('')
