@@ -81,6 +81,34 @@ mvn test -Dtest="GuestLoginIntegrationTest"
 
 The `AuthServerClient` helper class manages session cookies via `java.net.CookieManager` and manually follows redirects so the code can be captured before the browser would be sent to `web-client-location/callback`.
 
+## CI
+
+The workflow at `.github/workflows/auth-server-ci.yml` runs on pull requests that touch `auth-server/**` (events: `opened`, `synchronize`).
+
+### What it does
+
+1. Starts a MySQL 8 service container and seeds it by running the scripts in `src/main/resources/initialize_db/` in order: `create_authentication_tables.sql` → `create_client_table.sql` → `initialize_test_users.sql`.
+2. Builds the JAR with `mvn package -DskipTests` (includes the Nuxt frontend build — done once).
+3. Starts auth-server in the background with `java -jar`.
+4. Polls `GET /actuator/health` until the server reports `UP` (up to 150 s).
+5. Runs integration tests with `mvn surefire:test`.
+
+### Required GitHub secrets
+
+| Secret | Value in CI |
+|---|---|
+| `MYSQL_AUTH_SERVER_ROOT_USERNAME` | `root` (the MySQL service container only creates a root user) |
+| `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | any password |
+| `SPRING_MAIL_USERNAME` | Gmail address used by the server |
+| `SPRING_MAIL_PASSWORD` | Gmail App Password for that address |
+
+`MYSQL_AUTH_SERVER_DB_URL` is hardcoded in the workflow to `jdbc:mysql://localhost:3306/auth-server-db` (the GitHub Actions MySQL container exposes port 3306, not 3307).
+
+### Notes
+
+- `auth-server/frontend/package-lock.json` is intentionally **not committed** to git (listed in the root `.gitignore`). The `frontend-maven-plugin` generates it fresh during each build for the current platform, avoiding conflicts between Windows-generated and Linux-expected native binaries.
+- The `WEB_CLIENT` registered client is seeded with secret `{noop}secret`, matching the `web-client-secret` property in `src/test/resources/application.yml`.
+
 ## Multi-Factor Authentication (MFA)
 
 MFA is **optional per user**, controlled by the `is_mfa_enabled` column in `user_credential` (default `true`). Users whose `is_mfa_enabled` is `false` are fully authenticated immediately after the first factor and skip the OTT step entirely.
