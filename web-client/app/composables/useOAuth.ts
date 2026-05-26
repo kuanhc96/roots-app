@@ -5,8 +5,7 @@ export function useOAuth() {
   const isLoggedIn = ref(!!(existingToken?.trim() && !isTokenExpired(existingToken)))
 
   async function authorize() {
-    const accessToken = sessionStorage.getItem('access_token')
-    if (accessToken?.trim() && !isTokenExpired(accessToken)) return
+    if (isLoggedIn.value) return
 
     const refreshToken = sessionStorage.getItem('refresh_token')
     if (refreshToken) {
