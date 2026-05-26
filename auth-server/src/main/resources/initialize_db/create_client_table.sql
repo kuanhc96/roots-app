@@ -36,7 +36,7 @@ INSERT INTO oauth2_registered_client (
     'web-client-00000000-0000-0000-0000-000000000001',
     'WEB_CLIENT',
     CURRENT_TIMESTAMP,
-    '{noop}changeme',
+    '{noop}secret',
     NULL,
     'WEB_CLIENT',
     'client_secret_basic',
