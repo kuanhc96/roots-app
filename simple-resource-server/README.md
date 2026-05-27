@@ -10,7 +10,7 @@ It is part of the broader roots-app microservices system and depends on `auth-se
 
 ## Relationship to auth-server
 
-`auth-server` acts as the OAuth2 Authorization Server. It issues signed JWTs to clients after they complete the Authorization Code flow. `simple-resource-server` validates those JWTs by fetching the public JWK set from `auth-server` at startup and on key rotation.
+`auth-server` acts as the OAuth2 Authorization Server. It issues signed JWTs to clients after they complete the Authorization Code flow. `simple-resource-server` validates those JWTs by fetching the public JWK set from `auth-server`. The JWK set is fetched **lazily** — on the first request that carries a JWT, not at startup — so `auth-server` does not need to be reachable for the service to start.
 
 A valid token must contain:
 - A `scope` claim including `WEB_CLIENT_READ` (mapped to the `WEB_CLIENT_READ` authority)
@@ -48,4 +48,10 @@ cd simple-resource-server
 mvn spring-boot:run
 ```
 
-`auth-server` must be running and reachable at `AUTH_SERVER_JWK_URI` before or shortly after startup, as Spring Security fetches the JWK set to validate incoming tokens.
+`auth-server` must be reachable at `AUTH_SERVER_JWK_URI` by the time the first authenticated request arrives. It does not need to be available at startup.
+
+## CI
+
+The workflow at `.github/workflows/simple-resource-server-ci.yml` runs on pull requests that touch `simple-resource-server/**` (events: `opened`, `synchronize`).
+
+It runs `mvn test`, which executes the `contextLoads()` test in `SimpleResourceServerApplicationTests`. This verifies that the Spring application context starts successfully. No external services are required — all environment variables have defaults and the JWK set is fetched lazily.

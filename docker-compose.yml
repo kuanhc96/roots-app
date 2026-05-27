@@ -16,6 +16,36 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
       MYSQL_TCP_PORT: 3307
       MYSQL_DATABASE: auth-server-db
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --port 3307 -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  auth-server:
+    image: ${DOCKERHUB_USERNAME}/auth-server:latest
+    container_name: auth-server
+    ports:
+      - "9000:9000"
+    networks:
+      - roots_backend
+    depends_on:
+      auth-server-db:
+        condition: service_healthy
+    environment:
+      MYSQL_AUTH_SERVER_ROOT_USERNAME: ${MYSQL_AUTH_SERVER_ROOT_USERNAME}
+      MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
+      MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://auth-server-db:3307/auth-server-db
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD}
+      REMEMBER_ME_KEY: ${REMEMBER_ME_KEY:-dev-remember-me-key-change-in-prod}
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent localhost:9000/actuator/health | grep UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
 
 networks:
   roots_backend:

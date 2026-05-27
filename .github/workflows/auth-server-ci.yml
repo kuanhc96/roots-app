@@ -1,0 +1,81 @@
+name: Auth Server CI
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'auth-server/src/**'
+      - 'auth-server/pom.xml'
+      - 'auth-server/frontend/**'
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
+          MYSQL_DATABASE: auth-server-db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Seed database
+        run: |
+          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/create_authentication_tables.sql
+          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/create_client_table.sql
+          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/initialize_test_users.sql
+
+      - name: Build auth-server
+        working-directory: auth-server
+        run: mvn package -DskipTests
+        env:
+          MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
+          MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
+          MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
+          SPRING_MAIL_USERNAME: ${{ secrets.SPRING_MAIL_USERNAME }}
+          SPRING_MAIL_PASSWORD: ${{ secrets.SPRING_MAIL_PASSWORD }}
+
+      - name: Start auth-server
+        working-directory: auth-server
+        run: java -jar target/auth-server-*.jar &
+        env:
+          MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
+          MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
+          MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
+          SPRING_MAIL_USERNAME: ${{ secrets.SPRING_MAIL_USERNAME }}
+          SPRING_MAIL_PASSWORD: ${{ secrets.SPRING_MAIL_PASSWORD }}
+
+      - name: Wait for auth-server
+        run: |
+          echo "Waiting for auth-server to be ready..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:9000/actuator/health; then
+              echo ""
+              echo "Auth-server is ready."
+              exit 0
+            fi
+            echo "Attempt $i/30, retrying in 5s..."
+            sleep 5
+          done
+          echo "Auth-server failed to start within 150s."
+          exit 1
+
+      - name: Run integration tests
+        working-directory: auth-server
+        run: mvn surefire:test

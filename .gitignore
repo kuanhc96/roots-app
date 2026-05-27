@@ -7,6 +7,7 @@
 **/node_modules/
 **/.env
 **/dist
+auth-server/frontend/package-lock.json
 
 # IDE
 **/.idea/

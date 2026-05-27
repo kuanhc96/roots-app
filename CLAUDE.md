@@ -282,6 +282,45 @@ docker compose up -d auth-server-db
 - All other services use `application.properties` with minimal config; most config is expected to come from `config-server`
 - All services target **Java 21** and use **Spring Boot 4.0.5** with **Spring Cloud 2025.1.1**
 
+## CI / CD — GitHub Actions
+
+Workflows live in `.github/workflows/`. CI workflows run on `pull_request` events `opened` and `synchronize`. CD workflows run on `push` to `main` (i.e. after a PR merges).
+
+### auth-server-ci.yml — `paths: auth-server/**`
+
+1. Starts a **MySQL 8 service container** (port 3306 inside CI, not 3307). `MYSQL_AUTH_SERVER_DB_URL` is overridden to `jdbc:mysql://localhost:3306/auth-server-db`.
+2. Seeds the DB by running the scripts in `auth-server/src/main/resources/initialize_db/` in order: `create_authentication_tables.sql` → `create_client_table.sql` → `initialize_test_users.sql`.
+3. Builds with `mvn package -DskipTests` — builds the JAR and the embedded Nuxt frontend once.
+4. Starts auth-server in the background with `java -jar`.
+5. Polls `GET /actuator/health` until `UP` (150 s timeout).
+6. Runs integration tests with `mvn surefire:test`.
+
+**Required GitHub secrets:** `MYSQL_AUTH_SERVER_ROOT_USERNAME` (set to `root`), `MYSQL_AUTH_SERVER_ROOT_PASSWORD`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`.
+
+**`auth-server/frontend/package-lock.json` is gitignored.** It was removed from version control to prevent platform-specific native binary mismatches (Windows-generated lockfiles don't include Linux binaries required in CI). The `frontend-maven-plugin` regenerates it on each build for the current platform.
+
+**`WEB_CLIENT` client secret** in `create_client_table.sql` is seeded as `{noop}secret`, matching `web-client-secret` in `src/test/resources/application.yml`.
+
+### auth-server-cd.yml — `paths: auth-server/**`
+
+Triggers on push to `main`. Skipped automatically when the commit message contains `[skip ci]` (used by the version-bump bot commit to prevent a loop).
+
+1. Reads the current `<version>` from `auth-server/pom.xml` (e.g. `0.0.1-SNAPSHOT`).
+2. Strips `-SNAPSHOT` and increments the patch digit to produce the **release version** (e.g. `0.0.2`).
+3. Sets `pom.xml` to the release version with `mvn versions:set`.
+4. Builds and pushes the Docker image via `mvn jib:build -DskipTests` — base image `eclipse-temurin:21-jre`; pushes two tags: `<release-version>` and `latest` (e.g. `yourname/auth-server:0.0.2` and `yourname/auth-server:latest`).
+5. Sets `pom.xml` to the next SNAPSHOT (e.g. `0.0.2-SNAPSHOT`) and commits it back to `main` as `github-actions[bot]` with `[skip ci]` in the message.
+
+**Required GitHub secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`.
+
+**Required one-time repo setup:**
+- Settings → Actions → General → Workflow permissions → **Read and write permissions**
+- Settings → Branches → main protection rule → Allow specified actors to bypass required pull requests → add **GitHub Actions**
+
+### simple-resource-server-ci.yml — `paths: simple-resource-server/**`
+
+Runs `mvn test`, which executes `contextLoads()` in `SimpleResourceServerApplicationTests`. No external services are needed — the JWK set is fetched lazily (on the first authenticated request, not at startup), so auth-server does not need to be running.
+
 ## Database
 
 Auth-server DB schema (MySQL 8, port 3307):
