@@ -4,7 +4,9 @@ on:
   push:
     branches: [main]
     paths:
-      - 'auth-server/**'
+      - 'auth-server/src/**'
+      - 'auth-server/pom.xml'
+      - 'auth-server/frontend/**'
 
 permissions:
   contents: write
