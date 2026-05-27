@@ -109,6 +109,30 @@ The workflow at `.github/workflows/auth-server-ci.yml` runs on pull requests tha
 - `auth-server/frontend/package-lock.json` is intentionally **not committed** to git (listed in the root `.gitignore`). The `frontend-maven-plugin` generates it fresh during each build for the current platform, avoiding conflicts between Windows-generated and Linux-expected native binaries.
 - The `WEB_CLIENT` registered client is seeded with secret `{noop}secret`, matching the `web-client-secret` property in `src/test/resources/application.yml`.
 
+## CD
+
+The workflow at `.github/workflows/auth-server-cd.yml` triggers on every push to `main` that touches `auth-server/**` (i.e. after a PR merges). Commits whose message contains `[skip ci]` are ignored — this prevents the workflow's own version-bump commit from triggering another run.
+
+### What it does
+
+1. Reads the current `<version>` from `pom.xml` (e.g. `0.0.1-SNAPSHOT`).
+2. Strips `-SNAPSHOT` and increments the patch digit to produce the **release version** (e.g. `0.0.2`).
+3. Sets `pom.xml` to the release version with `mvn versions:set`.
+4. Builds and pushes the Docker image via Jib (`mvn jib:build -DskipTests`) using `eclipse-temurin:21-jre` as the base image. Two tags are pushed: the release version (e.g. `yourname/auth-server:0.0.2`) and `latest`.
+5. Sets `pom.xml` to the next SNAPSHOT (e.g. `0.0.2-SNAPSHOT`) and commits it back to `main` as `github-actions[bot]` with `[skip ci]` in the commit message.
+
+### Required GitHub secrets
+
+| Secret | Description |
+|---|---|
+| `DOCKERHUB_USERNAME` | Your Docker Hub username |
+| `DOCKERHUB_TOKEN` | Docker Hub access token (Account Settings → Security → Access Tokens) |
+
+### Required one-time repo setup
+
+1. **Workflow write permissions:** Settings → Actions → General → Workflow permissions → select **Read and write permissions**.
+2. **Branch protection bypass:** Settings → Branches → main protection rule → Allow specified actors to bypass required pull requests → add **GitHub Actions**. This lets the bot commit the version bump directly to `main`.
+
 ## Multi-Factor Authentication (MFA)
 
 MFA is **optional per user**, controlled by the `is_mfa_enabled` column in `user_credential` (default `true`). Users whose `is_mfa_enabled` is `false` are fully authenticated immediately after the first factor and skip the OTT step entirely.
