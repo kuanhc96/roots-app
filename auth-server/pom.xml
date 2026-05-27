@@ -120,6 +120,18 @@
                 </executions>
             </plugin>
 
+            <!-- Jib: build and push Docker image without a local Docker daemon -->
+            <plugin>
+                <groupId>com.google.cloud.tools</groupId>
+                <artifactId>jib-maven-plugin</artifactId>
+                <version>3.4.4</version>
+                <configuration>
+                    <from>
+                        <image>eclipse-temurin:21-jre</image>
+                    </from>
+                </configuration>
+            </plugin>
+
             <!-- Copy the generated Nuxt static files into Spring Boot's static resources -->
             <plugin>
                 <artifactId>maven-resources-plugin</artifactId>
