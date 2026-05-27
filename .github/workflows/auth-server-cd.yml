@@ -53,7 +53,7 @@ jobs:
       - name: Build and push Docker image
         working-directory: auth-server
         run: |
-          mvn jib:build -DskipTests \
+          mvn clean compile jib:build -DskipTests \
             -Djib.to.image=${{ secrets.DOCKERHUB_USERNAME }}/auth-server:${{ steps.version.outputs.release }} \
             -Djib.to.tags=latest
 
