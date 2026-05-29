@@ -9,8 +9,11 @@
     "preview": "nuxt preview"
   },
   "dependencies": {
+    "@vee-validate/yup": "^4.15.1",
+    "vee-validate": "^4.15.1",
     "vuetify": "^4.0.5",
-    "vuetify-nuxt-module": "^0.19.5"
+    "vuetify-nuxt-module": "^0.19.5",
+    "yup": "^1.7.1"
   },
   "devDependencies": {
     "nuxt": "^3.11.2",
