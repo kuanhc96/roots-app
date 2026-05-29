@@ -5,6 +5,7 @@ CREATE TABLE user_credential (
     id                BIGINT       NOT NULL AUTO_INCREMENT,
     user_guid         VARCHAR(36)  NOT NULL,
     email             VARCHAR(255) NOT NULL,
+    name              VARCHAR(255) NOT NULL,
     password          VARCHAR(255) NOT NULL,
     is_mfa_enabled    BOOLEAN      NOT NULL DEFAULT TRUE,
     is_email_verified BOOLEAN      NOT NULL DEFAULT FALSE,
