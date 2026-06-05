@@ -1,4 +1,3 @@
 package com.roots.authserver.dto.request;
 
-public class CreateAccountRequest {
-}
+public record CreateAccountRequest(String name, String email, String password) {}
