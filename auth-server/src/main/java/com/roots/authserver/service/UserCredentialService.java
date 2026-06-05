@@ -12,6 +12,7 @@ import com.roots.authserver.exception.EmailAlreadyExistsException;
 import com.roots.authserver.model.UserCredential;
 import com.roots.authserver.repository.RoleRepository;
 import com.roots.authserver.repository.UserCredentialRepository;
+import com.roots.authserver.validator.CreateAccountValidator;
 import lombok.RequiredArgsConstructor;
 
 @Service
