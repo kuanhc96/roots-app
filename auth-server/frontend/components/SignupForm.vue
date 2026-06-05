@@ -36,7 +36,7 @@ const { value: confirmPassword, errorMessage: confirmPasswordError } =
   useField<string>('confirmPassword')
 
 const submitError = ref('')
-const router = useRouter()
+const loginForm = ref<HTMLFormElement | null>(null)
 
 const onSubmit = handleSubmit(async (values) => {
   submitError.value = ''
@@ -56,7 +56,10 @@ const onSubmit = handleSubmit(async (values) => {
       return
     }
 
-    router.replace('/signup/success')
+    // Account created — automatically start the login (authorization-code) flow with
+    // the same credentials so the user doesn't re-enter them. This native POST /login
+    // navigates the browser, letting Spring Security's form-login pipeline take over.
+    loginForm.value?.submit()
   } catch (e) {
     submitError.value = 'Account creation failed. Please try again.'
   }
@@ -65,6 +68,11 @@ const onSubmit = handleSubmit(async (values) => {
 
 <template>
   <v-card width="400">
+    <!-- Hidden form: auto-submitted after account creation to start the login flow -->
+    <form ref="loginForm" method="post" action="/login" style="display: none">
+      <input type="hidden" name="email" :value="email" />
+      <input type="hidden" name="password" :value="password" />
+    </form>
     <v-form @submit.prevent="onSubmit">
       <v-card-title>Create Account</v-card-title>
       <v-card-text>
