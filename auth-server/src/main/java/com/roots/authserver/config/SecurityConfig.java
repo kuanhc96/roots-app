@@ -25,6 +25,7 @@ import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.RememberMeAuthenticationProvider;
 import com.roots.authserver.service.InMemoryOneTimePinService;
 
+import org.springframework.security.authentication.ott.InMemoryOneTimeTokenService;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -251,8 +252,13 @@ public class SecurityConfig {
     }
 
     @Bean
-    public InMemoryOneTimePinService oneTimeTokenService() {
+    public InMemoryOneTimePinService inMemoryOneTimePinService() {
         return new InMemoryOneTimePinService();
+    }
+
+    @Bean
+    public InMemoryOneTimeTokenService inMemoryOneTimeTokenService() {
+        return new InMemoryOneTimeTokenService();
     }
 
     @Bean
