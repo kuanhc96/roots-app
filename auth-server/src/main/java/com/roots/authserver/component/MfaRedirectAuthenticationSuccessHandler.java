@@ -4,7 +4,7 @@ import java.io.IOException;
 
 import org.jspecify.annotations.NonNull;
 import org.springframework.security.authentication.ott.GenerateOneTimeTokenRequest;
-import org.springframework.security.authentication.ott.InMemoryOneTimeTokenService;
+import org.springframework.security.authentication.ott.JdbcOneTimeTokenService;
 import org.springframework.security.authentication.ott.OneTimeToken;
 import org.springframework.security.authentication.ott.OneTimeTokenService;
 import org.springframework.security.core.Authentication;
@@ -26,7 +26,7 @@ import lombok.RequiredArgsConstructor;
 public class MfaRedirectAuthenticationSuccessHandler extends SavedRequestAwareAuthenticationSuccessHandler {
 
     private final InMemoryOneTimePinService inMemoryOneTimePinService;
-    private final InMemoryOneTimeTokenService inMemoryOneTimeTokenService;
+    private final JdbcOneTimeTokenService jdbcOneTimeTokenService;
     private final EmailService emailService;
 
     @Override
@@ -42,7 +42,7 @@ public class MfaRedirectAuthenticationSuccessHandler extends SavedRequestAwareAu
             response.sendRedirect("/ott/login");
         } else if (auth instanceof CreateAccountPendingAuthenticationToken) {
             GenerateOneTimeTokenRequest generateOneTimeTokenRequest = new GenerateOneTimeTokenRequest(auth.getName());
-            OneTimeToken oneTimeToken = inMemoryOneTimeTokenService.generate(generateOneTimeTokenRequest);
+            OneTimeToken oneTimeToken = jdbcOneTimeTokenService.generate(generateOneTimeTokenRequest);
             String magicLink = ServletUriComponentsBuilder.fromCurrentContextPath()
                     .path("/magic-link/login")
                     .queryParam("magicLinkToken", oneTimeToken.getTokenValue())
