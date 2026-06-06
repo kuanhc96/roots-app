@@ -27,7 +27,7 @@ It bundles a Nuxt frontend via Maven. The Maven build:
 
 The `auth-server-db` MySQL instance runs on port **3307** (not the default 3306) and is defined in `docker-compose.yml`. DB schema is in `auth-server/src/main/resources/initialize_db/`.
 
-**Required env vars at startup:** `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` (no defaults). `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`. `SERVER_PORT` defaults to `9000`. `REMEMBER_ME_KEY` defaults to `dev-remember-me-key-change-in-prod` (change in production). `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` defaults to `1209600` (14 days). `SPRING_MAIL_USERNAME` and `SPRING_MAIL_PASSWORD` are required for Gmail OTP delivery (no defaults); use a Gmail App Password, not the account password.
+**Required env vars at startup:** `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` (no defaults). `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`. `SERVER_PORT` defaults to `9000`. `REMEMBER_ME_KEY` defaults to `dev-remember-me-key-change-in-prod` (change in production). `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` defaults to `1209600` (14 days). `SPRING_MAIL_USERNAME` and `SPRING_MAIL_PASSWORD` are required for Gmail OTP/magic-link delivery (no defaults); use a Gmail App Password, not the account password. `WEB_CLIENT_LOCATION` (property `web-client.location`) defaults to `http://localhost:3000` and is used to hand off to web-client after magic-link email verification when no saved OAuth2 request exists.
 
 ### Spring Security / OAuth2 Authorization Server
 
@@ -81,7 +81,7 @@ Implements `AuthenticationSuccessHandler`. Clears the `remember-me` cookie (sett
 |---|---|---|
 | `POST /login/guest` | `SpaController` | Authenticates the user as guest (no credentials required); creates a `GuestAuthenticationToken`, delegates to `GuestAuthenticationProvider` via `AuthenticationManager`, saves the resulting `MfaAuthenticationToken` to the session, and redirects to the saved OAuth2 request |
 
-**OTT storage:** `InMemoryOneTimeTokenService` (Spring Security built-in). Tokens are lost on restart — dev/test only.
+**OTT storage:** the MFA one-time PIN uses the custom in-memory `InMemoryOneTimePinService` (lost on restart — dev/test only). The account-creation magic-link token uses Spring Security's `JdbcOneTimeTokenService`, persisted in the `one_time_tokens` table (survives restart).
 
 **Supporting classes (`model/`, `repository/`, `service/`):**
 
@@ -103,6 +103,40 @@ Implements `AuthenticationSuccessHandler`. Clears the `remember-me` cookie (sett
 **MFA disabled flow:**
 1. Provider validates first factor, checks `is_mfa_enabled = false`, and returns `MfaAuthenticationToken` directly.
 2. `MfaRedirectAuthenticationSuccessHandler` sees a non-pending token and falls through to the saved-request redirect — no OTT step.
+
+#### Account Creation Flow
+
+New users self-register via the Nuxt `/signup` page → `POST /api/accounts` (public; `permitAll`, CSRF disabled). Controller → service → repository:
+
+1. `SignupForm.vue` validates name/email/password/confirm client-side (vee-validate + yup) and POSTs `{ name, email, password }` as JSON.
+2. `AccountController.createAccount()` (`@ResponseStatus(CREATED)`) delegates to `UserCredentialService.createAccount()` (`@Transactional`).
+3. `CreateAccountValidator` re-validates server-side (name ≤ 255; email contains `@`; password ≥ 8 with at least one uppercase, lowercase, and digit) — throws `InvalidRequestException` (**400**) on failure.
+4. Duplicate email → `EmailAlreadyExistsException` (**409**); `UNIQUE(email)` is the race backstop.
+5. Password hashed via the `PasswordEncoder` bean (`{bcrypt}`); `user_guid` from `UUID`; `is_mfa_enabled=true`, `is_email_verified=false`.
+6. `UserCredentialRepository.insert()` inserts the credential (id via `GeneratedKeyHolder`); `RoleRepository.insert()` adds a default `member` role.
+7. Returns **201** `CreateAccountResponse(name, email)`.
+
+**Auto-login + email verification (magic link).** Instead of making the new user re-type credentials, the signup page auto-starts the authorization-code flow, which routes the unverified account through magic-link email verification:
+
+8. After the `201`, `SignupForm.vue` auto-submits a hidden native `<form method=post action=/login>` with the same `email`+`password` (param names `email`/`password`; CSRF disabled) — the browser navigates into Spring's form-login pipeline.
+9. `MfaAwareDaoAuthenticationProvider` validates the password, sees `is_email_verified=false`, returns `CreateAccountPendingAuthenticationToken`.
+10. `MfaRedirectAuthenticationSuccessHandler` builds an absolute `…/magic-link/login?magicLinkToken=<otp>` URL (`ServletUriComponentsBuilder.fromCurrentContextPath()`, request thread), emails it via `EmailService.sendMagicLinkEmail(to, magicLink)`, and redirects to `/signup/success`.
+11. User clicks the link → `GET /magic-link/login?magicLinkToken=<otp>`. `SpaController.forwardMagicLinkSent` binds the token (`@RequestParam`) and **stores it in the HTTP session** (attribute `magicLinkToken`) before forwarding to the Nuxt page. This is deliberate: the page is a statically-generated SSR Nuxt route, and Vue Router strips the query string during client-side hydration (`window.location.search` is empty by the time any component hook runs), so the browser can't read the token — but the server sees it reliably on this GET. The token never needs to round-trip through client JS.
+12. The Nuxt `magic-link/login` page renders a **"Continue with login"** button (a native `<form method="post" action="/magic-link/login">`; no client-side token reading, no auto-submit). The user clicks it → `POST /magic-link/login` carrying **no token field**. `SpaController.verifyMagicLink` reads `magicLinkToken` back **from the session**, consumes it via `JdbcOneTimeTokenService` (a delete-and-return against the `one_time_tokens` table) and verifies the returned `username` matches the pending account's email, removes the session attribute, calls `UserCredentialService.verifyEmail` (`is_email_verified=true`), builds a full `MfaAuthenticationToken`, saves the session, and redirects to the saved OAuth2 request. (A missing session attribute or a token that fails to consume → `redirect:/magic-link/login?error=invalidToken`.)
+13. If no SavedRequest exists (direct `/signup` visit), `verifyMagicLink` redirects to the web-client base URL (`web-client.location`, default `http://localhost:3000`) so web-client restarts `/oauth2/authorize` with its own `state` (the auth-server can't initiate it — web-client validates `state` against its own `sessionStorage`). Limitation: same-browser only — the pending token, the saved request, **and now the captured `magicLinkToken`** all live in that one HTTP session. Requiring a button click (rather than auto-submitting on mount) means an email client/scanner that only prefetches the link cannot trigger the consuming POST.
+
+| Class | Role |
+|---|---|
+| `AccountController` (`controller/`) | `POST /api/accounts` → `UserCredentialService.createAccount` |
+| `CreateAccountValidator` (`service/`) | Server-side field validation; throws `InvalidRequestException` |
+| `RoleRepository` (`repository/`) | `insert(credentialId, roleName)` — role row with a generated `role_guid` |
+| `MfaAwareDaoAuthenticationProvider` (`component/`) | Unverified email → `CreateAccountPendingAuthenticationToken` |
+| `CreateAccountPendingAuthenticationToken` (`principal/`) | First factor passed, email unverified; `isAuthenticated()=false` |
+| `SpaController.forwardMagicLinkSent` (`controller/`) | `GET /magic-link/login` — captures `magicLinkToken` from the query into the session (the SPA can't read it post-hydration), forwards to the page |
+| `SpaController.verifyMagicLink` (`controller/`) | `POST /magic-link/login` — reads `magicLinkToken` from the session, consumes it, verifies email, upgrades session, redirects to saved request or web-client |
+| `InvalidRequestException` / `EmailAlreadyExistsException` (`exception/`) | Mapped to 400 / 409 by `GlobalExceptionHandler` (`@RestControllerAdvice`) |
+
+`UserCredentialService` also gains `createAccount(request)`, `verifyEmail(email)`, and `isEmailVerified(email)`; `UserCredentialRepository` gains `insert(...)` and `verifyEmail(...)`; and the `UserCredential` record gains a `name` field (its `RowMapper` and `findByEmail` query are updated accordingly).
 
 **OAuth2 protocol endpoints:**
 
@@ -143,18 +177,24 @@ GET http://localhost:9000/oauth2/authorize?response_type=code&client_id=WEB_CLIE
 auth-server/frontend/
 ├── app.vue                          # root layout wrapper
 ├── components/
-│   ├── LoginForm.vue                # contains two forms: #login-form (POST /login — email, password, remember-me; intercepted by Spring Security's UsernamePasswordAuthenticationFilter) and #guest-form (POST /login/guest — no fields); Vuetify inputs use the HTML `form` attribute to bind to the correct form; "Continue as Guest" button submits #guest-form
-│   └── OttLoginForm.vue             # native HTML form (POST /ott/login); OTT text field + "Remember this browser?" checkbox (posts rememberBrowser=true); submitted after user receives their one-time token
+│   ├── LoginForm.vue                # contains two forms: #login-form (POST /login — email, password, remember-me; intercepted by Spring Security's UsernamePasswordAuthenticationFilter) and #guest-form (POST /login/guest — no fields); Vuetify inputs use the HTML `form` attribute to bind to the correct form; "Continue as Guest" button submits #guest-form; also links to /signup ("Create an account")
+│   ├── OttLoginForm.vue             # native HTML form (POST /ott/login); OTT text field + "Remember this browser?" checkbox (posts rememberBrowser=true); submitted after user receives their one-time token
+│   └── SignupForm.vue               # account-creation form (name, email, password, confirm password); validated with vee-validate + yup; on submit fetch-POSTs { name, email, password } to /api/accounts; on 201 auto-submits a hidden native form (POST /login) with the same email+password to start the login flow (no credential re-entry); shows an inline v-alert on failure; links to /login
 ├── pages/
 │   ├── login.vue                    # /login — mounts LoginForm centered on page
 │   ├── about.vue                    # /about
+│   ├── signup/
+│   │   ├── index.vue                # /signup — mounts SignupForm centered on page
+│   │   └── success.vue              # /signup/success — "Account creation succeeded. Please check your email to continue." (reachable by direct URL; no route guard)
+│   ├── magic-link/
+│   │   └── login.vue                # /magic-link/login — renders a "Continue with login" button (native form POST /magic-link/login, no token field); the token is captured server-side into the session on GET, so the page reads nothing from the URL (Vue Router strips the query on hydration)
 │   └── ott/
 │       └── login.vue                # /ott/login — on mount calls POST /ott/generate to trigger OTT delivery; mounts OttLoginForm centered on page
 ├── nuxt.config.ts
 └── package.json
 ```
 
-UI uses **Vuetify 4** (`vuetify-nuxt-module`). `/` redirects to `/login` via `routeRules`.
+UI uses **Vuetify 4** (`vuetify-nuxt-module`). `/` redirects to `/login` via `routeRules`. The signup form validates client-side with **vee-validate** + **yup** (`@vee-validate/yup`).
 
 ### web-client structure
 
@@ -276,7 +316,7 @@ docker compose up -d auth-server-db
 
 ## Key Configuration
 
-- `auth-server/src/main/resources/application.yml` — server port defaults to `${SERVER_PORT:9000}`; `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` are required with no fallback; `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`; Gmail SMTP is configured under `spring.mail` — `SPRING_MAIL_USERNAME` and `SPRING_MAIL_PASSWORD` are required (no defaults); uses `smtp.gmail.com:587` with STARTTLS
+- `auth-server/src/main/resources/application.yml` — server port defaults to `${SERVER_PORT:9000}`; `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` are required with no fallback; `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`; Gmail SMTP is configured under `spring.mail` — `SPRING_MAIL_USERNAME` and `SPRING_MAIL_PASSWORD` are required (no defaults); uses `smtp.gmail.com:587` with STARTTLS; `web-client.location` defaults to `http://localhost:3000` (override: `WEB_CLIENT_LOCATION`) — web-client hand-off target after magic-link verification when no saved request exists
 - `simple-resource-server/src/main/resources/application.yml` — port defaults to `8081` (override: `SERVER_PORT`); JWK URI defaults to `http://localhost:9000/oauth2/jwks` (override: `AUTH_SERVER_JWK_URI`); CORS origin defaults to `http://localhost:3000` (override: `WEB_CLIENT_ORIGIN` via `web.client.origin` property)
 - `web-client/nuxt.config.ts` — `runtimeConfig.public.simpleResourceServerUrl` defaults to `http://localhost:8081` (override: `NUXT_PUBLIC_SIMPLE_RESOURCE_SERVER_URL`); `runtimeConfig.public.authServerUrl` defaults to `http://localhost:9000` (override: `NUXT_PUBLIC_AUTH_SERVER_URL`); `runtimeConfig.public.webClientId` defaults to `WEB_CLIENT` (override: `NUXT_PUBLIC_WEB_CLIENT_ID`); `runtimeConfig.public.webClientSecret` has no default and **must** be set via `NUXT_PUBLIC_WEB_CLIENT_SECRET` (must match the `client_secret` stored in auth-server's `oauth2_registered_client` table)
 - All other services use `application.properties` with minimal config; most config is expected to come from `config-server`
@@ -289,7 +329,7 @@ Workflows live in `.github/workflows/`. CI workflows run on `pull_request` event
 ### auth-server-ci.yml — `paths: auth-server/**`
 
 1. Starts a **MySQL 8 service container** (port 3306 inside CI, not 3307). `MYSQL_AUTH_SERVER_DB_URL` is overridden to `jdbc:mysql://localhost:3306/auth-server-db`.
-2. Seeds the DB by running the scripts in `auth-server/src/main/resources/initialize_db/` in order: `create_authentication_tables.sql` → `create_client_table.sql` → `initialize_test_users.sql`.
+2. Seeds the DB by running the scripts in `auth-server/src/main/resources/initialize_db/` in order: `create_authentication_tables.sql` → `create_client_table.sql` → `create_one_time_tokens_table.sql` → `initialize_test_users.sql`.
 3. Builds with `mvn package -DskipTests` — builds the JAR and the embedded Nuxt frontend once.
 4. Starts auth-server in the background with `java -jar`.
 5. Polls `GET /actuator/health` until `UP` (150 s timeout).
@@ -324,7 +364,8 @@ Runs `mvn test`, which executes `contextLoads()` in `SimpleResourceServerApplica
 ## Database
 
 Auth-server DB schema (MySQL 8, port 3307):
-- `user_credential` — stores `email`, bcrypt `password`, `user_guid` UUID, `is_mfa_enabled` (boolean, default `true`), and `is_email_verified` (boolean, default `false`)
+- `user_credential` — stores `email`, `name`, bcrypt `password`, `user_guid` UUID, `is_mfa_enabled` (boolean, default `true`), and `is_email_verified` (boolean, default `false`)
 - `role` — many roles per credential, linked by `credential_id`
+- `one_time_tokens` — Spring Security `JdbcOneTimeTokenService` schema (`token_value` PK, `username`, `expires_at`); backs the account-creation magic-link token. Standalone (no FK); `username` holds the user's email. Rows are deleted on consume; expired-but-unclicked rows are not cleaned up (dev/test scale)
 
 SQL scripts to create tables and seed test data are in `auth-server/src/main/resources/initialize_db/`.
