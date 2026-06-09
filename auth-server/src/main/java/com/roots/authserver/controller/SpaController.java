@@ -2,7 +2,7 @@ package com.roots.authserver.controller;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.ott.InMemoryOneTimeTokenService;
+import org.springframework.security.authentication.ott.JdbcOneTimeTokenService;
 import org.springframework.security.authentication.ott.OneTimeTokenAuthenticationToken;
 import org.springframework.security.authentication.ott.OneTimeTokenService;
 import org.springframework.security.core.Authentication;
@@ -36,7 +36,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class SpaController {
     private final InMemoryOneTimePinService inMemoryOneTimePinService;
-    private final InMemoryOneTimeTokenService inMemoryOneTimeTokenService;
+    private final JdbcOneTimeTokenService jdbcOneTimeTokenService;
     private final UserCredentialService userCredentialService;
     private final AuthenticationManager authenticationManager;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
@@ -134,7 +134,7 @@ public class SpaController {
         }
 
         UserDetails user = (UserDetails) pending.getPrincipal();
-        var consumedToken = inMemoryOneTimeTokenService.consume(new OneTimeTokenAuthenticationToken(magicLinkToken));
+        var consumedToken = jdbcOneTimeTokenService.consume(new OneTimeTokenAuthenticationToken(magicLinkToken));
         if (consumedToken == null || !consumedToken.getUsername().equals(user.getUsername())) {
             return "redirect:/magic-link/login?error=invalidToken";
         } else {

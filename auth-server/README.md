@@ -12,7 +12,8 @@ A fullstack Spring Boot + Nuxt/Vue application that handles authentication for t
 | `SERVER_PORT`                     | No | `9000` | HTTP port the server listens on |
 | `REMEMBER_ME_KEY`                 | No | `dev-remember-me-key-change-in-prod` | Secret key used to sign remember-me cookies; change in production |
 | `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` | No | `1209600` (14 days) | Lifetime of the remember-me cookie in seconds |
-| `SPRING_MAIL_USERNAME`              | Yes | — | Gmail address used to send OTP emails |
+| `WEB_CLIENT_LOCATION`               | No | `http://localhost:3000` | Base URL of web-client; used to hand off the OAuth2 flow after magic-link email verification when no saved request exists |
+| `SPRING_MAIL_USERNAME`              | Yes | — | Gmail address used to send OTP and magic-link emails |
 | `SPRING_MAIL_PASSWORD`              | Yes | — | Gmail App Password for the above account (not the account password; requires 2FA + App Password in Google Account settings) |
 
 `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` must be provided as JVM arguments (or environment variables) at startup, for example:
@@ -87,7 +88,7 @@ The workflow at `.github/workflows/auth-server-ci.yml` runs on pull requests tha
 
 ### What it does
 
-1. Starts a MySQL 8 service container and seeds it by running the scripts in `src/main/resources/initialize_db/` in order: `create_authentication_tables.sql` → `create_client_table.sql` → `initialize_test_users.sql`.
+1. Starts a MySQL 8 service container and seeds it by running the scripts in `src/main/resources/initialize_db/` in order: `create_authentication_tables.sql` → `create_client_table.sql` → `create_one_time_tokens_table.sql` → `initialize_test_users.sql`.
 2. Builds the JAR with `mvn package -DskipTests` (includes the Nuxt frontend build — done once).
 3. Starts auth-server in the background with `java -jar`.
 4. Polls `GET /actuator/health` until the server reports `UP` (up to 150 s).
@@ -133,6 +134,69 @@ The workflow at `.github/workflows/auth-server-cd.yml` triggers on every push to
 1. **Workflow write permissions:** Settings → Actions → General → Workflow permissions → select **Read and write permissions**.
 2. **Branch protection bypass:** Settings → Branches → main protection rule → Allow specified actors to bypass required pull requests → add **GitHub Actions**. This lets the bot commit the version bump directly to `main`.
 
+## Account Creation
+
+New users self-register through the Nuxt `/signup` page, which POSTs to `POST /api/accounts`. The endpoint is public (`permitAll`, CSRF disabled) and is structured controller → service → repository.
+
+### Flow
+
+1. The `/signup` Nuxt page (`SignupForm.vue`) collects name, email, password, and confirm-password, validating them client-side with **vee-validate** + **yup**. On success it POSTs `{ name, email, password }` as JSON to `/api/accounts`.
+2. `AccountController.createAccount()` delegates to `UserCredentialService.createAccount()` (`@Transactional`).
+3. `CreateAccountValidator` re-validates the request server-side — name required and ≤ 255 chars; email required and contains `@`; password required, ≥ 8 chars, with at least one uppercase letter, one lowercase letter, and one number. Any violation throws `InvalidRequestException` → **400**.
+4. Duplicate emails are rejected: if `findByEmail` already returns a row, the service throws `EmailAlreadyExistsException` → **409** (the `UNIQUE(email)` constraint is the final race backstop).
+5. The password is hashed with the `PasswordEncoder` bean (delegating encoder → `{bcrypt}`). A `user_guid` is generated with `UUID`, `is_mfa_enabled` is set to `true`, and `is_email_verified` to `false`.
+6. `UserCredentialRepository.insert()` inserts the `user_credential` row (returning the generated id via `GeneratedKeyHolder`), then `RoleRepository.insert()` adds a default `member` role for that credential — both inside the same transaction.
+7. On success the endpoint returns **201 Created** with `CreateAccountResponse(name, email)`.
+
+### Auto-login & email verification (magic link)
+
+Rather than make the new user re-type their credentials on the login form, the signup page **automatically starts the authorization-code flow** with the credentials just entered, which routes the brand-new (unverified) account through email verification:
+
+1. After the `201` from `/api/accounts`, `SignupForm.vue` auto-submits a hidden native `<form method="post" action="/login">` carrying the same `email` + `password` (param names match `usernameParameter("email")` / default `password`; CSRF is disabled). The browser navigates, handing off to Spring Security's form-login pipeline.
+2. `MfaAwareDaoAuthenticationProvider` validates the password, sees `is_email_verified = false`, and returns a `CreateAccountPendingAuthenticationToken` (not yet authenticated).
+3. `MfaRedirectAuthenticationSuccessHandler` builds an absolute magic-link URL — `…/magic-link/login?magicLinkToken=<otp>` via `ServletUriComponentsBuilder.fromCurrentContextPath()` on the request thread — emails it with `EmailService.sendMagicLinkEmail`, and redirects the browser to `/signup/success` ("check your email to continue").
+4. The user clicks the link → `GET /magic-link/login?magicLinkToken=<otp>`. `SpaController.forwardMagicLinkSent` binds the token with `@RequestParam` and **saves it as a session attribute** (`magicLinkToken`) before forwarding to the Nuxt page.
+
+   **Why the session?** The `magic-link/login` page is a statically-generated SSR Nuxt route. When it hydrates in the browser, Vue Router resyncs the address bar to the route's canonical path and **strips the query string** — by the time any component hook runs, `window.location.search` (and `useRoute().query`) is empty, so the page cannot read `magicLinkToken` from the URL. (A Spring `forward:` is server-internal and never changes the browser URL, so this stripping is purely client-side.) The server, however, sees the query reliably on this GET. So we capture the token server-side and stash it in the HTTP session; the token never has to round-trip through client JavaScript.
+
+5. The page renders a **"Continue with login"** button — a native `<form method="post" action="/magic-link/login">` with no token field and **no auto-submit**. The user clicks it → `POST /magic-link/login` carrying no token. `SpaController.verifyMagicLink` reads `magicLinkToken` back **from the session**, consumes it via `JdbcOneTimeTokenService` (a delete-and-return against the `one_time_tokens` table, then checks the returned `username` matches the pending account's email), removes the session attribute, calls `UserCredentialService.verifyEmail` (sets `is_email_verified = true`), builds a fully authenticated `MfaAuthenticationToken`, saves it to the session, and redirects to the **saved OAuth2 request** — completing the authorization-code grant back to web-client. (If the session has no `magicLinkToken`, or it fails to consume, it redirects to `/magic-link/login?error=invalidToken`.)
+6. If there is **no** saved request (the user reached `/signup` directly, not via an OAuth2 flow), `verifyMagicLink` instead redirects to the web-client base URL (`web-client.location`, default `http://localhost:3000`). web-client then initiates `/oauth2/authorize` with its own `state`; since the session is already authenticated, a code is issued and its callback succeeds. (The auth-server cannot initiate the flow itself because web-client validates `state` against its own `sessionStorage`.)
+
+> **Limitations.** The magic link must be opened in the **same browser** that signed up — the pending token, the saved request, **and the captured `magicLinkToken`** all live in that one HTTP session. Requiring a button click (instead of auto-submitting on mount) means an email client/scanner that merely prefetches the link cannot trigger the consuming POST.
+
+### Key classes
+
+| Class | Package | Role |
+|---|---|---|
+| `AccountController` | `controller/` | `POST /api/accounts`; `@ResponseStatus(CREATED)`; delegates to `UserCredentialService` |
+| `CreateAccountRequest` | `dto/request/` | Record `(name, email, password)` — request body |
+| `CreateAccountResponse` | `dto/response/` | Record `(name, email)` — response body |
+| `CreateAccountValidator` | `service/` | Server-side field validation; throws `InvalidRequestException` |
+| `UserCredentialService` | `service/` | `createAccount(request)` (`@Transactional`); `verifyEmail(email)` sets `is_email_verified = true` |
+| `UserCredentialRepository` | `repository/` | `insert(UserCredential)` returns the generated id via `GeneratedKeyHolder`; `verifyEmail(email)` |
+| `RoleRepository` | `repository/` | `insert(credentialId, roleName)` — adds a role row with a generated `role_guid` |
+| `MfaAwareDaoAuthenticationProvider` | `component/` | Routes an unverified account to `CreateAccountPendingAuthenticationToken` after validating the password |
+| `CreateAccountPendingAuthenticationToken` | `principal/` | First factor passed but email unverified; `isAuthenticated() = false` |
+| `MfaRedirectAuthenticationSuccessHandler` | `component/` | For the pending token, emails the magic link and redirects to `/signup/success` |
+| `SpaController` | `controller/` | `forwardMagicLinkSent` (`GET /magic-link/login`) captures `magicLinkToken` from the query into the session (the hydrated SPA can't read it); `verifyMagicLink` (`POST /magic-link/login`) reads it back from the session, consumes it, verifies email, upgrades the session, redirects to the saved request or web-client |
+| `EmailService` | `service/` | `sendMagicLinkEmail(to, magicLink)` — sends the verification link via Gmail SMTP |
+| `InvalidRequestException` | `exception/` | Generic bad-request signal → **400** |
+| `EmailAlreadyExistsException` | `exception/` | Duplicate email → **409** |
+| `GlobalExceptionHandler` | `exception/` | `@RestControllerAdvice` mapping the two exceptions to 400 / 409 with a `{"error": "..."}` body |
+
+| Class | Package | Role |
+|---|---|---|
+| `AccountController` | `controller/` | `POST /api/accounts`; `@ResponseStatus(CREATED)`; delegates to `UserCredentialService` |
+| `CreateAccountRequest` | `dto/request/` | Record `(name, email, password)` — request body |
+| `CreateAccountResponse` | `dto/response/` | Record `(name, email)` — response body |
+| `CreateAccountValidator` | `service/` | Server-side field validation; throws `InvalidRequestException` |
+| `UserCredentialService` | `service/` | `createAccount(request)` — orchestrates validation, duplicate check, hashing, and both inserts (`@Transactional`) |
+| `UserCredentialRepository` | `repository/` | `insert(UserCredential)` returns the generated id via `GeneratedKeyHolder` |
+| `RoleRepository` | `repository/` | `insert(credentialId, roleName)` — adds a role row with a generated `role_guid` |
+| `InvalidRequestException` | `exception/` | Generic bad-request signal → **400** |
+| `EmailAlreadyExistsException` | `exception/` | Duplicate email → **409** |
+| `GlobalExceptionHandler` | `exception/` | `@RestControllerAdvice` mapping the two exceptions to 400 / 409 with a `{"error": "..."}` body |
+
 ## Multi-Factor Authentication (MFA)
 
 MFA is **optional per user**, controlled by the `is_mfa_enabled` column in `user_credential` (default `true`). Users whose `is_mfa_enabled` is `false` are fully authenticated immediately after the first factor and skip the OTT step entirely.
@@ -170,7 +234,10 @@ MFA is **optional per user**, controlled by the `is_mfa_enabled` column in `user
 
 ### OTT storage
 
-`InMemoryOneTimeTokenService` (Spring Security built-in) is used. Tokens are lost on server restart — **dev/test only**. A persistent token store should be wired in for production.
+Two separate one-time-secret stores:
+
+- **MFA one-time PIN** — the custom `InMemoryOneTimePinService` (6-digit numeric code). In-memory only; lost on server restart — **dev/test only**.
+- **Account-creation magic-link token** — Spring Security's `JdbcOneTimeTokenService`, backed by the `one_time_tokens` table (`token_value` PK, `username`, `expires_at`). Tokens **survive restart**. The table is standalone (no FK to `user_credential`); `username` holds the user's email, which `verifyMagicLink` checks against the pending account after consuming the token by its value. Default TTL is 5 minutes. Expired-but-unclicked rows are not cleaned up (acceptable at dev/test scale).
 
 ## Guest Login
 
@@ -235,6 +302,6 @@ Connects to a MySQL 8 instance on port **3307** by default. The schema is define
 
 | Table | Columns |
 |---|---|
-| `user_credential` | `id`, `user_guid`, `email`, `password`, `is_mfa_enabled` (default `true`), `is_email_verified` (default `false`), `creation_date`, `update_date` |
+| `user_credential` | `id`, `user_guid`, `email`, `name`, `password`, `is_mfa_enabled` (default `true`), `is_email_verified` (default `false`), `creation_date`, `update_date` |
 | `role` | `id`, `role_guid`, `credential_id` (FK → `user_credential`), `role_name`, `creation_date`, `update_date` |
 | `oauth2_registered_client` | `id`, `client_id`, `client_id_issued_at`, `client_secret`, `client_secret_expires_at`, `client_name`, `client_authentication_methods`, `authorization_grant_types`, `redirect_uris`, `post_logout_redirect_uris`, `scopes`, `client_settings`, `token_settings` |

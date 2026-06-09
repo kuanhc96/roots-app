@@ -39,6 +39,7 @@ jobs:
         run: |
           mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/create_authentication_tables.sql
           mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/create_client_table.sql
+          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/create_one_time_tokens_table.sql
           mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/initialize_test_users.sql
 
       - name: Build auth-server
