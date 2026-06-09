@@ -9,6 +9,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import com.roots.authserver.principal.CreateAccountPendingAuthenticationToken;
 import com.roots.authserver.principal.MfaAuthenticationToken;
 import com.roots.authserver.principal.MfaPendingAuthenticationToken;
 import com.roots.authserver.service.UserCredentialService;
@@ -29,6 +30,10 @@ public class MfaAwareDaoAuthenticationProvider implements AuthenticationProvider
 
         if (!passwordEncoder.matches(presented, user.getPassword())) {
             throw new BadCredentialsException("Invalid credentials");
+        }
+
+        if (!userCredentialService.isEmailVerified(username)) {
+            return new CreateAccountPendingAuthenticationToken(user);
         }
 
         if (userCredentialService.isMfaEnabled(username)) {

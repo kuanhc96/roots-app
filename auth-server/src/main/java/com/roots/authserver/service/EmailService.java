@@ -14,11 +14,20 @@ public class EmailService {
     private final JavaMailSender mailSender;
 
     @Async
-    public void sendOTTEmail(String to, String ott) {
+    public void sendOTTEmail(String to, String otp) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(to);
         message.setSubject("Your One-Time Password for Roots");
-        message.setText("Your One-Time Password is: " + ott);
+        message.setText("Your One-Time Password is: " + otp);
+        mailSender.send(message);
+    }
+
+    @Async
+    public void sendMagicLinkEmail(String to, String magicLink) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(to);
+        message.setSubject("Verify Email For Created Account @ Roots");
+        message.setText("Proceed to login with " + magicLink);
         mailSender.send(message);
     }
 }

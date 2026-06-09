@@ -169,7 +169,7 @@ web-client/
 │   │   ├── useOAuth.ts                  # authorize() — refreshes existing tokens or initiates a new Authorization Code flow; extracted from RoleApiCard.vue for reuse across pages
 │   │   └── useSimpleResourceClient.ts   # instantiates SimpleResourceClient from runtimeConfig
 │   ├── pages/
-│   │   ├── home.vue                     # 2×2 card grid + 5th wide card (md="8"); redirects unauthenticated users to /oauth2/authorize
+│   │   ├── home.vue                     # 2×2 card grid + 5th wide card (md="8"); does NOT auto-authenticate (onBeforeMount is empty) — authorization is initiated manually via the RoleApiCard "authorize" button
 │   │   ├── callback.vue                 # OAuth2 callback; exchanges auth code for access token, stores in sessionStorage
 │   │   └── logout.vue                   # post-logout landing page; clears sessionStorage tokens on mount; shows authorize button to re-authenticate
 │   └── utils/

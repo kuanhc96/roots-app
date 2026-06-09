@@ -15,6 +15,9 @@
         <v-spacer></v-spacer>
         <v-btn type="submit" form="guest-form" variant="text">Continue as Guest</v-btn>
       </v-card-actions>
+      <v-card-actions>
+        <NuxtLink to="/signup">Create an account</NuxtLink>
+      </v-card-actions>
     </v-card>
   </div>
 </template>
