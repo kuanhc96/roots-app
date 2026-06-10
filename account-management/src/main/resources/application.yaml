@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: account-management
+  datasource:
+    url: ${MYSQL_AUTH_SERVER_DB_URL:jdbc:mysql://localhost:3307/auth-server-db}
+    username: ${MYSQL_AUTH_SERVER_ROOT_USERNAME}
+    password: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${AUTH_SERVER_JWK_URI:http://localhost:9000/oauth2/jwks}
+
+server:
+  port: ${SERVER_PORT:8082}
