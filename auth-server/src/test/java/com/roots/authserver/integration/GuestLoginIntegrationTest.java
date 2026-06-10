@@ -10,8 +10,7 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
-import com.roots.authserver.integration.AuthServerClient.TokenResponse;
-
+import java.net.http.HttpResponse;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +25,12 @@ class GuestLoginIntegrationTest {
     @Autowired
     private AuthServerClient client;
 
+    @Autowired
+    private OAuth2Client oAuth2Client;
+
+    @Value("${auth-server-location}")
+    private String authServerLocation;
+
     @Value("${web-client-location}")
     private String webClientLocation;
 
@@ -38,10 +43,23 @@ class GuestLoginIntegrationTest {
 
         client.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
 
-        String code = client.loginAsGuest(redirectUri);
+        // Follow the redirect chain from the guest login until we land on the callback.
+        HttpResponse<String> response = client.loginAsGuest();
+        while (response.statusCode() == 302) {
+            String location = response.headers().firstValue("Location").orElseThrow();
+            if (location.startsWith(redirectUri)) {
+                break;
+            }
+            response = client.getOnSession(HttpFlowUtils.resolveLocation(authServerLocation, location));
+        }
+
+        assertThat(response.statusCode()).isEqualTo(302);
+        String callback = response.headers().firstValue("Location").orElseThrow();
+        assertThat(callback).startsWith(redirectUri);
+        String code = HttpFlowUtils.extractQueryParam(callback, "code");
         assertThat(code).isNotBlank();
 
-        TokenResponse tokens = client.exchangeCodeForToken(code, "WEB_CLIENT", webClientSecret, redirectUri);
+        TokenResponse tokens = oAuth2Client.exchangeCodeForToken(code, "WEB_CLIENT", webClientSecret, redirectUri);
         assertThat(tokens.accessToken()).isNotBlank();
         assertThat(tokens.tokenType()).isEqualToIgnoringCase("Bearer");
         assertThat(tokens.refreshToken()).isNotBlank();
