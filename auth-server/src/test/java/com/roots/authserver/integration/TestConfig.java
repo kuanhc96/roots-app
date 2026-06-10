@@ -14,4 +14,9 @@ public class TestConfig {
     public AuthServerClient authServerClient() {
         return new AuthServerClient(authServerLocation);
     }
+
+    @Bean
+    public OAuth2Client oAuth2Client() {
+        return new OAuth2Client(authServerLocation);
+    }
 }
