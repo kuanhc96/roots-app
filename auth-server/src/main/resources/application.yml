@@ -20,6 +20,11 @@ spring:
           auth: true
           starttls:
             enable: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${AUTH_SERVER_JWK_URI:http://localhost:9000/oauth2/jwks}
 
 server:
   port: ${SERVER_PORT:9000}
