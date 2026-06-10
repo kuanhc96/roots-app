@@ -5,24 +5,31 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 
 import java.net.CookieManager;
 import java.net.URI;
-import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
+import java.util.Map;
 
 public class AuthServerClient {
 
     private final String baseUrl;
     private final HttpClient httpClient;
+    // Cookie-less client for machine-to-machine calls (client_credentials token
+    // exchange and the bearer-authenticated test endpoints). Carries no session
+    // cookie, so these out-of-band calls cannot disturb the browser session held by
+    // httpClient.
+    private final HttpClient machineClient;
     private final ObjectMapper objectMapper;
 
     public AuthServerClient(String baseUrl) {
         this.baseUrl = baseUrl;
         this.httpClient = HttpClient.newBuilder()
                 .cookieHandler(new CookieManager())
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .build();
+        this.machineClient = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
         this.objectMapper = new ObjectMapper()
@@ -36,52 +43,103 @@ public class AuthServerClient {
                 + "&scope=" + encode(scope)
                 + "&state=" + encode(state);
 
-        HttpResponse<String> response = get(authorizeUrl);
+        HttpResponse<String> response = getOnSession(authorizeUrl);
 
         if (response.statusCode() == 302) {
             String loginUrl = resolveLocation(response);
-            get(loginUrl);
+            getOnSession(loginUrl);
         }
     }
 
-    public String loginAsGuest(String redirectUri) throws Exception {
+    /**
+     * Submits POST /login/guest and returns the auth-server's immediate response.
+     * The caller follows the resulting redirect chain (via {@link #getOnSession(String)})
+     * and asserts on the status / Location.
+     */
+    public HttpResponse<String> loginAsGuest() throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/login/guest"))
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-        while (response.statusCode() == 302) {
-            String location = response.headers().firstValue("Location").orElseThrow();
-            if (location.startsWith(redirectUri)) {
-                return extractQueryParam(location, "code");
-            }
-            response = get(resolveLocation(response));
-        }
-
-        throw new IllegalStateException("Did not receive redirect to callback URI; last status: " + response.statusCode());
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    public TokenResponse exchangeCodeForToken(String code, String clientId, String clientSecret, String redirectUri) throws Exception {
-        String credentials = Base64.getEncoder().encodeToString(
-                (clientId + ":" + clientSecret).getBytes(StandardCharsets.UTF_8));
-        String body = "grant_type=authorization_code"
-                + "&code=" + encode(code)
-                + "&redirect_uri=" + encode(redirectUri);
+    /**
+     * Creates a new account via POST /api/accounts. Returns the raw response so the
+     * test can assert on the status (201 on success).
+     */
+    public HttpResponse<String> createAccount(String name, String email, String password) throws Exception {
+        String json = objectMapper.writeValueAsString(
+                Map.of("name", name, "email", email, "password", password));
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/oauth2/token"))
-                .header("Authorization", "Basic " + credentials)
+                .uri(URI.create(baseUrl + "/api/accounts"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Performs form login (POST /login) and returns the raw response. The caller
+     * inspects the status / Location header (an unverified account yields a 302 to
+     * the "check your email" page).
+     */
+    public HttpResponse<String> login(String email, String password) throws Exception {
+        String body = "email=" + encode(email) + "&password=" + encode(password);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/login"))
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        return objectMapper.readValue(response.body(), TokenResponse.class);
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    private HttpResponse<String> get(String url) throws Exception {
+    /**
+     * Calls the integration-test-only POST /magic-link/generate/test endpoint with a
+     * client_credentials access token to mint a magic-link token for the given email.
+     * Runs on the cookie-less client; the email is passed explicitly rather than
+     * inferred from a session. Returns the raw response (200 body is the token value).
+     */
+    public HttpResponse<String> generateMagicLinkToken(String accessToken, String email) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/magic-link/generate/test?email=" + encode(email)))
+                .header("Authorization", "Bearer " + accessToken)
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+
+        return machineClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Completes magic-link verification on the browser session. The token is first
+     * handed to the server via GET so it is captured into the HTTP session (the SPA
+     * can't read it after hydration), then POST /magic-link/login consumes it from the
+     * session. Returns the auth-server's immediate response to that POST; the caller
+     * follows the resulting redirect chain (via {@link #getOnSession(String)}) and
+     * asserts on the status / Location.
+     */
+    public HttpResponse<String> verifyMagicLink(String magicLinkToken) throws Exception {
+        getOnSession(baseUrl + "/magic-link/login?magicLinkToken=" + encode(magicLinkToken));
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/magic-link/login"))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Issues a GET on the browser session (cookie-bearing client). Exposed so tests
+     * can follow the redirect chain produced by the login / magic-link flows.
+     */
+    public HttpResponse<String> getOnSession(String url) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .GET()
@@ -91,30 +149,10 @@ public class AuthServerClient {
 
     private String resolveLocation(HttpResponse<?> response) {
         String location = response.headers().firstValue("Location").orElseThrow();
-        return location.startsWith("http") ? location : baseUrl + location;
-    }
-
-    private static String extractQueryParam(String url, String name) {
-        String query = URI.create(url).getQuery();
-        for (String param : query.split("&")) {
-            String[] kv = param.split("=", 2);
-            if (kv[0].equals(name) && kv.length == 2) {
-                return URLDecoder.decode(kv[1], StandardCharsets.UTF_8);
-            }
-        }
-        throw new IllegalArgumentException("Parameter '" + name + "' not found in: " + url);
+        return HttpFlowUtils.resolveLocation(baseUrl, location);
     }
 
     private static String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
-
-    public record TokenResponse(
-            String accessToken,
-            String tokenType,
-            String refreshToken,
-            String idToken,
-            String scope,
-            String expiresIn
-    ) {}
 }
