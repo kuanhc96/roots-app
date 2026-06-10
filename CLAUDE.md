@@ -166,6 +166,41 @@ Test the full Authorization Code flow with:
 GET http://localhost:9000/oauth2/authorize?response_type=code&client_id=WEB_CLIENT&redirect_uri=http://localhost:3000/callback&scope=openid%20WEB_CLIENT_READ&state=state
 ```
 
+**Registered client — INTEGRATION_TEST_CLIENT:**
+
+| Property | Value |
+|---|---|
+| `clientId` | `INTEGRATION_TEST_CLIENT` |
+| `clientSecret` | `{noop}integration-test-secret` (seeded in `create_client_table.sql`) |
+| `redirectUri` / `post_logout_redirect_uri` | none (machine-to-machine) |
+| `scopes` | `INTEGRATION_TEST_CLIENT_READ`, `INTEGRATION_TEST_CLIENT_WRITE`, `INTEGRATION_TEST_CLIENT_UPDATE`, `INTEGRATION_TEST_CLIENT_DELETE` |
+| `grantTypes` | `client_credentials` |
+
+Used only by integration tests to obtain an access token for calling auth-server's own protected test endpoints (below).
+
+#### auth-server as an OAuth2 Resource Server (integration-test self-calls)
+
+In addition to being an Authorization Server, auth-server is **also an OAuth2 Resource Server** (`spring-boot-starter-oauth2-resource-server`). This exists so integration tests can drive flows that normally depend on reading an email (the MFA OTT and the account-creation magic link) without an inbox: a test authenticates as `INTEGRATION_TEST_CLIENT` via `client_credentials`, then uses that access token to call test-only endpoints on auth-server itself that return the generated token value directly.
+
+How it is wired in `config/SecurityConfig.java`:
+- `@EnableMethodSecurity` enables `@PreAuthorize` on controller methods.
+- The default `SecurityFilterChain` adds `oauth2ResourceServer(jwt)`. Because that chain pins an explicit `AuthenticationManager` (for form-login / remember-me / guest), the resource server's `BearerTokenAuthenticationFilter` delegates bearer-token authentication to that same `ProviderManager`. A `JwtAuthenticationProvider` (built from the in-memory `jwtDecoder`) is therefore added to the `ProviderManager` explicitly — without it, a bearer request fails with `ProviderNotFoundException: No AuthenticationProvider found for BearerTokenAuthenticationToken`.
+- The `JwtAuthenticationConverter` maps the JWT `scope` claim to authorities with **no** prefix (mirroring simple-resource-server), so scope `INTEGRATION_TEST_CLIENT_WRITE` becomes the authority `INTEGRATION_TEST_CLIENT_WRITE`.
+
+**Test-only endpoints (`MfaController`)** — each guarded by `@PreAuthorize("hasAuthority('INTEGRATION_TEST_CLIENT_WRITE')")`, i.e. callable only with an `INTEGRATION_TEST_CLIENT` client_credentials access token:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /ott/generate/test` | Like `/ott/generate` but returns the OTT value in the response body (still reads the pending user from the session) |
+| `POST /magic-link/generate/test?email=<email>` | Mints an account-creation magic-link token via `JdbcOneTimeTokenService` for the given `email` and returns the token value; stateless — the email is passed explicitly rather than read from the session, since a client_credentials caller has no browser session |
+
+**Self-testing pattern (client_credentials → call auth-server):**
+1. `OAuth2Client.getClientCredentialsToken(...)` exchanges `INTEGRATION_TEST_CLIENT` credentials at `POST /oauth2/token` (`grant_type=client_credentials`) for an access token.
+2. The test attaches that token as a `Bearer` header when calling a `/…/test` endpoint to obtain the OTT / magic-link token value directly.
+3. The token value then feeds the normal verification endpoint (e.g. `POST /magic-link/login`) to complete the flow.
+
+`CreateAccountIntegrationTest` exercises the full chain: create account → auto-login lands on `/signup/success` → client_credentials token → `POST /magic-link/generate/test` → `POST /magic-link/login` → lands on the web-client callback with an authorization code. See `auth-server/README.md` for live-server run instructions.
+
 ### web-client vs auth-server/frontend
 
 - `web-client/` — standalone Nuxt 4 app, developed and deployed independently

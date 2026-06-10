@@ -59,6 +59,7 @@ Default connection targets are declared in `src/test/resources/application.yml`:
 | `auth-server-location` | `http://localhost:9000` | Base URL of the running auth-server |
 | `web-client-location` | `http://localhost:3000` | Base URL used as the OAuth2 redirect URI origin |
 | `web-client-secret` | `secret` | Plaintext value of `WEB_CLIENT` client secret (must match `oauth2_registered_client` table) |
+| `integration-test-client-secret` | `integration-test-secret` | Plaintext value of `INTEGRATION_TEST_CLIENT` client secret (must match `oauth2_registered_client` table) |
 
 Override any of these on the command line with `-D<property>=<value>`.
 
@@ -81,6 +82,44 @@ mvn test -Dtest="GuestLoginIntegrationTest"
 3. Exchanges the code for tokens (`POST /oauth2/token`) and asserts that `access_token`, `token_type` (`Bearer`), `refresh_token`, and `id_token` are all present.
 
 The `AuthServerClient` helper class manages session cookies via `java.net.CookieManager` and manually follows redirects so the code can be captured before the browser would be sent to `web-client-location/callback`.
+
+### Self-testing via the `client_credentials` flow
+
+auth-server is also an **OAuth2 Resource Server**, so integration tests can call a few protected, test-only endpoints on auth-server *itself* to drive flows that otherwise require reading an email (the MFA OTT and the account-creation magic link).
+
+A dedicated machine client, **`INTEGRATION_TEST_CLIENT`** (seeded in `src/main/resources/initialize_db/create_client_table.sql`), uses the `client_credentials` grant:
+
+| Property | Value |
+|---|---|
+| `clientId` | `INTEGRATION_TEST_CLIENT` |
+| `clientSecret` | `{noop}integration-test-secret` |
+| `grantTypes` | `client_credentials` |
+| `scopes` | `INTEGRATION_TEST_CLIENT_READ` / `_WRITE` / `_UPDATE` / `_DELETE` |
+
+A test obtains an access token (`POST /oauth2/token`, `grant_type=client_credentials`) and attaches it as a `Bearer` header to call:
+
+| Endpoint | Guard | Purpose |
+|---|---|---|
+| `POST /ott/generate/test` | `INTEGRATION_TEST_CLIENT_WRITE` | Returns the MFA OTT value in the response body |
+| `POST /magic-link/generate/test?email=<email>` | `INTEGRATION_TEST_CLIENT_WRITE` | Returns an account-creation magic-link token for `email` |
+
+These endpoints are guarded with `@PreAuthorize` (method security, enabled via `@EnableMethodSecurity`). Because the default filter chain pins a custom `AuthenticationManager`, a `JwtAuthenticationProvider` is added to that manager so the bearer token can be authenticated — otherwise the bearer request fails with `ProviderNotFoundException: No AuthenticationProvider found for ...BearerTokenAuthenticationToken`.
+
+Helper classes (`src/test/java/com/roots/authserver/integration/`):
+- `AuthServerClient` — session-based browser interactions (authorize, create account, login, verify magic link). Holds the cookie jar, plus a separate **cookie-less** client for the bearer-authenticated `/…/test` call so it can't disturb the browser session.
+- `OAuth2Client` — stateless, cookie-less helper dedicated to `POST /oauth2/token`; performs the `client_credentials` exchange.
+- `TokenResponse` — shared record for token-endpoint responses.
+
+### CreateAccountIntegrationTest
+
+`CreateAccountIntegrationTest` verifies the full self-service account creation + magic-link verification flow end-to-end:
+
+1. Starts an OAuth2 authorization request to seed the session's saved request.
+2. Creates an account (`POST /api/accounts`) with placeholder values and a **randomized email** (so the test is rerunnable against a persistent DB), asserting `201`.
+3. Auto-logs-in (`POST /login`); the unverified email redirects to `/signup/success` (the "check your email" page).
+4. Obtains an `INTEGRATION_TEST_CLIENT` access token via the `client_credentials` flow.
+5. Calls `POST /magic-link/generate/test` with that token to obtain the magic-link token directly.
+6. Completes verification (`POST /magic-link/login`) and follows the redirect chain to the web-client callback, asserting an authorization `code` is present.
 
 ## CI
 
