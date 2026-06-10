@@ -1,6 +1,10 @@
 spring:
   application:
     name: account-management
+  datasource:
+    url: ${MYSQL_AUTH_SERVER_DB_URL:jdbc:mysql://localhost:3307/auth-server-db}
+    username: ${MYSQL_AUTH_SERVER_ROOT_USERNAME}
+    password: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
   security:
     oauth2:
       resourceserver:
