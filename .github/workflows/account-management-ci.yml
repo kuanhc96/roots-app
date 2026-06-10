@@ -1,0 +1,62 @@
+name: Account Management CI
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'account-management/src/**'
+      - 'account-management/pom.xml'
+
+jobs:
+  startup-check:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
+          MYSQL_DATABASE: auth-server-db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build account-management
+        working-directory: account-management
+        run: mvn package -DskipTests
+
+      - name: Start account-management
+        working-directory: account-management
+        run: java -jar target/account-management-*.jar &
+        env:
+          MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
+          MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
+          MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
+
+      - name: Wait for account-management
+        run: |
+          echo "Waiting for account-management to be ready..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:8082/actuator/health; then
+              echo ""
+              echo "account-management is ready."
+              exit 0
+            fi
+            echo "Attempt $i/30, retrying in 5s..."
+            sleep 5
+          done
+          echo "account-management failed to start within 150s."
+          exit 1
