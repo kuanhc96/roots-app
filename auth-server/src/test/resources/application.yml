@@ -1,4 +1,4 @@
-auth-server-location: http://localhost:9000
+auth-server-location: http://127.0.0.1:9000
 web-client-location: http://localhost:3000
 web-client-secret: secret
 integration-test-client-secret: integration-test-secret
