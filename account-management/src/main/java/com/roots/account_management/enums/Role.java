@@ -1,5 +1,12 @@
 package com.roots.account_management.enums;
 
+import java.util.Arrays;
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+import lombok.Getter;
+
+@Getter
 public enum Role {
     PASTOR("pastor"),
     DEACON("deacon"),
@@ -8,13 +15,25 @@ public enum Role {
     MEMBER("member"),
     GUEST("guest");
 
-    private final String dbValue;
+    @JsonValue
+    private final String value;
 
-    Role(String dbValue) {
-        this.dbValue = dbValue;
+    Role(String value) {
+        this.value = value;
     }
 
-    public String dbValue() {
-        return dbValue;
+    @JsonCreator
+    public static Role getValue(String value) {
+        for (Role type : Role.values()) {
+            if (type.getValue().equalsIgnoreCase(value)) {
+                return type;
+            }
+        }
+
+        throw new IllegalArgumentException("Unknown enum value: %s. Valid values are [%s]".formatted(value,
+                Arrays.stream(Role.values())
+                        .map(Role::getValue)  // Get the lowercase values from the enum
+                        .reduce((v1, v2) -> v1 + ", " + v2)  // Join the values with a comma separator
+                        .orElse("")));
     }
 }
