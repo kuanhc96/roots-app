@@ -50,8 +50,13 @@ class CreateAccountIntegrationTest {
         HttpResponse<String> authorizeResponse =
                 client.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
         assertThat(authorizeResponse.statusCode()).isEqualTo(302);
-        client.getOnSession(HttpFlowUtils.resolveLocation(
-                authServerLocation, authorizeResponse.headers().firstValue("Location").orElseThrow()));
+        while (authorizeResponse.statusCode() == 302) {
+            String location = authorizeResponse.headers().firstValue("Location").orElseThrow();
+            if (location.startsWith(redirectUri)) {
+                break;
+            }
+            authorizeResponse = client.getOnSession(HttpFlowUtils.resolveLocation(authServerLocation, location));
+        }
     }
 
     @Test
