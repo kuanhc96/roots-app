@@ -59,6 +59,7 @@ Default connection targets are declared in `src/test/resources/application.yml`:
 | `auth-server-location` | `http://localhost:9000` | Base URL of the running auth-server |
 | `web-client-location` | `http://localhost:3000` | Base URL used as the OAuth2 redirect URI origin |
 | `web-client-secret` | `secret` | Plaintext value of `WEB_CLIENT` client secret (must match `oauth2_registered_client` table) |
+| `integration-test-client-secret` | `integration-test-secret` | Plaintext value of `INTEGRATION_TEST_CLIENT` client secret (must match `oauth2_registered_client` table) |
 
 Override any of these on the command line with `-D<property>=<value>`.
 
@@ -81,6 +82,54 @@ mvn test -Dtest="GuestLoginIntegrationTest"
 3. Exchanges the code for tokens (`POST /oauth2/token`) and asserts that `access_token`, `token_type` (`Bearer`), `refresh_token`, and `id_token` are all present.
 
 The `AuthServerClient` helper class manages session cookies via `java.net.CookieManager` and manually follows redirects so the code can be captured before the browser would be sent to `web-client-location/callback`.
+
+### Self-testing via the `client_credentials` flow
+
+auth-server is also an **OAuth2 Resource Server**, so integration tests can call a few protected, test-only endpoints on auth-server *itself* to drive flows that otherwise require reading an email (the MFA OTT and the account-creation magic link).
+
+A dedicated machine client, **`INTEGRATION_TEST_CLIENT`** (seeded in `src/main/resources/initialize_db/create_client_table.sql`), uses the `client_credentials` grant:
+
+| Property | Value |
+|---|---|
+| `clientId` | `INTEGRATION_TEST_CLIENT` |
+| `clientSecret` | `{noop}integration-test-secret` |
+| `grantTypes` | `client_credentials` |
+| `scopes` | `INTEGRATION_TEST_CLIENT_READ` / `_WRITE` / `_UPDATE` / `_DELETE` |
+
+A test obtains an access token (`POST /oauth2/token`, `grant_type=client_credentials`) and attaches it as a `Bearer` header to call:
+
+| Endpoint | Guard | Purpose |
+|---|---|---|
+| `POST /ott/generate/test` | `INTEGRATION_TEST_CLIENT_WRITE` | Returns the MFA OTT value in the response body |
+| `POST /magic-link/generate/test?email=<email>` | `INTEGRATION_TEST_CLIENT_WRITE` | Returns an account-creation magic-link token for `email` |
+
+These endpoints are guarded with `@PreAuthorize` (method security, enabled via `@EnableMethodSecurity`). Because the default filter chain pins a custom `AuthenticationManager`, a `JwtAuthenticationProvider` is added to that manager so the bearer token can be authenticated — otherwise the bearer request fails with `ProviderNotFoundException: No AuthenticationProvider found for ...BearerTokenAuthenticationToken`.
+
+Helper classes (`src/test/java/com/roots/authserver/integration/`):
+- `IntegrationTestBase` — abstract base that all integration test classes extend. Carries the Spring test-context annotations (`@ExtendWith`/`@ContextConfiguration`/`@TestPropertySource`) and the `auth-server-location` value, and builds a **fresh** `AuthServerClient` + `OAuth2Client` before each test (`@BeforeEach`), closing them after (`@AfterEach`). See [HTTP client lifecycle](#http-client-lifecycle-per-test-fresh-clients) below for why.
+- `AuthServerClient` — session-based browser interactions (authorize, create account, login, verify magic link). Holds the cookie jar, plus a separate **cookie-less** client for the bearer-authenticated `/…/test` call so it can't disturb the browser session. `AutoCloseable`; `close()` shuts down **both** its `HttpClient`s.
+- `OAuth2Client` — stateless, cookie-less helper dedicated to `POST /oauth2/token`; performs the `client_credentials` exchange. `AutoCloseable`; `close()` shuts down its `HttpClient`.
+- `TokenResponse` — shared record for token-endpoint responses.
+- `TestConfig` — empty `@Configuration` that only anchors the test context so `@TestPropertySource`/`@Value` can resolve the connection settings (it no longer defines client beans).
+
+### HTTP client lifecycle (per-test fresh clients)
+
+Each test builds its own `AuthServerClient`/`OAuth2Client` and closes them afterwards (via `IntegrationTestBase`), rather than sharing one instance across the suite. This is deliberate and fixes an intermittent `java.net.ConnectException`.
+
+**Before.** `AuthServerClient` and `OAuth2Client` were shared singleton `@Bean`s in `TestConfig`, `@Autowired` into each test class. Spring caches and reuses a single test `ApplicationContext` across all integration test classes, so every test shared one JDK `HttpClient` — and therefore one **connection pool** (the set of kept-open, reused TCP keep-alive connections). On a long run (the full suite, or CI), a pooled connection could sit idle longer than the live auth-server's Tomcat `keepAliveTimeout` (20 s). Tomcat closes its end, but the client still believes the connection is good (its own keep-alive default is 1200 s) and reuses the now-dead connection on the next request → `ClosedChannelException`, surfaced as `ConnectException`. The symptoms were distinctive: the **second** integration class to run failed (whichever one it was), each class **passed in isolation** (requests are back-to-back, so no idle gap opens), and it reproduced **locally only when the whole suite ran at once**.
+
+**After.** The clients are no longer beans. `IntegrationTestBase` builds a fresh `AuthServerClient` + `OAuth2Client` in `@BeforeEach` and `close()`s them in `@AfterEach` (both are now `AutoCloseable`). Each test gets its own short-lived connection pool, so no connection is ever idle long enough to be reaped by the server, and nothing is shared between tests. As a bonus, every test starts with a clean cookie jar / session (the shared client had been leaking `JSESSIONID` across tests). When extending `IntegrationTestBase`, use the inherited `authServerClient` / `oAuth2Client` fields — do **not** reintroduce a shared client bean.
+
+### CreateAccountIntegrationTest
+
+`CreateAccountIntegrationTest` verifies the full self-service account creation + magic-link verification flow end-to-end:
+
+1. Starts an OAuth2 authorization request to seed the session's saved request.
+2. Creates an account (`POST /api/accounts`) with placeholder values and a **randomized email** (so the test is rerunnable against a persistent DB), asserting `201`.
+3. Auto-logs-in (`POST /login`); the unverified email redirects to `/signup/success` (the "check your email" page).
+4. Obtains an `INTEGRATION_TEST_CLIENT` access token via the `client_credentials` flow.
+5. Calls `POST /magic-link/generate/test` with that token to obtain the magic-link token directly.
+6. Completes verification (`POST /magic-link/login`) and follows the redirect chain to the web-client callback, asserting an authorization `code` is present.
 
 ## CI
 

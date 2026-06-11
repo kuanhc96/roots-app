@@ -27,6 +27,7 @@ import com.roots.authserver.service.InMemoryOneTimePinService;
 
 import org.springframework.security.authentication.ott.JdbcOneTimeTokenService;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -42,6 +43,9 @@ import org.springframework.security.web.authentication.rememberme.TokenBasedReme
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationProvider;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.client.JdbcRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
@@ -74,6 +78,7 @@ import java.util.stream.Collectors;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     @Value("${remember-me.key}")
@@ -122,9 +127,23 @@ public class SecurityConfig {
                         .usernameParameter("email")
                         .successHandler(successHandler)
                 )
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+                )
                 .csrf(AbstractHttpConfigurer::disable);
 
         return http.build();
+    }
+
+    @Bean
+    public JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtGrantedAuthoritiesConverter scopesConverter = new JwtGrantedAuthoritiesConverter();
+        scopesConverter.setAuthorityPrefix("");
+
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(scopesConverter);
+
+        return converter;
     }
 
     // TODO: this is a temporary measure. The frontend client should not be able to
@@ -180,8 +199,19 @@ public class SecurityConfig {
     public AuthenticationManager authenticationManager(
             MfaAwareDaoAuthenticationProvider authenticationProvider,
             RememberMeAuthenticationProvider rememberMeAuthenticationProvider,
-            GuestAuthenticationProvider guestAuthenticationProvider) {
-        return new ProviderManager(authenticationProvider, rememberMeAuthenticationProvider, guestAuthenticationProvider);
+            GuestAuthenticationProvider guestAuthenticationProvider,
+            JwtDecoder jwtDecoder) {
+        // Because this chain pins an explicit AuthenticationManager, the resource
+        // server's BearerTokenAuthenticationFilter delegates here. Register a
+        // JwtAuthenticationProvider so BearerTokenAuthenticationTokens can be
+        // authenticated (e.g. the INTEGRATION_TEST_CLIENT client_credentials token).
+        JwtAuthenticationProvider jwtAuthenticationProvider = new JwtAuthenticationProvider(jwtDecoder);
+        jwtAuthenticationProvider.setJwtAuthenticationConverter(jwtAuthenticationConverter());
+        return new ProviderManager(
+                authenticationProvider,
+                rememberMeAuthenticationProvider,
+                guestAuthenticationProvider,
+                jwtAuthenticationProvider);
     }
 
     @Bean

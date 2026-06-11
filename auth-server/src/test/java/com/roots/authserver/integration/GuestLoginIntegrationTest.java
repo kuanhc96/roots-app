@@ -3,28 +3,16 @@ package com.roots.authserver.integration;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.test.context.ContextConfiguration;
-import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.context.junit.jupiter.SpringExtension;
 
-import com.roots.authserver.integration.AuthServerClient.TokenResponse;
-
+import java.net.http.HttpResponse;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@ExtendWith({SpringExtension.class})
-@ContextConfiguration(classes = TestConfig.class)
-@TestPropertySource("classpath:/application.yml")
-class GuestLoginIntegrationTest {
-
-    @Autowired
-    private AuthServerClient client;
+class GuestLoginIntegrationTest extends IntegrationTestBase {
 
     @Value("${web-client-location}")
     private String webClientLocation;
@@ -36,12 +24,23 @@ class GuestLoginIntegrationTest {
     void guestLogin_shouldReturnAccessToken() throws Exception {
         String redirectUri = webClientLocation + "/callback";
 
-        client.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
+        HttpResponse<String> authorizeResponse =
+                authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
+        assertThat(authorizeResponse.statusCode()).isEqualTo(302);
+        authServerClient.getOnSession(HttpFlowUtils.resolveLocation(
+                authServerLocation, authorizeResponse.headers().firstValue("Location").orElseThrow()));
 
-        String code = client.loginAsGuest(redirectUri);
+        // Follow the redirect chain from the guest login until we land on the callback.
+        HttpResponse<String> response = HttpFlowUtils.followRedirects(
+                authServerClient, authServerLocation, authServerClient.loginAsGuest(), redirectUri);
+
+        assertThat(response.statusCode()).isEqualTo(302);
+        String callback = response.headers().firstValue("Location").orElseThrow();
+        assertThat(callback).startsWith(redirectUri);
+        String code = HttpFlowUtils.extractQueryParam(callback, "code");
         assertThat(code).isNotBlank();
 
-        TokenResponse tokens = client.exchangeCodeForToken(code, "WEB_CLIENT", webClientSecret, redirectUri);
+        TokenResponse tokens = oAuth2Client.getAuthorizationGrantToken(code, "WEB_CLIENT", webClientSecret, redirectUri);
         assertThat(tokens.accessToken()).isNotBlank();
         assertThat(tokens.tokenType()).isEqualToIgnoringCase("Bearer");
         assertThat(tokens.refreshToken()).isNotBlank();
