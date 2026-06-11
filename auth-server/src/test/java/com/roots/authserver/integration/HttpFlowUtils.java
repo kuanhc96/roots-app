@@ -2,6 +2,7 @@ package com.roots.authserver.integration;
 
 import java.net.URI;
 import java.net.URLDecoder;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -35,5 +36,23 @@ public final class HttpFlowUtils {
             }
         }
         throw new IllegalArgumentException("Parameter '" + name + "' not found in: " + url);
+    }
+
+    /**
+     * Follows the {@code 302} redirect chain produced by the auth-server login / magic-link
+     * flows, issuing each hop on the cookie-bearing session, until the {@code Location} header
+     * points at {@code targetPrefix} (e.g. the web-client callback) or the response is no longer
+     * a redirect. Returns the final response.
+     */
+    public static HttpResponse<String> followRedirects(AuthServerClient client, String baseUrl,
+            HttpResponse<String> response, String targetPrefix) throws Exception {
+        while (response.statusCode() == 302) {
+            String location = response.headers().firstValue("Location").orElseThrow();
+            if (location.startsWith(targetPrefix)) {
+                break;
+            }
+            response = client.getOnSession(resolveLocation(baseUrl, location));
+        }
+        return response;
     }
 }

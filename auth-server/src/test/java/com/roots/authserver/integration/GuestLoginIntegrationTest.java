@@ -48,14 +48,8 @@ class GuestLoginIntegrationTest {
                 authServerLocation, authorizeResponse.headers().firstValue("Location").orElseThrow()));
 
         // Follow the redirect chain from the guest login until we land on the callback.
-        HttpResponse<String> response = client.loginAsGuest();
-        while (response.statusCode() == 302) {
-            String location = response.headers().firstValue("Location").orElseThrow();
-            if (location.startsWith(redirectUri)) {
-                break;
-            }
-            response = client.getOnSession(HttpFlowUtils.resolveLocation(authServerLocation, location));
-        }
+        HttpResponse<String> response = HttpFlowUtils.followRedirects(
+                client, authServerLocation, client.loginAsGuest(), redirectUri);
 
         assertThat(response.statusCode()).isEqualTo(302);
         String callback = response.headers().firstValue("Location").orElseThrow();

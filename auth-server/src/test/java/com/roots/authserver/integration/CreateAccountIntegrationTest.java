@@ -50,13 +50,7 @@ class CreateAccountIntegrationTest {
         HttpResponse<String> authorizeResponse =
                 client.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
         assertThat(authorizeResponse.statusCode()).isEqualTo(302);
-        while (authorizeResponse.statusCode() == 302) {
-            String location = authorizeResponse.headers().firstValue("Location").orElseThrow();
-            if (location.startsWith(redirectUri)) {
-                break;
-            }
-            authorizeResponse = client.getOnSession(HttpFlowUtils.resolveLocation(authServerLocation, location));
-        }
+        HttpFlowUtils.followRedirects(client, authServerLocation, authorizeResponse, redirectUri);
     }
 
     @Test
@@ -84,14 +78,8 @@ class CreateAccountIntegrationTest {
 
         // 5. Complete verification with the magic-link token, then follow the redirect
         //    chain; we should land on the web-client callback with an authorization code.
-        HttpResponse<String> response = client.verifyMagicLink(magicLinkToken);
-        while (response.statusCode() == 302) {
-            String location = response.headers().firstValue("Location").orElseThrow();
-            if (location.startsWith(redirectUri)) {
-                break;
-            }
-            response = client.getOnSession(HttpFlowUtils.resolveLocation(authServerLocation, location));
-        }
+        HttpResponse<String> response = HttpFlowUtils.followRedirects(
+                client, authServerLocation, client.verifyMagicLink(magicLinkToken), redirectUri);
 
         assertThat(response.statusCode()).isEqualTo(302);
         String callback = response.headers().firstValue("Location").orElseThrow();
