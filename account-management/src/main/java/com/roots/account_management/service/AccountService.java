@@ -2,6 +2,7 @@ package com.roots.account_management.service;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -16,7 +17,6 @@ import com.roots.account_management.exception.EmailAlreadyExistsException;
 import com.roots.account_management.model.UserCredential;
 import com.roots.account_management.repository.RoleRepository;
 import com.roots.account_management.repository.UserCredentialRepository;
-import com.roots.account_management.validator.CreateAccountValidator;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -28,12 +28,9 @@ public class AccountService {
     private final UserCredentialRepository userCredentialRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
-    private final CreateAccountValidator createAccountValidator;
 
     @Transactional
     public CreateAccountResponse createTestAccount(CreateAccountRequest request) {
-        createAccountValidator.validate(request);
-
         if (userCredentialRepository.findByEmail(request.email()).isPresent()) {
             throw new EmailAlreadyExistsException("An account with this email already exists");
         }
@@ -54,7 +51,7 @@ public class AccountService {
 
         List<Role> roles = resolveRoles(request.roles());
         for (Role role : roles) {
-            roleRepository.insert(credentialId, role.dbValue());
+            roleRepository.insert(credentialId, role.getValue());
         }
 
         return new CreateAccountResponse(
@@ -65,6 +62,24 @@ public class AccountService {
                 request.emailVerified(),
                 roles
         );
+    }
+
+    // Idempotent delete: resolves the account by exactly one of email/userGUID
+    // (the caller-supplied pair is pre-validated in the controller). No match is a
+    // no-op so test teardown can run safely more than once. Role rows are removed
+    // before the credential because the role FK has no ON DELETE CASCADE.
+    @Transactional
+    public void deleteTestAccount(String email, String userGUID) {
+        boolean hasEmail = email != null && !email.isBlank();
+        Optional<UserCredential> account = hasEmail
+                ? userCredentialRepository.findByEmail(email)
+                : userCredentialRepository.findByUserGuid(userGUID);
+
+        account.ifPresent(credential -> {
+            long credentialId = credential.id();
+            roleRepository.deleteByCredentialId(credentialId);
+            userCredentialRepository.deleteById(credentialId);
+        });
     }
 
     // MEMBER is always present (the floor), then any caller-requested roles, de-duplicated

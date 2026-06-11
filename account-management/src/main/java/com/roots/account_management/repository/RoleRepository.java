@@ -19,4 +19,8 @@ public class RoleRepository {
                 UUID.randomUUID().toString(), credentialId, roleName
         );
     }
+
+    public void deleteByCredentialId(long credentialId) {
+        jdbcTemplate.update("DELETE FROM role WHERE credential_id = ?", credentialId);
+    }
 }

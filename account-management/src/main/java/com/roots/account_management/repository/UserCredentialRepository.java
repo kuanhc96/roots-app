@@ -38,6 +38,19 @@ public class UserCredentialRepository {
         return results.stream().findFirst();
     }
 
+    public Optional<UserCredential> findByUserGuid(String userGuid) {
+        var results = jdbcTemplate.query(
+                "SELECT id, user_guid, email, name, password, is_mfa_enabled, is_email_verified FROM user_credential WHERE user_guid = ?",
+                ROW_MAPPER,
+                userGuid
+        );
+        return results.stream().findFirst();
+    }
+
+    public void deleteById(long id) {
+        jdbcTemplate.update("DELETE FROM user_credential WHERE id = ?", id);
+    }
+
     public long insert(UserCredential userCredential) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
