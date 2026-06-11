@@ -43,7 +43,11 @@ class CreateAccountIntegrationTest {
 
         // Start the authorization-code flow so a SavedRequest is held in the session;
         // magic-link verification redirects back to it (and thus to the callback).
-        client.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
+        HttpResponse<String> authorizeResponse =
+                client.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
+        assertThat(authorizeResponse.statusCode()).isEqualTo(302);
+        client.getOnSession(HttpFlowUtils.resolveLocation(
+                authServerLocation, authorizeResponse.headers().firstValue("Location").orElseThrow()));
 
         // 1. Create the account with placeholder values.
         HttpResponse<String> createResponse = client.createAccount(TEST_NAME, email, TEST_PASSWORD);

@@ -55,7 +55,7 @@ public class OAuth2Client {
      * Performs an authorization_code token exchange (POST /oauth2/token) for a
      * confidential client such as WEB_CLIENT, swapping the code for tokens.
      */
-    public TokenResponse exchangeCodeForToken(String code, String clientId, String clientSecret, String redirectUri) throws Exception {
+    public TokenResponse getAuthorizationGrantToken(String code, String clientId, String clientSecret, String redirectUri) throws Exception {
         String credentials = Base64.getEncoder().encodeToString(
                 (clientId + ":" + clientSecret).getBytes(StandardCharsets.UTF_8));
         String body = "grant_type=authorization_code"

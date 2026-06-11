@@ -36,19 +36,20 @@ public class AuthServerClient {
                 .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
     }
 
-    public void startOAuth2AuthorizationFlow(String clientId, String redirectUri, String scope, String state) throws Exception {
+    /**
+     * Starts the Authorization Code flow (GET /oauth2/authorize) on the browser session
+     * so a SavedRequest is held for the rest of the flow. Returns the auth-server's
+     * immediate response; the caller asserts the 302 and follows the Location to the
+     * login page (via {@link #getOnSession(String)}).
+     */
+    public HttpResponse<String> startOAuth2AuthorizationFlow(String clientId, String redirectUri, String scope, String state) throws Exception {
         String authorizeUrl = baseUrl + "/oauth2/authorize?response_type=code"
                 + "&client_id=" + encode(clientId)
                 + "&redirect_uri=" + encode(redirectUri)
                 + "&scope=" + encode(scope)
                 + "&state=" + encode(state);
 
-        HttpResponse<String> response = getOnSession(authorizeUrl);
-
-        if (response.statusCode() == 302) {
-            String loginUrl = resolveLocation(response);
-            getOnSession(loginUrl);
-        }
+        return getOnSession(authorizeUrl);
     }
 
     /**
@@ -145,11 +146,6 @@ public class AuthServerClient {
                 .GET()
                 .build();
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-    }
-
-    private String resolveLocation(HttpResponse<?> response) {
-        String location = response.headers().firstValue("Location").orElseThrow();
-        return HttpFlowUtils.resolveLocation(baseUrl, location);
     }
 
     private static String encode(String value) {

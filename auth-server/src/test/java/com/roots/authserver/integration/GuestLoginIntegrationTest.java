@@ -41,7 +41,11 @@ class GuestLoginIntegrationTest {
     void guestLogin_shouldReturnAccessToken() throws Exception {
         String redirectUri = webClientLocation + "/callback";
 
-        client.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
+        HttpResponse<String> authorizeResponse =
+                client.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
+        assertThat(authorizeResponse.statusCode()).isEqualTo(302);
+        client.getOnSession(HttpFlowUtils.resolveLocation(
+                authServerLocation, authorizeResponse.headers().firstValue("Location").orElseThrow()));
 
         // Follow the redirect chain from the guest login until we land on the callback.
         HttpResponse<String> response = client.loginAsGuest();
@@ -59,7 +63,7 @@ class GuestLoginIntegrationTest {
         String code = HttpFlowUtils.extractQueryParam(callback, "code");
         assertThat(code).isNotBlank();
 
-        TokenResponse tokens = oAuth2Client.exchangeCodeForToken(code, "WEB_CLIENT", webClientSecret, redirectUri);
+        TokenResponse tokens = oAuth2Client.getAuthorizationGrantToken(code, "WEB_CLIENT", webClientSecret, redirectUri);
         assertThat(tokens.accessToken()).isNotBlank();
         assertThat(tokens.tokenType()).isEqualToIgnoringCase("Bearer");
         assertThat(tokens.refreshToken()).isNotBlank();
