@@ -12,7 +12,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
-public class AuthServerClient {
+public class AuthServerClient implements AutoCloseable {
 
     private final String baseUrl;
     private final HttpClient httpClient;
@@ -177,5 +177,16 @@ public class AuthServerClient {
 
     private static String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Closes both underlying HttpClients (the cookie-bearing browser client and the
+     * cookie-less machine client), releasing their pooled connections and selector
+     * threads. Called per test so no idle connection is carried over to the next one.
+     */
+    @Override
+    public void close() {
+        httpClient.close();
+        machineClient.close();
     }
 }

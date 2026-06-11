@@ -16,7 +16,7 @@ import java.util.Base64;
  * cookie-less HttpClient because token exchanges are out-of-band machine calls that
  * don't participate in the browser session held by {@link AuthServerClient}.
  */
-public class OAuth2Client {
+public class OAuth2Client implements AutoCloseable {
 
     private final String baseUrl;
     private final HttpClient httpClient;
@@ -75,5 +75,14 @@ public class OAuth2Client {
 
     private static String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Closes the underlying HttpClient, releasing its pooled connections and selector
+     * threads. Called per test so no idle connection is carried over to the next one.
+     */
+    @Override
+    public void close() {
+        httpClient.close();
     }
 }

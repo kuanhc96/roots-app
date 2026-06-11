@@ -5,15 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.test.context.ContextConfiguration;
-import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import java.net.http.HttpResponse;
 import java.util.UUID;
@@ -29,20 +24,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   - {@link TestEndpointAuthorization}: the bearer-guarded POST /magic-link/generate/test
  *     rejects missing / wrong-scope / malformed tokens (401 / 403).
  */
-@ExtendWith({SpringExtension.class})
-@ContextConfiguration(classes = TestConfig.class)
-@TestPropertySource("classpath:/application.yml")
-class NegativeCaseIntegrationTest {
+class NegativeCaseIntegrationTest extends IntegrationTestBase {
 
     private static final String VALID_NAME = "Integration Test User";
     private static final String VALID_PASSWORD = "Password123";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
-    @Autowired
-    private AuthServerClient client;
-
-    @Autowired
-    private OAuth2Client oAuth2Client;
 
     @Value("${integration-test-client-secret}")
     private String integrationTestClientSecret;
@@ -84,7 +70,7 @@ class NegativeCaseIntegrationTest {
         @MethodSource("invalidCreateAccountRequests")
         void createAccount_withInvalidInput_returns400(
                 String caseName, String name, String email, String password) throws Exception {
-            HttpResponse<String> response = client.createAccount(name, email, password);
+            HttpResponse<String> response = authServerClient.createAccount(name, email, password);
 
             assertThat(response.statusCode()).isEqualTo(400);
             assertHasErrorField(response.body());
@@ -94,10 +80,10 @@ class NegativeCaseIntegrationTest {
         void createAccount_withDuplicateEmail_returns409() throws Exception {
             String email = uniqueEmail();
 
-            HttpResponse<String> first = client.createAccount(VALID_NAME, email, VALID_PASSWORD);
+            HttpResponse<String> first = authServerClient.createAccount(VALID_NAME, email, VALID_PASSWORD);
             assertThat(first.statusCode()).isEqualTo(201);
 
-            HttpResponse<String> duplicate = client.createAccount(VALID_NAME, email, VALID_PASSWORD);
+            HttpResponse<String> duplicate = authServerClient.createAccount(VALID_NAME, email, VALID_PASSWORD);
             assertThat(duplicate.statusCode()).isEqualTo(409);
             assertHasErrorField(duplicate.body());
         }
@@ -108,7 +94,7 @@ class NegativeCaseIntegrationTest {
 
         @Test
         void generateMagicLinkToken_withoutBearerToken_returns401() throws Exception {
-            HttpResponse<String> response = client.generateMagicLinkTokenWithoutAuth(uniqueEmail());
+            HttpResponse<String> response = authServerClient.generateMagicLinkTokenWithoutAuth(uniqueEmail());
 
             assertThat(response.statusCode()).isEqualTo(401);
         }
@@ -121,7 +107,7 @@ class NegativeCaseIntegrationTest {
             assertThat(readToken.accessToken()).isNotBlank();
 
             HttpResponse<String> response =
-                    client.generateMagicLinkTokenWithRawToken(readToken.accessToken(), uniqueEmail());
+                    authServerClient.generateMagicLinkTokenWithRawToken(readToken.accessToken(), uniqueEmail());
 
             assertThat(response.statusCode()).isEqualTo(403);
         }
@@ -129,7 +115,7 @@ class NegativeCaseIntegrationTest {
         @Test
         void generateMagicLinkToken_withMalformedToken_returns401() throws Exception {
             HttpResponse<String> response =
-                    client.generateMagicLinkTokenWithRawToken("not-a-real-jwt", uniqueEmail());
+                    authServerClient.generateMagicLinkTokenWithRawToken("not-a-real-jwt", uniqueEmail());
 
             assertThat(response.statusCode()).isEqualTo(401);
         }
