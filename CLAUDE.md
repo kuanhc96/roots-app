@@ -201,6 +201,8 @@ How it is wired in `config/SecurityConfig.java`:
 
 `CreateAccountIntegrationTest` exercises the full chain: create account → auto-login lands on `/signup/success` → client_credentials token → `POST /magic-link/generate/test` → `POST /magic-link/login` → lands on the web-client callback with an authorization code. See `auth-server/README.md` for live-server run instructions.
 
+**Per-test HTTP client lifecycle:** the integration test classes extend `IntegrationTestBase`, which builds a fresh `AuthServerClient` + `OAuth2Client` in `@BeforeEach` and `close()`s them in `@AfterEach` (both are `AutoCloseable`; `AuthServerClient.close()` shuts down both its cookie-bearing and cookie-less `HttpClient`s). This replaced an earlier design where the clients were shared singleton `@Bean`s in `TestConfig`. *Before:* the cached Spring test context shared one `HttpClient` (one connection pool) across the whole suite; on long runs an idle pooled keep-alive connection outlived Tomcat's 20 s `keepAliveTimeout`, the server closed it, the client reused the dead connection, and the request failed with `ClosedChannelException` surfaced as `ConnectException` (the *second* test class to run failed; each passed in isolation). *After:* a fresh client per test means a fresh connection pool per test — no connection is idle long enough to be reaped, none is shared across tests, and each test gets a clean session. `TestConfig` is now an empty `@Configuration` that only anchors `@TestPropertySource`/`@Value`. **Do not** reintroduce shared client beans.
+
 ### web-client vs auth-server/frontend
 
 - `web-client/` — standalone Nuxt 4 app, developed and deployed independently

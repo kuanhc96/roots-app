@@ -106,9 +106,19 @@ A test obtains an access token (`POST /oauth2/token`, `grant_type=client_credent
 These endpoints are guarded with `@PreAuthorize` (method security, enabled via `@EnableMethodSecurity`). Because the default filter chain pins a custom `AuthenticationManager`, a `JwtAuthenticationProvider` is added to that manager so the bearer token can be authenticated — otherwise the bearer request fails with `ProviderNotFoundException: No AuthenticationProvider found for ...BearerTokenAuthenticationToken`.
 
 Helper classes (`src/test/java/com/roots/authserver/integration/`):
-- `AuthServerClient` — session-based browser interactions (authorize, create account, login, verify magic link). Holds the cookie jar, plus a separate **cookie-less** client for the bearer-authenticated `/…/test` call so it can't disturb the browser session.
-- `OAuth2Client` — stateless, cookie-less helper dedicated to `POST /oauth2/token`; performs the `client_credentials` exchange.
+- `IntegrationTestBase` — abstract base that all integration test classes extend. Carries the Spring test-context annotations (`@ExtendWith`/`@ContextConfiguration`/`@TestPropertySource`) and the `auth-server-location` value, and builds a **fresh** `AuthServerClient` + `OAuth2Client` before each test (`@BeforeEach`), closing them after (`@AfterEach`). See [HTTP client lifecycle](#http-client-lifecycle-per-test-fresh-clients) below for why.
+- `AuthServerClient` — session-based browser interactions (authorize, create account, login, verify magic link). Holds the cookie jar, plus a separate **cookie-less** client for the bearer-authenticated `/…/test` call so it can't disturb the browser session. `AutoCloseable`; `close()` shuts down **both** its `HttpClient`s.
+- `OAuth2Client` — stateless, cookie-less helper dedicated to `POST /oauth2/token`; performs the `client_credentials` exchange. `AutoCloseable`; `close()` shuts down its `HttpClient`.
 - `TokenResponse` — shared record for token-endpoint responses.
+- `TestConfig` — empty `@Configuration` that only anchors the test context so `@TestPropertySource`/`@Value` can resolve the connection settings (it no longer defines client beans).
+
+### HTTP client lifecycle (per-test fresh clients)
+
+Each test builds its own `AuthServerClient`/`OAuth2Client` and closes them afterwards (via `IntegrationTestBase`), rather than sharing one instance across the suite. This is deliberate and fixes an intermittent `java.net.ConnectException`.
+
+**Before.** `AuthServerClient` and `OAuth2Client` were shared singleton `@Bean`s in `TestConfig`, `@Autowired` into each test class. Spring caches and reuses a single test `ApplicationContext` across all integration test classes, so every test shared one JDK `HttpClient` — and therefore one **connection pool** (the set of kept-open, reused TCP keep-alive connections). On a long run (the full suite, or CI), a pooled connection could sit idle longer than the live auth-server's Tomcat `keepAliveTimeout` (20 s). Tomcat closes its end, but the client still believes the connection is good (its own keep-alive default is 1200 s) and reuses the now-dead connection on the next request → `ClosedChannelException`, surfaced as `ConnectException`. The symptoms were distinctive: the **second** integration class to run failed (whichever one it was), each class **passed in isolation** (requests are back-to-back, so no idle gap opens), and it reproduced **locally only when the whole suite ran at once**.
+
+**After.** The clients are no longer beans. `IntegrationTestBase` builds a fresh `AuthServerClient` + `OAuth2Client` in `@BeforeEach` and `close()`s them in `@AfterEach` (both are now `AutoCloseable`). Each test gets its own short-lived connection pool, so no connection is ever idle long enough to be reaped by the server, and nothing is shared between tests. As a bonus, every test starts with a clean cookie jar / session (the shared client had been leaking `JSESSIONID` across tests). When extending `IntegrationTestBase`, use the inherited `authServerClient` / `oAuth2Client` fields — do **not** reintroduce a shared client bean.
 
 ### CreateAccountIntegrationTest
 
