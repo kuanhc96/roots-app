@@ -24,6 +24,11 @@ import com.roots.authserver.principal.MfaAuthenticationToken;
 import com.roots.authserver.principal.MfaPendingAuthenticationToken;
 import com.roots.authserver.service.InMemoryOneTimePinService;
 import com.roots.authserver.service.UserCredentialService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +39,8 @@ import lombok.RequiredArgsConstructor;
  */
 @Controller
 @RequiredArgsConstructor
+@Tag(name = "SPA & authentication flow",
+        description = "Serves the embedded Nuxt pages and handles the MFA, magic-link, and guest-login form submissions")
 public class SpaController {
     private final InMemoryOneTimePinService inMemoryOneTimePinService;
     private final JdbcOneTimeTokenService jdbcOneTimeTokenService;
@@ -46,23 +53,32 @@ public class SpaController {
     @Value("${web-client.location:http://localhost:3000}")
     private String webClientLocation;
 
+    @Operation(summary = "Serve the SPA root", description = "Forwards to index.html for Nuxt client-side routing.")
     @GetMapping("/")
     public String forwardRoot() {
         return "forward:/index.html";
     }
 
+    @Operation(summary = "Serve the login page", description = "Forwards GET /login to the Nuxt login page (POST /login is handled by Spring Security).")
     @GetMapping("/login")
     public String forwardLogin() {
         return "forward:/login/index.html";
     }
 
+    @Operation(summary = "Serve the OTT login page", description = "Forwards to the Nuxt OTT login page, which triggers OTT delivery on mount.")
     @GetMapping("/ott/login")
     public String forwardOttSent() {
         return "forward:/ott/login/index.html";
     }
 
+    @Operation(
+            summary = "Serve the magic-link login page",
+            description = "Captures the magicLinkToken query parameter into the HTTP session (the SPA cannot read it "
+                    + "after hydration strips the query string), then forwards to the Nuxt magic-link page. The "
+                    + "subsequent POST /magic-link/login reads the token back from the session.")
     @GetMapping("/magic-link/login")
     public String forwardMagicLinkSent(
+            @Parameter(description = "Account-creation magic-link token from the emailed link")
             @RequestParam(required = false) String magicLinkToken,
             HttpServletRequest request) {
         // The browser reliably sends the token to the server here, but the Nuxt
@@ -75,14 +91,26 @@ public class SpaController {
         return "forward:/magic-link/login/index.html";
     }
 
+    @Operation(summary = "Serve the signup-success page", description = "Forwards to the Nuxt 'check your email' page shown after registration.")
     @GetMapping("/signup/success")
     public String forwardSignupSuccess() {
         return "forward:/signup/success/index.html";
     }
 
+    @Operation(
+            summary = "Verify an MFA one-time token",
+            description = "Consumes the submitted OTT against the pending MfaPendingAuthenticationToken session. On "
+                    + "success, optionally disables MFA for the browser, upgrades the session to a fully authenticated "
+                    + "MfaAuthenticationToken, and redirects to the saved OAuth2 authorization request.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "302", description = "Redirect to the saved OAuth2 request on success, "
+                    + "to /login if no pending session, or back to /ott/login with an error on invalid token / missing saved request")
+    })
     @PostMapping("/ott/login")
     public String verifyOtt(
+            @Parameter(description = "The one-time token value the user received", required = true)
             @RequestParam String ott,
+            @Parameter(description = "When true, disables MFA for this user going forward")
             @RequestParam(required = false, defaultValue = "false") boolean rememberBrowser,
             HttpServletRequest request,
             HttpServletResponse response) {
@@ -115,6 +143,16 @@ public class SpaController {
         }
     }
 
+    @Operation(
+            summary = "Verify the account-creation magic link",
+            description = "Reads the magicLinkToken stashed in the session by GET /magic-link/login, consumes it via "
+                    + "JdbcOneTimeTokenService, marks the account's email verified, upgrades the session to a fully "
+                    + "authenticated MfaAuthenticationToken, and redirects to the saved OAuth2 request (or the "
+                    + "web-client base URL if no saved request exists). Carries no token field itself.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "302", description = "Redirect to the saved OAuth2 request or web-client on success, "
+                    + "to /login if no pending session, or back to /magic-link/login with an error on invalid/missing token")
+    })
     @PostMapping("/magic-link/login")
     public String verifyMagicLink(
             HttpServletRequest request,
@@ -159,6 +197,14 @@ public class SpaController {
         }
     }
 
+    @Operation(
+            summary = "Log in as guest",
+            description = "Authenticates the caller as a guest (no credentials required) via GuestAuthenticationProvider, "
+                    + "saves the resulting MfaAuthenticationToken to the session, and redirects to the saved OAuth2 request.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "302", description = "Redirect to the saved OAuth2 request on success, "
+                    + "or back to /login with an error if no saved request exists")
+    })
     @PostMapping("/login/guest")
     public String loginAsGuest(HttpServletRequest request, HttpServletResponse response) {
         Authentication guestAuth = authenticationManager.authenticate(new GuestAuthenticationToken());
