@@ -54,7 +54,7 @@ jobs:
 
       - name: Start auth-server
         working-directory: auth-server
-        run: java -jar target/auth-server-*.jar &
+        run: java -jar target/auth-server-*.jar > auth-server.log 2>&1 &
         env:
           MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
           MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
@@ -80,3 +80,10 @@ jobs:
       - name: Run integration tests
         working-directory: auth-server
         run: mvn surefire:test
+
+      - name: Upload auth-server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-server-log
+          path: auth-server/auth-server.log
