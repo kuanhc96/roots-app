@@ -117,6 +117,33 @@ public class AuthServerClient {
     }
 
     /**
+     * Calls POST /magic-link/generate/test with no Authorization header. Used by the
+     * negative-path tests to assert the endpoint rejects unauthenticated calls.
+     */
+    public HttpResponse<String> generateMagicLinkTokenWithoutAuth(String email) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/magic-link/generate/test?email=" + encode(email)))
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+
+        return machineClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Calls POST /magic-link/generate/test with an arbitrary bearer token value. Used by
+     * the negative-path tests to assert a malformed / invalid token is rejected.
+     */
+    public HttpResponse<String> generateMagicLinkTokenWithRawToken(String bearerToken, String email) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/magic-link/generate/test?email=" + encode(email)))
+                .header("Authorization", "Bearer " + bearerToken)
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+
+        return machineClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
      * Completes magic-link verification on the browser session. The token is first
      * handed to the server via GET so it is captured into the HTTP session (the SPA
      * can't read it after hydration), then POST /magic-link/login consumes it from the
