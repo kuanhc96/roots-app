@@ -1,5 +1,6 @@
 package com.roots.authserver.integration;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,10 +37,13 @@ class CreateAccountIntegrationTest {
     @Value("${integration-test-client-secret}")
     private String integrationTestClientSecret;
 
-    @Test
-    void createAccountFlow_verifiesEmailViaMagicLinkAndLandsOnCallback() throws Exception {
-        String redirectUri = webClientLocation + "/callback";
-        String email = "itest+" + UUID.randomUUID() + "@example.com";
+    private String redirectUri;
+    private String email;
+
+    @BeforeEach
+    void startOAuth2AuthorizationFlow() throws Exception {
+        redirectUri = webClientLocation + "/callback";
+        email = "itest+" + UUID.randomUUID() + "@example.com";
 
         // Start the authorization-code flow so a SavedRequest is held in the session;
         // magic-link verification redirects back to it (and thus to the callback).
@@ -48,7 +52,10 @@ class CreateAccountIntegrationTest {
         assertThat(authorizeResponse.statusCode()).isEqualTo(302);
         client.getOnSession(HttpFlowUtils.resolveLocation(
                 authServerLocation, authorizeResponse.headers().firstValue("Location").orElseThrow()));
+    }
 
+    @Test
+    void createAccountFlow_verifiesEmailViaMagicLinkAndLandsOnCallback() throws Exception {
         // 1. Create the account with placeholder values.
         HttpResponse<String> createResponse = client.createAccount(TEST_NAME, email, TEST_PASSWORD);
         assertThat(createResponse.statusCode()).isEqualTo(201);
