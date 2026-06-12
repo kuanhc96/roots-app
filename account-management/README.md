@@ -55,14 +55,15 @@ Connection targets are configured in `src/test/resources/application.yml` (`auth
 
 The workflow at `.github/workflows/account-management-ci.yml` runs on pull requests that touch `account-management/src/**` or `account-management/pom.xml` (events: `opened`, `synchronize`).
 
-CI simply verifies the service **starts successfully** before a merge. The [integration tests](#integration-tests) are **not** run in CI: they require a live `auth-server` (for the `client_credentials` token and JWK set) plus a running account-management, neither of which the CI job provides.
+CI runs the [integration tests](#integration-tests) and fails the job if any of them fail. Because those tests need a live `auth-server` (for the `client_credentials` token and the JWK set) **and** a running account-management, the workflow boots both services against a shared MySQL before running the tests.
 
 ### What it does
 
-1. Starts a MySQL 8 service container with an empty `auth-server-db` database. No seeding is required: the actuator `db` health indicator only needs a reachable datasource, and the account endpoints (which read/write `user_credential`/`role`) are never hit by the startup check.
-2. Builds the JAR with `mvn package -DskipTests`.
-3. Starts the service in the background with `java -jar`.
-4. Polls `GET /actuator/health` until the service reports `UP` (up to 150 s). If it never comes up, the job fails.
+1. Starts a MySQL 8 service container (port 3306) with an `auth-server-db` database.
+2. **Seeds the shared schema** by running the `auth-server` scripts in `auth-server/src/main/resources/initialize_db/` (`create_authentication_tables.sql` → `create_client_table.sql` → `create_one_time_tokens_table.sql` → `initialize_test_users.sql`). This creates the `user_credential`/`role` tables account-management writes to and seeds the `INTEGRATION_TEST_CLIENT` that issues the `client_credentials` token.
+3. Builds and starts **auth-server** (`mvn package -DskipTests` → `java -jar`), then polls `GET http://localhost:9000/actuator/health` until `UP` (up to 150 s).
+4. Builds and starts **account-management** (`mvn package -DskipTests` — this also compiles the test sources → `java -jar`), then polls `GET http://localhost:8082/actuator/health` until `UP` (up to 150 s).
+5. Runs the integration tests with `mvn surefire:test`. A failure fails the job.
 
 ### Required GitHub secrets
 
@@ -70,8 +71,10 @@ CI simply verifies the service **starts successfully** before a merge. The [inte
 |---|---|
 | `MYSQL_AUTH_SERVER_ROOT_USERNAME` | `root` (the MySQL service container only creates a root user) |
 | `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | any password |
+| `SPRING_MAIL_USERNAME` | Gmail username — required because auth-server is started in this job and validates the mail config at startup |
+| `SPRING_MAIL_PASSWORD` | Gmail App Password (same reason) |
 
-`MYSQL_AUTH_SERVER_DB_URL` is hardcoded in the workflow to `jdbc:mysql://localhost:3306/auth-server-db` (the GitHub Actions MySQL container exposes port 3306, not 3307). `AUTH_SERVER_JWK_URI` is left at its default — the JWK set is fetched lazily, so `auth-server` need not be running for the startup check to pass.
+`MYSQL_AUTH_SERVER_DB_URL` is hardcoded in the workflow to `jdbc:mysql://localhost:3306/auth-server-db` (the GitHub Actions MySQL container exposes port 3306, not 3307). `AUTH_SERVER_JWK_URI` is left at its default (`http://localhost:9000/oauth2/jwks`) — auth-server is running on that port, so account-management can fetch the JWK set to validate the bearer token.
 
 ## CD
 
