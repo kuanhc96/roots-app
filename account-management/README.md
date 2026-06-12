@@ -2,6 +2,23 @@
 
 Spring Boot service in the **roots-app** stack. Runs as an **OAuth2 Resource Server** (Spring Security 7.x) — it validates JWT bearer tokens issued by `auth-server` and enforces access via `@PreAuthorize` (`@EnableMethodSecurity`), the same way as `simple-resource-server`.
 
+It reads and writes the **shared auth-server database** (`user_credential` and `role` tables) directly via `JdbcTemplate`; it owns no schema of its own. It exposes integration-test-only account create/delete endpoints (see [Endpoints](#endpoints)), callable only by the `INTEGRATION_TEST_CLIENT` machine client.
+
+## Endpoints
+
+Both endpoints live under `/api/account` (`controller/AccountController`) and are **integration-test-only**: each is guarded by `@PreAuthorize` and callable only with an `INTEGRATION_TEST_CLIENT` `client_credentials` access token obtained from `auth-server`. They let tests create and tear down accounts directly in the shared DB without driving the full signup/email-verification flow.
+
+| Endpoint | Required authority | Behaviour |
+|---|---|---|
+| `POST /api/account/test` | `INTEGRATION_TEST_CLIENT_WRITE` | Creates an account from `CreateAccountRequest(name, email, password, mfaEnabled?, emailVerified?, roles?)`. `mfaEnabled` defaults to `true`, `emailVerified` to `false`; the `MEMBER` role is always added plus any requested roles (de-duplicated). Password is bcrypt-hashed; a `user_guid` UUID is generated. Returns **201** `CreateAccountResponse(name, email, userGUID, mfaEnabled, emailVerified, roles)`. |
+| `DELETE /api/account/test?email=…` *or* `?userGUID=…` | `INTEGRATION_TEST_CLIENT_DELETE` | Deletes by **exactly one** of `email`/`userGUID`. Returns **204**. Idempotent — no match is a no-op, so teardown can run repeatedly. |
+
+**Validation** (`validator/Validator`, server-side): name required and ≤ 255 chars; email required and contains `@`; password required, ≥ 8 chars with at least one uppercase, lowercase, and digit. Failures throw `InvalidRequestException` → **400**. A duplicate email throws `EmailAlreadyExistsException` → **409**. The delete endpoint requires exactly one of email/userGUID (not both, not neither) → **400**. `GlobalExceptionHandler` (`@RestControllerAdvice`) maps these to `{"error": "<message>"}`.
+
+**Roles** (`enums/Role`): `pastor`, `deacon`, `small_group_leader`, `vice_small_group_leader`, `member`, `guest` (serialized as the lowercase value, case-insensitive on input).
+
+**Swagger UI** is available via `springdoc-openapi-starter-webmvc-ui` (the endpoints carry `@Operation`/`@Parameter` annotations).
+
 ## Environment Variables
 
 All variables have defaults suitable for local development; override them per environment as needed.
@@ -24,18 +41,29 @@ mvn package                # compile + test + jar
 mvn test                   # run tests
 ```
 
+### Integration tests
+
+`AccountLifecycleIntegrationTest` (under `src/test/java/.../integration/`) exercises the create→delete lifecycle against **live** services: it obtains an `INTEGRATION_TEST_CLIENT` `client_credentials` token from `auth-server`, then drives `POST`/`DELETE /api/account/test` against a running account-management. Start MySQL, auth-server, and account-management first, then:
+
+```bash
+mvn test -Dtest="AccountLifecycleIntegrationTest"
+```
+
+Connection targets are configured in `src/test/resources/application.yml` (`auth-server-location`, `account-management-location`, `integration-test-client-secret`); override on the command line with `-D<property>=<value>`. These tests are **not** run by CI (see below).
+
 ## CI
 
 The workflow at `.github/workflows/account-management-ci.yml` runs on pull requests that touch `account-management/src/**` or `account-management/pom.xml` (events: `opened`, `synchronize`).
 
-There are no integration tests yet, so — like `simple-resource-server` — CI simply verifies the service **starts successfully** before a merge.
+CI runs the [integration tests](#integration-tests) and fails the job if any of them fail. Because those tests need a live `auth-server` (for the `client_credentials` token and the JWK set) **and** a running account-management, the workflow boots both services against a shared MySQL before running the tests.
 
 ### What it does
 
-1. Starts a MySQL 8 service container with an empty `auth-server-db` database. No seeding is required: the service has no schema or repositories of its own yet, it just needs a reachable database so the datasource and the actuator `db` health indicator come up.
-2. Builds the JAR with `mvn package -DskipTests`.
-3. Starts the service in the background with `java -jar`.
-4. Polls `GET /actuator/health` until the service reports `UP` (up to 150 s). If it never comes up, the job fails.
+1. Starts a MySQL 8 service container (port 3306) with an `auth-server-db` database.
+2. **Seeds the shared schema** by running the `auth-server` scripts in `auth-server/src/main/resources/initialize_db/` (`create_authentication_tables.sql` → `create_client_table.sql` → `create_one_time_tokens_table.sql` → `initialize_test_users.sql`). This creates the `user_credential`/`role` tables account-management writes to and seeds the `INTEGRATION_TEST_CLIENT` that issues the `client_credentials` token.
+3. Builds and starts **auth-server** (`mvn package -DskipTests` → `java -jar`), then polls `GET http://localhost:9000/actuator/health` until `UP` (up to 150 s).
+4. Builds and starts **account-management** (`mvn package -DskipTests` — this also compiles the test sources → `java -jar`), then polls `GET http://localhost:8082/actuator/health` until `UP` (up to 150 s).
+5. Runs the integration tests with `mvn surefire:test`. A failure fails the job.
 
 ### Required GitHub secrets
 
@@ -43,8 +71,10 @@ There are no integration tests yet, so — like `simple-resource-server` — CI 
 |---|---|
 | `MYSQL_AUTH_SERVER_ROOT_USERNAME` | `root` (the MySQL service container only creates a root user) |
 | `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | any password |
+| `SPRING_MAIL_USERNAME` | Gmail username — required because auth-server is started in this job and validates the mail config at startup |
+| `SPRING_MAIL_PASSWORD` | Gmail App Password (same reason) |
 
-`MYSQL_AUTH_SERVER_DB_URL` is hardcoded in the workflow to `jdbc:mysql://localhost:3306/auth-server-db` (the GitHub Actions MySQL container exposes port 3306, not 3307). `AUTH_SERVER_JWK_URI` is left at its default — the JWK set is fetched lazily, so `auth-server` need not be running for the startup check to pass.
+`MYSQL_AUTH_SERVER_DB_URL` is hardcoded in the workflow to `jdbc:mysql://localhost:3306/auth-server-db` (the GitHub Actions MySQL container exposes port 3306, not 3307). `AUTH_SERVER_JWK_URI` is left at its default (`http://localhost:9000/oauth2/jwks`) — auth-server is running on that port, so account-management can fetch the JWK set to validate the bearer token.
 
 ## CD
 
