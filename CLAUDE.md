@@ -14,9 +14,10 @@ This is a Spring Cloud microservices application called **roots-app**. The servi
 | `auth-server` | Spring Boot (Maven) + Nuxt/Vue | 9000 | Authentication + embedded SSR frontend |
 | `bff-server` | Spring Boot (Maven) | — | Backend-for-frontend |
 | `simple-resource-server` | Spring Boot (Maven) | 8081 | Example protected resource with role endpoints |
+| `account-management` | Spring Boot (Maven) | 8082 | Account CRUD resource server (integration-test-only endpoints so far) |
 | `web-client` | Nuxt 4 / Vue 3 | 3000 | Standalone frontend |
 
-**Startup order:** config-server → eureka-server → gateway-server → auth-server → bff-server → simple-resource-server → web-client.
+**Startup order:** config-server → eureka-server → gateway-server → auth-server → bff-server → simple-resource-server → account-management → web-client.
 
 ### auth-server is special
 
@@ -293,6 +294,36 @@ simple-resource-server is an **OAuth2 Resource Server** (Spring Security 7.x). I
 
 The auth-server must include a `roles` claim in issued JWTs (uppercase values, e.g. `PASTOR`) for role checks to pass. This is implemented via `OAuth2TokenCustomizer` in `config/SecurityConfig.java`.
 
+### account-management
+
+A second **OAuth2 Resource Server** (Spring Security 7.x, port `8082`), wired the same way as simple-resource-server: it validates JWT bearer tokens issued by auth-server, runs `anyRequest().permitAll()` at the filter chain level, and enforces access purely via `@PreAuthorize` (`@EnableMethodSecurity`). `config/SecurityConfig.java` defines the `SecurityFilterChain`, a delegating `PasswordEncoder` bean (`{bcrypt}`), and a `JwtAuthenticationConverter` that maps the JWT `scope` claim to authorities with **no** prefix and the `roles` claim to `ROLE_*`.
+
+Unlike simple-resource-server, it owns no schema of its own — it reads and writes the **shared auth-server DB** (`user_credential` and `role` tables, MySQL on port `3307`) directly via `JdbcTemplate`. It uses the same `MYSQL_AUTH_SERVER_*` env vars as auth-server (`MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`; `MYSQL_AUTH_SERVER_ROOT_USERNAME`/`MYSQL_AUTH_SERVER_ROOT_PASSWORD` required, no defaults). JWK URI defaults to `${AUTH_SERVER_JWK_URI:http://localhost:9000/oauth2/jwks}` (fetched lazily on first authenticated request). Config lives in `src/main/resources/application.yaml`.
+
+**Integration-test-only endpoints (`controller/AccountController`)** under `/api/account`, each callable only with an `INTEGRATION_TEST_CLIENT` `client_credentials` access token (the same machine client auth-server seeds in `create_client_table.sql`). These exist so integration tests across the stack can create and tear down accounts directly in the shared DB without driving the full signup/email flow:
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `POST /api/account/test` | `@PreAuthorize hasAuthority('INTEGRATION_TEST_CLIENT_WRITE')` | Creates an account with caller-supplied `mfaEnabled`/`emailVerified`/`roles`; returns **201** `CreateAccountResponse(name, email, userGUID, mfaEnabled, emailVerified, roles)` |
+| `DELETE /api/account/test?email=…` *or* `?userGUID=…` | `@PreAuthorize hasAuthority('INTEGRATION_TEST_CLIENT_DELETE')` | Deletes by **exactly one** of email/userGUID; returns **204**. Idempotent — no match is a no-op so teardown can run repeatedly |
+
+Request/response and flow details:
+- `dto/request/CreateAccountRequest(name, email, password, mfaEnabled, emailVerified, roles)` — the compact constructor defaults `mfaEnabled=true` and `emailVerified=false` when omitted/null (Jackson uses the canonical constructor).
+- `validator/Validator` re-validates server-side: name required and ≤ 255; email required and contains `@`; password required, ≥ 8 chars with at least one uppercase, lowercase, and digit → `InvalidRequestException` (**400**). For delete it enforces exactly one of email/userGUID (not both, not neither) → also **400**.
+- `service/AccountService.createTestAccount()` (`@Transactional`) rejects a duplicate email with `EmailAlreadyExistsException` (**409**), hashes the password via the `PasswordEncoder`, generates a `user_guid` UUID, inserts the credential (`UserCredentialRepository.insert`, id via `GeneratedKeyHolder`), and inserts roles. `resolveRoles()` always includes `MEMBER` (the floor) plus any requested roles, de-duplicated preserving order. `deleteTestAccount()` deletes role rows before the credential (the role FK has no `ON DELETE CASCADE`).
+- `enums/Role` — `PASTOR`, `DEACON`, `SMALL_GROUP_LEADER`, `VICE_SMALL_GROUP_LEADER`, `MEMBER`, `GUEST`; serialized to/from its lowercase `value` (`@JsonValue`/`@JsonCreator`, case-insensitive), e.g. `member`, `small_group_leader`.
+- `exception/GlobalExceptionHandler` (`@RestControllerAdvice`) maps `InvalidRequestException` → **400** and `EmailAlreadyExistsException` → **409**, both as `{"error": "<message>"}`.
+- **Swagger UI** is available via `springdoc-openapi-starter-webmvc-ui`; the endpoints carry `@Operation`/`@Parameter` annotations.
+
+**Integration tests (`src/test/java/.../integration/`)** require both auth-server and account-management running. `AccountLifecycleIntegrationTest` obtains a `client_credentials` token (scopes `INTEGRATION_TEST_CLIENT_WRITE INTEGRATION_TEST_CLIENT_DELETE`) from auth-server via `OAuth2Client`, then drives create→delete (by email, and by userGUID) against account-management via `AccountManagementClient` (cookie-less; Bearer-token only). `TestConfig` builds the two clients as beans from `auth-server-location`/`account-management-location` in `src/test/resources/application.yml`. These tests are **not** run by CI (see below).
+
+### account-management endpoints summary
+
+| Endpoint | Required authority |
+|---|---|
+| `POST /api/account/test` | `INTEGRATION_TEST_CLIENT_WRITE` scope |
+| `DELETE /api/account/test` | `INTEGRATION_TEST_CLIENT_DELETE` scope |
+
 ## Commands
 
 ### Spring Boot services (all use Maven)
@@ -398,11 +429,19 @@ Triggers on push to `main`. Skipped automatically when the commit message contai
 
 Runs `mvn test`, which executes `contextLoads()` in `SimpleResourceServerApplicationTests`. No external services are needed — the JWK set is fetched lazily (on the first authenticated request, not at startup), so auth-server does not need to be running.
 
+### account-management-ci.yml — `paths: account-management/src/**`, `account-management/pom.xml`
+
+A **startup check only** (like simple-resource-server, but DB-backed). It starts a MySQL 8 service container (port 3306) with an empty `auth-server-db`, builds with `mvn package -DskipTests`, starts the service with `java -jar`, and polls `GET /actuator/health` until `UP` (150 s). No DB seeding is needed: the actuator `db` health indicator only needs a reachable datasource, and the account endpoints (which read/write `user_credential`/`role`) are never hit by the startup check. The **integration tests are not run in CI** — they require a live auth-server (for the `client_credentials` token and JWK set) plus a running account-management, neither of which the CI job provides. **Required secrets:** `MYSQL_AUTH_SERVER_ROOT_USERNAME` (= `root`), `MYSQL_AUTH_SERVER_ROOT_PASSWORD`.
+
+### account-management-cd.yml — `paths: account-management/src/**`, `account-management/pom.xml`
+
+Triggers on push to `main`; skips its own version-bump commit via `[skip ci]`. Same pattern as auth-server-cd: read `<version>` from `pom.xml`, strip `-SNAPSHOT` and bump the patch to the release version, `mvn versions:set`, build and push the Docker image via `mvn jib:build -DskipTests` (base `eclipse-temurin:21-jre`; tags `<release-version>` and `latest`), then set the next `-SNAPSHOT` and commit it back to `main` as `github-actions[bot]`. Checkout/push use a `GH_PAT`. **Required secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `GH_PAT`.
+
 ## Database
 
-Auth-server DB schema (MySQL 8, port 3307):
+Auth-server DB schema (MySQL 8, port 3307). The `account-management` service shares this same DB and the `user_credential`/`role` tables (it has no schema of its own):
 - `user_credential` — stores `email`, `name`, bcrypt `password`, `user_guid` UUID, `is_mfa_enabled` (boolean, default `true`), and `is_email_verified` (boolean, default `false`)
-- `role` — many roles per credential, linked by `credential_id`
+- `role` — many roles per credential, linked by `credential_id`; the role FK has no `ON DELETE CASCADE`, so account-management deletes role rows before the credential
 - `one_time_tokens` — Spring Security `JdbcOneTimeTokenService` schema (`token_value` PK, `username`, `expires_at`); backs the account-creation magic-link token. Standalone (no FK); `username` holds the user's email. Rows are deleted on consume; expired-but-unclicked rows are not cleaned up (dev/test scale)
 
 SQL scripts to create tables and seed test data are in `auth-server/src/main/resources/initialize_db/`.

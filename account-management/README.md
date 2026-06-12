@@ -2,6 +2,23 @@
 
 Spring Boot service in the **roots-app** stack. Runs as an **OAuth2 Resource Server** (Spring Security 7.x) — it validates JWT bearer tokens issued by `auth-server` and enforces access via `@PreAuthorize` (`@EnableMethodSecurity`), the same way as `simple-resource-server`.
 
+It reads and writes the **shared auth-server database** (`user_credential` and `role` tables) directly via `JdbcTemplate`; it owns no schema of its own. It exposes integration-test-only account create/delete endpoints (see [Endpoints](#endpoints)), callable only by the `INTEGRATION_TEST_CLIENT` machine client.
+
+## Endpoints
+
+Both endpoints live under `/api/account` (`controller/AccountController`) and are **integration-test-only**: each is guarded by `@PreAuthorize` and callable only with an `INTEGRATION_TEST_CLIENT` `client_credentials` access token obtained from `auth-server`. They let tests create and tear down accounts directly in the shared DB without driving the full signup/email-verification flow.
+
+| Endpoint | Required authority | Behaviour |
+|---|---|---|
+| `POST /api/account/test` | `INTEGRATION_TEST_CLIENT_WRITE` | Creates an account from `CreateAccountRequest(name, email, password, mfaEnabled?, emailVerified?, roles?)`. `mfaEnabled` defaults to `true`, `emailVerified` to `false`; the `MEMBER` role is always added plus any requested roles (de-duplicated). Password is bcrypt-hashed; a `user_guid` UUID is generated. Returns **201** `CreateAccountResponse(name, email, userGUID, mfaEnabled, emailVerified, roles)`. |
+| `DELETE /api/account/test?email=…` *or* `?userGUID=…` | `INTEGRATION_TEST_CLIENT_DELETE` | Deletes by **exactly one** of `email`/`userGUID`. Returns **204**. Idempotent — no match is a no-op, so teardown can run repeatedly. |
+
+**Validation** (`validator/Validator`, server-side): name required and ≤ 255 chars; email required and contains `@`; password required, ≥ 8 chars with at least one uppercase, lowercase, and digit. Failures throw `InvalidRequestException` → **400**. A duplicate email throws `EmailAlreadyExistsException` → **409**. The delete endpoint requires exactly one of email/userGUID (not both, not neither) → **400**. `GlobalExceptionHandler` (`@RestControllerAdvice`) maps these to `{"error": "<message>"}`.
+
+**Roles** (`enums/Role`): `pastor`, `deacon`, `small_group_leader`, `vice_small_group_leader`, `member`, `guest` (serialized as the lowercase value, case-insensitive on input).
+
+**Swagger UI** is available via `springdoc-openapi-starter-webmvc-ui` (the endpoints carry `@Operation`/`@Parameter` annotations).
+
 ## Environment Variables
 
 All variables have defaults suitable for local development; override them per environment as needed.
@@ -24,15 +41,25 @@ mvn package                # compile + test + jar
 mvn test                   # run tests
 ```
 
+### Integration tests
+
+`AccountLifecycleIntegrationTest` (under `src/test/java/.../integration/`) exercises the create→delete lifecycle against **live** services: it obtains an `INTEGRATION_TEST_CLIENT` `client_credentials` token from `auth-server`, then drives `POST`/`DELETE /api/account/test` against a running account-management. Start MySQL, auth-server, and account-management first, then:
+
+```bash
+mvn test -Dtest="AccountLifecycleIntegrationTest"
+```
+
+Connection targets are configured in `src/test/resources/application.yml` (`auth-server-location`, `account-management-location`, `integration-test-client-secret`); override on the command line with `-D<property>=<value>`. These tests are **not** run by CI (see below).
+
 ## CI
 
 The workflow at `.github/workflows/account-management-ci.yml` runs on pull requests that touch `account-management/src/**` or `account-management/pom.xml` (events: `opened`, `synchronize`).
 
-There are no integration tests yet, so — like `simple-resource-server` — CI simply verifies the service **starts successfully** before a merge.
+CI simply verifies the service **starts successfully** before a merge. The [integration tests](#integration-tests) are **not** run in CI: they require a live `auth-server` (for the `client_credentials` token and JWK set) plus a running account-management, neither of which the CI job provides.
 
 ### What it does
 
-1. Starts a MySQL 8 service container with an empty `auth-server-db` database. No seeding is required: the service has no schema or repositories of its own yet, it just needs a reachable database so the datasource and the actuator `db` health indicator come up.
+1. Starts a MySQL 8 service container with an empty `auth-server-db` database. No seeding is required: the actuator `db` health indicator only needs a reachable datasource, and the account endpoints (which read/write `user_credential`/`role`) are never hit by the startup check.
 2. Builds the JAR with `mvn package -DskipTests`.
 3. Starts the service in the background with `java -jar`.
 4. Polls `GET /actuator/health` until the service reports `UP` (up to 150 s). If it never comes up, the job fails.
