@@ -51,7 +51,7 @@ class AccountLifecycleIntegrationTest {
     }
 
     @Test
-    void createsThenDeletesTestAccountByUserGuid() throws Exception {
+    void createsThenDeletesTestAccountByUserGUID() throws Exception {
         String accessToken = clientCredentialsToken();
         String email = uniqueEmail();
 
@@ -59,10 +59,10 @@ class AccountLifecycleIntegrationTest {
                 accountManagementClient.createTestAccount(accessToken, TEST_NAME, email, TEST_PASSWORD);
         assertThat(createResponse.statusCode()).isEqualTo(201);
 
-        String userGuid = accountManagementClient.extractUserGuid(createResponse.body());
-        assertThat(userGuid).isNotBlank();
+        String userGUID = accountManagementClient.extractUserGUID(createResponse.body());
+        assertThat(userGUID).isNotBlank();
 
-        HttpResponse<String> deleteResponse = accountManagementClient.deleteByUserGuid(accessToken, userGuid);
+        HttpResponse<String> deleteResponse = accountManagementClient.deleteByUserGUID(accessToken, userGUID);
         assertThat(deleteResponse.statusCode()).isEqualTo(204);
     }
 

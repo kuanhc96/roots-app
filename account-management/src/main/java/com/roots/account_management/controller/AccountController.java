@@ -1,5 +1,6 @@
 package com.roots.account_management.controller;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -53,6 +54,10 @@ public class AccountController {
             @Parameter(description = "GUID of the account to delete; provide this or email, not both")
             @RequestParam(required = false) String userGUID) {
         validator.validateDeleteAccountRequest(email, userGUID);
-        accountService.deleteTestAccount(email, userGUID);
+        if (StringUtils.isNotBlank(email)) {
+            accountService.deleteTestAccountByEmail(email);
+        } else {
+            accountService.deleteTestAccountByUserGUID(userGUID);
+        }
     }
 }

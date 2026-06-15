@@ -2,7 +2,6 @@ package com.roots.account_management.service;
 
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -35,11 +34,11 @@ public class AccountService {
             throw new EmailAlreadyExistsException("An account with this email already exists");
         }
 
-        String userGuid = UUID.randomUUID().toString();
+        String userGUID = UUID.randomUUID().toString();
 
         UserCredential userCredential = new UserCredential(
                 null,
-                userGuid,
+                userGUID,
                 request.email(),
                 request.name(),
                 passwordEncoder.encode(request.password()),
@@ -57,29 +56,31 @@ public class AccountService {
         return new CreateAccountResponse(
                 request.name(),
                 request.email(),
-                userGuid,
+                userGUID,
                 request.mfaEnabled(),
                 request.emailVerified(),
                 roles
         );
     }
 
-    // Idempotent delete: resolves the account by exactly one of email/userGUID
-    // (the caller-supplied pair is pre-validated in the controller). No match is a
-    // no-op so test teardown can run safely more than once. Role rows are removed
-    // before the credential because the role FK has no ON DELETE CASCADE.
+    // Idempotent: no match is a no-op so test teardown can run safely more than once.
     @Transactional
-    public void deleteTestAccount(String email, String userGUID) {
-        boolean hasEmail = email != null && !email.isBlank();
-        Optional<UserCredential> account = hasEmail
-                ? userCredentialRepository.findByEmail(email)
-                : userCredentialRepository.findByUserGuid(userGUID);
+    public void deleteTestAccountByEmail(String email) {
+        userCredentialRepository.findByEmail(email).ifPresent(this::deleteAccount);
+    }
 
-        account.ifPresent(credential -> {
-            long credentialId = credential.id();
-            roleRepository.deleteByCredentialId(credentialId);
-            userCredentialRepository.deleteById(credentialId);
-        });
+    // Idempotent: no match is a no-op so test teardown can run safely more than once.
+    @Transactional
+    public void deleteTestAccountByUserGUID(String userGUID) {
+        userCredentialRepository.findByUserGUID(userGUID).ifPresent(this::deleteAccount);
+    }
+
+    // Role rows are removed before the credential because the role FK has no
+    // ON DELETE CASCADE.
+    private void deleteAccount(UserCredential credential) {
+        long credentialId = credential.id();
+        roleRepository.deleteByCredentialId(credentialId);
+        userCredentialRepository.deleteById(credentialId);
     }
 
     // MEMBER is always present (the floor), then any caller-requested roles, de-duplicated

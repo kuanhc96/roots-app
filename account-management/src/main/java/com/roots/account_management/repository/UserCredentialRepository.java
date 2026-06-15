@@ -38,11 +38,11 @@ public class UserCredentialRepository {
         return results.stream().findFirst();
     }
 
-    public Optional<UserCredential> findByUserGuid(String userGuid) {
+    public Optional<UserCredential> findByUserGUID(String userGUID) {
         var results = jdbcTemplate.query(
                 "SELECT id, user_guid, email, name, password, is_mfa_enabled, is_email_verified FROM user_credential WHERE user_guid = ?",
                 ROW_MAPPER,
-                userGuid
+                userGUID
         );
         return results.stream().findFirst();
     }
@@ -59,7 +59,7 @@ public class UserCredentialRepository {
                             "VALUES (?, ?, ?, ?, ?, ?)",
                     Statement.RETURN_GENERATED_KEYS
             );
-            ps.setString(1, userCredential.userGuid());
+            ps.setString(1, userCredential.userGUID());
             ps.setString(2, userCredential.email());
             ps.setString(3, userCredential.name());
             ps.setString(4, userCredential.password());

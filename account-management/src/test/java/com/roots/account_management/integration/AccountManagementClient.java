@@ -59,14 +59,14 @@ public class AccountManagementClient {
      * Deletes a test account by userGUID via DELETE /api/account/test?userGUID=...
      * Returns the raw response (204 on success).
      */
-    public HttpResponse<String> deleteByUserGuid(String accessToken, String userGUID) throws Exception {
+    public HttpResponse<String> deleteByUserGUID(String accessToken, String userGUID) throws Exception {
         return delete(accessToken, "userGUID=" + encode(userGUID));
     }
 
     /**
      * Extracts the userGUID field from a create-account 201 response body.
      */
-    public String extractUserGuid(String createResponseBody) throws Exception {
+    public String extractUserGUID(String createResponseBody) throws Exception {
         return objectMapper.readTree(createResponseBody).get("userGUID").asText();
     }
 
