@@ -8,7 +8,7 @@ on:
       - 'account-management/pom.xml'
 
 jobs:
-  startup-check:
+  integration-test:
     runs-on: ubuntu-latest
 
     services:
@@ -34,9 +34,73 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
+      # The unit tests (com.roots.account_management.unit.*) are pure Mockito / standalone
+      # MockMvc — no DB or running services — so run them first as a fast gate, before
+      # anything is built or booted. Uses `mvn test` (not surefire:test) so it compiles the
+      # sources itself; the regex selects only the unit package, skipping the integration
+      # tests and the @SpringBootTest context-load test (which need the DB/services below).
+      - name: Run unit tests
+        working-directory: account-management
+        run: mvn test '-Dtest=%regex[.*unit.*]'
+
+      # The integration tests need the shared auth-server DB: the user_credential/role
+      # tables that account-management writes to, and the INTEGRATION_TEST_CLIENT seeded
+      # in create_client_table.sql (which issues the client_credentials token). Seed the
+      # full auth-server schema so auth-server itself boots cleanly too.
+      - name: Seed database
+        run: |
+          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/create_authentication_tables.sql
+          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/create_client_table.sql
+          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/create_one_time_tokens_table.sql
+          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/initialize_test_users.sql
+
+      # auth-server issues the client_credentials token and serves the JWK set that
+      # account-management uses to validate it, so it must be running for the tests.
+      - name: Build auth-server
+        working-directory: auth-server
+        run: mvn package -DskipTests
+        env:
+          MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
+          MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
+          MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
+          SPRING_MAIL_USERNAME: ${{ secrets.SPRING_MAIL_USERNAME }}
+          SPRING_MAIL_PASSWORD: ${{ secrets.SPRING_MAIL_PASSWORD }}
+
+      - name: Start auth-server
+        working-directory: auth-server
+        run: java -jar target/auth-server-*.jar &
+        env:
+          MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
+          MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
+          MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
+          SPRING_MAIL_USERNAME: ${{ secrets.SPRING_MAIL_USERNAME }}
+          SPRING_MAIL_PASSWORD: ${{ secrets.SPRING_MAIL_PASSWORD }}
+
+      - name: Wait for auth-server
+        run: |
+          echo "Waiting for auth-server to be ready..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:9000/actuator/health; then
+              echo ""
+              echo "Auth-server is ready."
+              exit 0
+            fi
+            echo "Attempt $i/30, retrying in 5s..."
+            sleep 5
+          done
+          echo "Auth-server failed to start within 150s."
+          exit 1
+
+      # Build with -DskipTests: this compiles the test sources (so surefire:test can run
+      # them later) and produces the runnable jar, without executing the integration
+      # tests before account-management is up.
       - name: Build account-management
         working-directory: account-management
         run: mvn package -DskipTests
+        env:
+          MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
+          MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
+          MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
 
       - name: Start account-management
         working-directory: account-management
@@ -60,3 +124,11 @@ jobs:
           done
           echo "account-management failed to start within 150s."
           exit 1
+
+      - name: Run integration tests
+        working-directory: account-management
+        run: mvn surefire:test
+        env:
+          MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
+          MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
+          MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
