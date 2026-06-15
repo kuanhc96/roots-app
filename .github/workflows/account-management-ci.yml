@@ -34,6 +34,15 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
+      # The unit tests (com.roots.account_management.unit.*) are pure Mockito / standalone
+      # MockMvc — no DB or running services — so run them first as a fast gate, before
+      # anything is built or booted. Uses `mvn test` (not surefire:test) so it compiles the
+      # sources itself; the regex selects only the unit package, skipping the integration
+      # tests and the @SpringBootTest context-load test (which need the DB/services below).
+      - name: Run unit tests
+        working-directory: account-management
+        run: mvn test '-Dtest=%regex[.*unit.*]'
+
       # The integration tests need the shared auth-server DB: the user_credential/role
       # tables that account-management writes to, and the INTEGRATION_TEST_CLIENT seeded
       # in create_client_table.sql (which issues the client_credentials token). Seed the
@@ -115,13 +124,6 @@ jobs:
           done
           echo "account-management failed to start within 150s."
           exit 1
-
-      # The unit tests (com.roots.account_management.unit.*) are pure Mockito / standalone
-      # MockMvc — no DB or running services — so run them first as a fast gate. The regex
-      # matches the unit package only, leaving the integration tests for the next step.
-      - name: Run unit tests
-        working-directory: account-management
-        run: mvn surefire:test '-Dtest=%regex[.*unit.*]'
 
       - name: Run integration tests
         working-directory: account-management
