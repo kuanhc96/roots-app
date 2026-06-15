@@ -64,6 +64,22 @@ public class AccountManagementClient {
     }
 
     /**
+     * Deletes with both email and userGUID present — an invalid combination the
+     * validator rejects with 400.
+     */
+    public HttpResponse<String> deleteByEmailAndUserGUID(String accessToken, String email, String userGUID) throws Exception {
+        return delete(accessToken, "email=" + encode(email) + "&userGUID=" + encode(userGUID));
+    }
+
+    /**
+     * Deletes with neither email nor userGUID — an invalid combination the validator
+     * rejects with 400.
+     */
+    public HttpResponse<String> deleteWithoutParams(String accessToken) throws Exception {
+        return delete(accessToken, "");
+    }
+
+    /**
      * Extracts the userGUID field from a create-account 201 response body.
      */
     public String extractUserGUID(String createResponseBody) throws Exception {

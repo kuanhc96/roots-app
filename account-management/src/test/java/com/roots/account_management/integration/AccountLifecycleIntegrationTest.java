@@ -1,5 +1,6 @@
 package com.roots.account_management.integration;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,7 +10,6 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import java.net.http.HttpResponse;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -37,10 +37,16 @@ class AccountLifecycleIntegrationTest {
     @Value("${integration-test-client-secret}")
     private String integrationTestClientSecret;
 
+    private String accessToken;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        accessToken = TestUtils.getClientCredentialsToken(oAuth2Client, integrationTestClientSecret, SCOPES);
+    }
+
     @Test
     void createsThenDeletesTestAccountByEmail() throws Exception {
-        String accessToken = clientCredentialsToken();
-        String email = uniqueEmail();
+        String email = TestUtils.getUniqueEmail();
 
         HttpResponse<String> createResponse =
                 accountManagementClient.createTestAccount(accessToken, TEST_NAME, email, TEST_PASSWORD);
@@ -52,8 +58,7 @@ class AccountLifecycleIntegrationTest {
 
     @Test
     void createsThenDeletesTestAccountByUserGUID() throws Exception {
-        String accessToken = clientCredentialsToken();
-        String email = uniqueEmail();
+        String email = TestUtils.getUniqueEmail();
 
         HttpResponse<String> createResponse =
                 accountManagementClient.createTestAccount(accessToken, TEST_NAME, email, TEST_PASSWORD);
@@ -64,16 +69,5 @@ class AccountLifecycleIntegrationTest {
 
         HttpResponse<String> deleteResponse = accountManagementClient.deleteByUserGUID(accessToken, userGUID);
         assertThat(deleteResponse.statusCode()).isEqualTo(204);
-    }
-
-    private String clientCredentialsToken() throws Exception {
-        TokenResponse token = oAuth2Client.getClientCredentialsToken(
-                "INTEGRATION_TEST_CLIENT", integrationTestClientSecret, SCOPES);
-        assertThat(token.accessToken()).isNotBlank();
-        return token.accessToken();
-    }
-
-    private static String uniqueEmail() {
-        return "itest+" + UUID.randomUUID() + "@example.com";
     }
 }
