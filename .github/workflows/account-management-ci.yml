@@ -116,6 +116,13 @@ jobs:
           echo "account-management failed to start within 150s."
           exit 1
 
+      # The unit tests (com.roots.account_management.unit.*) are pure Mockito / standalone
+      # MockMvc — no DB or running services — so run them first as a fast gate. The regex
+      # matches the unit package only, leaving the integration tests for the next step.
+      - name: Run unit tests
+        working-directory: account-management
+        run: mvn surefire:test '-Dtest=%regex[.*unit.*]'
+
       - name: Run integration tests
         working-directory: account-management
         run: mvn surefire:test
