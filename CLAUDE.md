@@ -28,7 +28,9 @@ It bundles a Nuxt frontend via Maven. The Maven build:
 
 The `auth-server-db` MySQL instance runs on port **3307** (not the default 3306) and is defined in `docker-compose.yml`. DB schema is in `auth-server/src/main/resources/initialize_db/`.
 
-**Required env vars at startup:** `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` (no defaults). `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`. `SERVER_PORT` defaults to `9000`. `REMEMBER_ME_KEY` defaults to `dev-remember-me-key-change-in-prod` (change in production). `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` defaults to `1209600` (14 days). `SPRING_MAIL_USERNAME` and `SPRING_MAIL_PASSWORD` are required for Gmail OTP/magic-link delivery (no defaults); use a Gmail App Password, not the account password. `WEB_CLIENT_LOCATION` (property `web-client.location`) defaults to `http://localhost:3000` and is used to hand off to web-client after magic-link email verification when no saved OAuth2 request exists.
+**Required env vars at startup:** `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` (no defaults). `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`. `SERVER_PORT` defaults to `9000`. `REMEMBER_ME_KEY` defaults to `dev-remember-me-key-change-in-prod` (change in production). `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` defaults to `1209600` (14 days). `SPRING_MAIL_USERNAME` and `SPRING_MAIL_PASSWORD` (both default to `noop`) are needed for Gmail OTP/magic-link delivery only when `emailSender.enabled=true` (the dev/qa/prod profiles); use a Gmail App Password, not the account password. Under the `test` profile `emailSender.enabled=false`, so the server boots and runs without real Gmail credentials. `WEB_CLIENT_LOCATION` (property `web-client.location`) defaults to `http://localhost:3000` and is used to hand off to web-client after magic-link email verification when no saved OAuth2 request exists.
+
+**Spring profiles (`dev`, `test`, `qa`, `prod`).** `application.yml` is split into a shared document plus four profile documents (`---` separated, each activated via `spring.config.activate.on-profile`). The shared document holds all real config and sets `spring.profiles.default: dev`, so a bare run with no profile active behaves as `dev`. Two per-profile flags drive email today: `emailSender.enabled` (`true` for `qa`/`prod`, `false` for `dev`/`test`) and `emailSender.logToken` (`true` only for `dev`). `EmailService` reads both via field-injected `@Value("…:false")` (the `:false` fallbacks fail closed). When email is disabled it either logs the OTT/magic-link **token value at INFO** (dev, `logToken=true` — a console debugging aid, no inbox needed) or logs a warning and skips silently (test). `qa`/`prod` are placeholders (no deploy target yet) that actually send mail. CI activates `test` (`SPRING_PROFILES_ACTIVE=test`) so no real emails are sent and no Gmail secrets are required. (Because `EmailService` is the chokepoint, the magic-link value is logged there; the old unconditional `System.out.println` in `MfaRedirectAuthenticationSuccessHandler` was removed so the link no longer leaks to stdout in `qa`/`prod`.)
 
 ### Spring Security / OAuth2 Authorization Server
 
@@ -73,7 +75,7 @@ Implements `AuthenticationSuccessHandler`. Clears the `remember-me` cookie (sett
 | Endpoint | Handler | Purpose |
 |---|---|---|
 | `GET /ott/login` | `SpaController` | Forwards to the Nuxt OTT login page |
-| `POST /ott/generate` | `MfaController` | Generates a one-time token for the pending user, logs it to stdout, and emails it to the user via `EmailService` |
+| `POST /ott/generate` | `MfaController` | Generates a one-time token for the pending user and hands it to `EmailService`, which emails it (qa/prod) or logs the value at INFO (dev) / skips it (test) |
 | `POST /ott/login` | `SpaController` | Verifies the submitted OTT; if `rememberBrowser=true` is posted, disables MFA for the user; upgrades the session to `MfaAuthenticationToken` and redirects to the original OAuth2 request |
 
 **Guest login endpoint:**
@@ -97,7 +99,7 @@ Implements `AuthenticationSuccessHandler`. Clears the `remember-me` cookie (sett
 1. User submits credentials or browser sends remember-me cookie.
 2. The appropriate MFA-aware provider validates the first factor, checks `is_mfa_enabled = true`, and stores a `MfaPendingAuthenticationToken` in the session.
 3. `MfaRedirectAuthenticationSuccessHandler` detects the pending token and redirects to `/ott/login`.
-4. The Nuxt `/ott/login` page mounts and immediately calls `POST /ott/generate`, which prints the OTT to the server console and emails it to the user via `EmailService`.
+4. The Nuxt `/ott/login` page mounts and immediately calls `POST /ott/generate`, which generates the OTT and passes it to `EmailService` — emailed to the user (qa/prod), logged at INFO to the server console (dev), or skipped (test).
 5. User enters the OTT and optionally checks "Remember this browser?", then submits `POST /ott/login`.
 6. `SpaController.verifyOtt()` consumes the token. If `rememberBrowser=true`, it calls `UserCredentialService.disableMfa()` to set `is_mfa_enabled = false`. The session is upgraded to `MfaAuthenticationToken` and redirected to the saved OAuth2 authorization request.
 
@@ -384,7 +386,7 @@ docker compose up -d auth-server-db
 
 ## Key Configuration
 
-- `auth-server/src/main/resources/application.yml` — server port defaults to `${SERVER_PORT:9000}`; `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` are required with no fallback; `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`; Gmail SMTP is configured under `spring.mail` — `SPRING_MAIL_USERNAME` and `SPRING_MAIL_PASSWORD` are required (no defaults); uses `smtp.gmail.com:587` with STARTTLS; `web-client.location` defaults to `http://localhost:3000` (override: `WEB_CLIENT_LOCATION`) — web-client hand-off target after magic-link verification when no saved request exists
+- `auth-server/src/main/resources/application.yml` — server port defaults to `${SERVER_PORT:9000}`; `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` are required with no fallback; `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`; Gmail SMTP is configured under `spring.mail` — `SPRING_MAIL_USERNAME` and `SPRING_MAIL_PASSWORD` default to `noop` and are only needed when `emailSender.enabled=true`; uses `smtp.gmail.com:587` with STARTTLS; `web-client.location` defaults to `http://localhost:3000` (override: `WEB_CLIENT_LOCATION`) — web-client hand-off target after magic-link verification when no saved request exists
 - `simple-resource-server/src/main/resources/application.yml` — port defaults to `8081` (override: `SERVER_PORT`); JWK URI defaults to `http://localhost:9000/oauth2/jwks` (override: `AUTH_SERVER_JWK_URI`); CORS origin defaults to `http://localhost:3000` (override: `WEB_CLIENT_ORIGIN` via `web.client.origin` property)
 - `web-client/nuxt.config.ts` — `runtimeConfig.public.simpleResourceServerUrl` defaults to `http://localhost:8081` (override: `NUXT_PUBLIC_SIMPLE_RESOURCE_SERVER_URL`); `runtimeConfig.public.authServerUrl` defaults to `http://localhost:9000` (override: `NUXT_PUBLIC_AUTH_SERVER_URL`); `runtimeConfig.public.webClientId` defaults to `WEB_CLIENT` (override: `NUXT_PUBLIC_WEB_CLIENT_ID`); `runtimeConfig.public.webClientSecret` has no default and **must** be set via `NUXT_PUBLIC_WEB_CLIENT_SECRET` (must match the `client_secret` stored in auth-server's `oauth2_registered_client` table)
 - All other services use `application.properties` with minimal config; most config is expected to come from `config-server`
@@ -399,11 +401,11 @@ Workflows live in `.github/workflows/`. CI workflows run on `pull_request` event
 1. Starts a **MySQL 8 service container** (port 3306 inside CI, not 3307). `MYSQL_AUTH_SERVER_DB_URL` is overridden to `jdbc:mysql://localhost:3306/auth-server-db`.
 2. Seeds the DB by running the scripts in `auth-server/src/main/resources/initialize_db/` in order: `create_authentication_tables.sql` → `create_client_table.sql` → `create_one_time_tokens_table.sql` → `initialize_test_users.sql`.
 3. Builds with `mvn package -DskipTests` — builds the JAR and the embedded Nuxt frontend once.
-4. Starts auth-server in the background with `java -jar`.
+4. Starts auth-server in the background with `java -jar`, under `SPRING_PROFILES_ACTIVE=test` (so `emailSender.enabled=false` — no real emails, no Gmail secrets needed).
 5. Polls `GET /actuator/health` until `UP` (150 s timeout).
 6. Runs integration tests with `mvn surefire:test`.
 
-**Required GitHub secrets:** `MYSQL_AUTH_SERVER_ROOT_USERNAME` (set to `root`), `MYSQL_AUTH_SERVER_ROOT_PASSWORD`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`.
+**Required GitHub secrets:** `MYSQL_AUTH_SERVER_ROOT_USERNAME` (set to `root`), `MYSQL_AUTH_SERVER_ROOT_PASSWORD`. (`SPRING_MAIL_USERNAME`/`SPRING_MAIL_PASSWORD` are no longer needed — the `test` profile disables email; the `:noop` defaults in `application.yml` let the `JavaMailSender` bean boot.)
 
 **`auth-server/frontend/package-lock.json` is gitignored.** It was removed from version control to prevent platform-specific native binary mismatches (Windows-generated lockfiles don't include Linux binaries required in CI). The `frontend-maven-plugin` regenerates it on each build for the current platform.
 
@@ -431,7 +433,7 @@ Runs `mvn test`, which executes `contextLoads()` in `SimpleResourceServerApplica
 
 ### account-management-ci.yml — `paths: account-management/src/**`, `account-management/pom.xml`
 
-Runs the integration tests against **both** live services. It (1) starts a MySQL 8 service container (port 3306) and seeds the full auth-server schema from `auth-server/src/main/resources/initialize_db/` (so the `user_credential`/`role` tables exist and `INTEGRATION_TEST_CLIENT` is seeded), (2) builds and starts **auth-server** (`mvn package -DskipTests` → `java -jar`) and waits for its health endpoint, (3) builds and starts **account-management** the same way (the `package` step also compiles the test sources) and waits for its health endpoint, then (4) runs `mvn surefire:test` — a failing integration test fails the job. Because auth-server is booted here, its mail config must be present. **Required secrets:** `MYSQL_AUTH_SERVER_ROOT_USERNAME` (= `root`), `MYSQL_AUTH_SERVER_ROOT_PASSWORD`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`.
+Runs the integration tests against **both** live services. It (1) starts a MySQL 8 service container (port 3306) and seeds the full auth-server schema from `auth-server/src/main/resources/initialize_db/` (so the `user_credential`/`role` tables exist and `INTEGRATION_TEST_CLIENT` is seeded), (2) builds and starts **auth-server** (`mvn package -DskipTests` → `java -jar`) and waits for its health endpoint, (3) builds and starts **account-management** the same way (the `package` step also compiles the test sources) and waits for its health endpoint, then (4) runs `mvn surefire:test` — a failing integration test fails the job. auth-server is booted here under `SPRING_PROFILES_ACTIVE=test` (matching auth-server-ci.yml), so it sends no email and needs no Gmail secrets. **Required secrets:** `MYSQL_AUTH_SERVER_ROOT_USERNAME` (= `root`), `MYSQL_AUTH_SERVER_ROOT_PASSWORD`.
 
 ### account-management-cd.yml — `paths: account-management/src/**`, `account-management/pom.xml`
 
