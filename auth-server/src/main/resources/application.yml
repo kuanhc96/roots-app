@@ -1,4 +1,9 @@
+# ── Shared configuration (applies to every profile) ──────────────────────────
+# `dev` is the default profile, so a bare `mvn spring-boot:run` (no profile set)
+# runs as dev with email sending enabled.
 spring:
+  profiles:
+    default: dev
   application:
     name: auth-server
   datasource:
@@ -12,8 +17,11 @@ spring:
   mail:
     host: smtp.gmail.com
     port: 587
-    username: ${SPRING_MAIL_USERNAME}
-    password: ${SPRING_MAIL_PASSWORD}
+    # Gmail credentials are only needed when emailSender.enabled=true (dev/qa/prod).
+    # The `:noop` defaults let the test profile boot the JavaMailSender bean without
+    # real secrets — no mail is ever sent under test.
+    username: ${SPRING_MAIL_USERNAME:noop}
+    password: ${SPRING_MAIL_PASSWORD:noop}
     properties:
       mail:
         smtp:
@@ -44,3 +52,45 @@ remember-me:
 
 web-client:
   location: ${WEB_CLIENT_LOCATION:http://localhost:3000}
+
+# ── dev (default) ─────────────────────────────────────────────────────────────
+# Email is off in dev; instead the OTT/magic-link token values are logged at INFO
+# so they can be copied from the console without an inbox.
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+emailSender:
+  enabled: false
+  logToken: true
+
+# ── test (activated in CI; disables outbound email) ──────────────────────────
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+emailSender:
+  enabled: false
+  logToken: false
+
+# ── qa (placeholder until a deploy target exists) ─────────────────────────────
+---
+spring:
+  config:
+    activate:
+      on-profile: qa
+emailSender:
+  enabled: true
+  logToken: false
+
+# ── prod (placeholder until a deploy target exists) ───────────────────────────
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+emailSender:
+  enabled: true
+  logToken: false
