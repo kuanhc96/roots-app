@@ -17,11 +17,12 @@ spring:
   mail:
     host: smtp.gmail.com
     port: 587
-    # Gmail credentials are only needed when emailSender.enabled=true (dev/qa/prod).
-    # The `:noop` defaults let the test profile boot the JavaMailSender bean without
-    # real secrets — no mail is ever sent under test.
-    username: ${SPRING_MAIL_USERNAME:noop}
-    password: ${SPRING_MAIL_PASSWORD:noop}
+    # No defaults: these are required exactly when the JavaMailSender is built, i.e.
+    # under qa/prod (which run MailSenderAutoConfiguration). dev/test exclude that
+    # auto-config (see below), never bind MailProperties, and so never resolve these
+    # placeholders — qa/prod fail fast at startup if the secrets are missing.
+    username: ${SPRING_MAIL_USERNAME}
+    password: ${SPRING_MAIL_PASSWORD}
     properties:
       mail:
         smtp:
@@ -55,22 +56,29 @@ web-client:
 
 # ── dev (default) ─────────────────────────────────────────────────────────────
 # Email is off in dev; instead the OTT/magic-link token values are logged at INFO
-# so they can be copied from the console without an inbox.
+# so they can be copied from the console without an inbox. The mail auto-config is
+# excluded so no JavaMailSender is ever constructed (EmailService's MailSender is null).
 ---
 spring:
   config:
     activate:
       on-profile: dev
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration
 emailSender:
   enabled: false
   logToken: true
 
 # ── test (activated in CI; disables outbound email) ──────────────────────────
+# Same as dev: exclude the mail auto-config so the JavaMailSender is never built and
+# no Gmail secrets are required to boot.
 ---
 spring:
   config:
     activate:
       on-profile: test
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration
 emailSender:
   enabled: false
   logToken: false
