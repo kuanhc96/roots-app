@@ -1,24 +1,23 @@
 package com.roots.authserver.service;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailSender;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class EmailService {
 
-    // Optional: dev/test exclude MailSenderAutoConfiguration, so no MailSender bean
-    // exists there and this stays null. That is safe because every send path below
-    // short-circuits on emailSenderEnabled=false before touching mailSender. Only
-    // qa/prod (auto-config active) inject the framework-provided JavaMailSenderImpl.
-    @Autowired(required = false)
-    private MailSender mailSender;
+    // Auto-configured by Spring Boot in every profile from spring.mail.* (the concrete
+    // bean is a JavaMailSenderImpl), so it is always present. Whether mail is actually
+    // sent is gated separately by emailSender.enabled (off in dev/test, on in qa/prod).
+    private final MailSender mailSender;
 
     // Field injection (not a constructor arg) so @RequiredArgsConstructor keeps wiring
     // only mailSender; a final field here would land in the Lombok constructor without

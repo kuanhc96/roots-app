@@ -17,10 +17,11 @@ spring:
   mail:
     host: smtp.gmail.com
     port: 587
-    # No defaults: these are required exactly when the JavaMailSender is built, i.e.
-    # under qa/prod (which run MailSenderAutoConfiguration). dev/test exclude that
-    # auto-config (see below), never bind MailProperties, and so never resolve these
-    # placeholders — qa/prod fail fast at startup if the secrets are missing.
+    # No defaults: the JavaMailSender is auto-configured in every profile, so these
+    # credentials must be provided as env/JVM vars in every environment (including CI,
+    # which carries them as GitHub secrets) — a missing value fails fast at startup.
+    # Note the Actuator mail health indicator opens a real SMTP connection on each
+    # /actuator/health call, so the credentials must be valid wherever health is polled.
     username: ${SPRING_MAIL_USERNAME}
     password: ${SPRING_MAIL_PASSWORD}
     properties:
@@ -55,9 +56,9 @@ web-client:
   location: ${WEB_CLIENT_LOCATION:http://localhost:3000}
 
 # ── dev (default) ─────────────────────────────────────────────────────────────
-# Email is off in dev; instead the OTT/magic-link token values are logged at INFO
-# so they can be copied from the console without an inbox. The mail auto-config is
-# excluded so no JavaMailSender is ever constructed (EmailService's MailSender is null).
+# The JavaMailSender is still built (auto-config runs in every profile), but email
+# is off in dev: instead the OTT/magic-link token values are logged at INFO so they
+# can be copied from the console without an inbox.
 ---
 spring:
   config:
@@ -68,8 +69,9 @@ emailSender:
   logToken: true
 
 # ── test (activated in CI; disables outbound email) ──────────────────────────
-# Same as dev: exclude the mail auto-config so the JavaMailSender is never built and
-# no Gmail secrets are required to boot.
+# The JavaMailSender is built here too; emailSender.enabled=false stops actual sends.
+# CI supplies SPRING_MAIL_USERNAME/PASSWORD as secrets so the bean and the Actuator
+# mail health check have valid credentials.
 ---
 spring:
   config:
