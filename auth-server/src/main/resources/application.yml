@@ -63,8 +63,6 @@ spring:
   config:
     activate:
       on-profile: dev
-  autoconfigure:
-    exclude: org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration
 emailSender:
   enabled: false
   logToken: true
@@ -77,8 +75,6 @@ spring:
   config:
     activate:
       on-profile: test
-  autoconfigure:
-    exclude: org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration
 emailSender:
   enabled: false
   logToken: false
