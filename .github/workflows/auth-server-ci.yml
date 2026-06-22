@@ -57,10 +57,7 @@ jobs:
       # mail health indicator (which opens an SMTP connection on each /actuator/health poll).
       - name: Start auth-server
         working-directory: auth-server
-        # Redirect stdout+stderr to a log file so the full startup output survives the
-        # backgrounded process and can be uploaded as an artifact (the console output of a
-        # forked process is otherwise lost from the step logs).
-        run: java -jar target/auth-server-*.jar > auth-server.log 2>&1 &
+        run: java -jar target/auth-server-*.jar &
         env:
           SPRING_PROFILES_ACTIVE: test
           MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
@@ -87,13 +84,3 @@ jobs:
       - name: Run integration tests
         working-directory: auth-server
         run: mvn surefire:test
-
-      # Always upload the auth-server log so it is downloadable from the run's
-      # Artifacts section, even when an earlier step (e.g. the health check) fails.
-      - name: Upload auth-server log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: auth-server-log
-          path: auth-server/auth-server.log
-          if-no-files-found: warn
