@@ -9,6 +9,7 @@ CREATE TABLE user_credential (
     password          VARCHAR(255) NOT NULL,
     is_mfa_enabled    BOOLEAN      NOT NULL DEFAULT TRUE,
     is_email_verified BOOLEAN      NOT NULL DEFAULT FALSE,
+    is_password_change_required BOOLEAN      NOT NULL DEFAULT FALSE,
     creation_date     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_date       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
