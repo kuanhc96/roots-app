@@ -38,7 +38,7 @@ services:
       auth-server-db:
         condition: service_healthy
     environment:
-      SPRING_PROFILES_ACTIVE: test
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
       MYSQL_AUTH_SERVER_ROOT_USERNAME: ${MYSQL_AUTH_SERVER_ROOT_USERNAME}
       MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
       MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://auth-server-db:3307/auth-server-db
@@ -65,7 +65,7 @@ services:
       auth-server:
         condition: service_healthy
     environment:
-      SPRING_PROFILES_ACTIVE: test
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
       MYSQL_AUTH_SERVER_ROOT_USERNAME: ${MYSQL_AUTH_SERVER_ROOT_USERNAME}
       MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
       MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://auth-server-db:3307/auth-server-db
