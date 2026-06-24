@@ -49,13 +49,17 @@ jobs:
           MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
           MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
           MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
-          SPRING_MAIL_USERNAME: ${{ secrets.SPRING_MAIL_USERNAME }}
-          SPRING_MAIL_PASSWORD: ${{ secrets.SPRING_MAIL_PASSWORD }}
 
+      # SPRING_PROFILES_ACTIVE=test disables outbound email (emailSender.enabled=false), so
+      # integration tests mint OTT/magic-link tokens via the /…/test endpoints rather than
+      # reading an inbox. The JavaMailSender is still built in every profile, so real
+      # SPRING_MAIL_* secrets are supplied: they satisfy the mail bean and the Actuator
+      # mail health indicator (which opens an SMTP connection on each /actuator/health poll).
       - name: Start auth-server
         working-directory: auth-server
         run: java -jar target/auth-server-*.jar &
         env:
+          SPRING_PROFILES_ACTIVE: test
           MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
           MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
           MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db

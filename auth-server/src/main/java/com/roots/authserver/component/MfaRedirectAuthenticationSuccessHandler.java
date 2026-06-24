@@ -48,7 +48,6 @@ public class MfaRedirectAuthenticationSuccessHandler extends SavedRequestAwareAu
                     .queryParam("magicLinkToken", oneTimeToken.getTokenValue())
                     .build()
                     .toUriString();
-            System.out.println("MAGIC LINK: " + magicLink);
             emailService.sendMagicLinkEmail(auth.getName(), magicLink);
             response.sendRedirect("/signup/success");
         } else {

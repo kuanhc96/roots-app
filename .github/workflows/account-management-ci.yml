@@ -63,13 +63,16 @@ jobs:
           MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
           MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
           MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
-          SPRING_MAIL_USERNAME: ${{ secrets.SPRING_MAIL_USERNAME }}
-          SPRING_MAIL_PASSWORD: ${{ secrets.SPRING_MAIL_PASSWORD }}
 
+      # Run auth-server under the test profile (emailSender.enabled=false): these tests
+      # never drive auth-server's signup/OTT flow, so no mail is sent. The JavaMailSender
+      # is still built in every profile, so SPRING_MAIL_* secrets are supplied to satisfy
+      # the mail bean and the Actuator mail health indicator (matching auth-server-ci.yml).
       - name: Start auth-server
         working-directory: auth-server
         run: java -jar target/auth-server-*.jar &
         env:
+          SPRING_PROFILES_ACTIVE: test
           MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
           MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
           MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db

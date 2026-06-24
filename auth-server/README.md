@@ -13,8 +13,23 @@ A fullstack Spring Boot + Nuxt/Vue application that handles authentication for t
 | `REMEMBER_ME_KEY`                 | No | `dev-remember-me-key-change-in-prod` | Secret key used to sign remember-me cookies; change in production |
 | `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` | No | `1209600` (14 days) | Lifetime of the remember-me cookie in seconds |
 | `WEB_CLIENT_LOCATION`               | No | `http://localhost:3000` | Base URL of web-client; used to hand off the OAuth2 flow after magic-link email verification when no saved request exists |
-| `SPRING_MAIL_USERNAME`              | Yes | — | Gmail address used to send OTP and magic-link emails |
-| `SPRING_MAIL_PASSWORD`              | Yes | — | Gmail App Password for the above account (not the account password; requires 2FA + App Password in Google Account settings) |
+| `SPRING_MAIL_USERNAME`              | Yes (every profile) | — (no default) | Gmail address; the `JavaMailSender` is built in every profile and the Actuator mail health indicator connects to SMTP, so this is required at startup everywhere |
+| `SPRING_MAIL_PASSWORD`              | Yes (every profile) | — (no default) | Gmail App Password for the above account (not the account password; requires 2FA + App Password in Google Account settings) |
+
+## Spring Profiles
+
+`application.yml` is split into a shared document plus four profile documents (`---` separated, each activated via `spring.config.activate.on-profile`):
+
+| Profile | `emailSender.enabled` | `emailSender.logToken` | Notes |
+|---|---|---|---|
+| `dev` | `false` | `true` | Default profile (`spring.profiles.default: dev`) — a bare `mvn spring-boot:run` runs as dev. Email is off; the OTT/magic-link token values are logged at INFO so they can be copied from the console without an inbox. The `JavaMailSender` is still built, so `SPRING_MAIL_*` must be set |
+| `test` | `false` | `false` | Activated in CI (`SPRING_PROFILES_ACTIVE=test`); disables outbound email (tokens come from the `/…/test` endpoints, not logs). The `JavaMailSender` is still built and the mail health indicator connects to SMTP, so CI supplies real `SPRING_MAIL_*` secrets |
+| `qa` | `true` | `false` | Placeholder (no deploy target yet); actually sends mail |
+| `prod` | `true` | `false` | Placeholder (no deploy target yet); actually sends mail |
+
+The two `emailSender.*` flags vary per profile. `EmailService` reads both via field-injected `@Value("…:false")`. When email is disabled it either logs the token value at INFO (dev, `logToken=true`) or logs a warning and skips the send (test) instead of calling the mail sender.
+
+The `JavaMailSender` itself is auto-configured from `spring.mail.*` in **every** profile, so `EmailService` injects it as a required `private final MailSender` (the concrete bean is a `JavaMailSenderImpl`). `SPRING_MAIL_USERNAME`/`SPRING_MAIL_PASSWORD` have **no defaults** and must be provided in every environment (a missing value fails fast at startup). They must also be *valid* wherever `/actuator/health` is polled — the Actuator mail health indicator opens a real SMTP connection on each poll — which is why CI supplies real Gmail secrets even though the `test` profile sends no mail. The `emailSender.enabled` flag only controls whether mail is actually sent (off in `dev`/`test`, on in `qa`/`prod`).
 
 `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` must be provided as JVM arguments (or environment variables) at startup, for example:
 
@@ -45,7 +60,11 @@ Integration tests in `src/test/java/com/roots/authserver/integration/` hit a **l
    ```bash
    docker compose up -d auth-server-db
    ```
-2. Start auth-server (from the project root or the `auth-server/` directory):
+2. Start auth-server (from the project root or the `auth-server/` directory). The integration tests mint OTT/magic-link tokens via the `/…/test` endpoints rather than reading an inbox, so you can run under the `test` profile and skip the Gmail setup entirely:
+   ```bash
+   mvn spring-boot:run -Dspring-boot.run.profiles=test -Dspring-boot.run.jvmArguments="-DMYSQL_AUTH_SERVER_ROOT_USERNAME=root -DMYSQL_AUTH_SERVER_ROOT_PASSWORD=<password>"
+   ```
+   To exercise real email delivery instead, run as `dev` (the default) and supply Gmail credentials:
    ```bash
    mvn spring-boot:run -Dspring-boot.run.jvmArguments="-DMYSQL_AUTH_SERVER_ROOT_USERNAME=root -DMYSQL_AUTH_SERVER_ROOT_PASSWORD=<password> -DSPRING_MAIL_USERNAME=<email> -DSPRING_MAIL_PASSWORD=<app-password>"
    ```
@@ -139,7 +158,7 @@ The workflow at `.github/workflows/auth-server-ci.yml` runs on pull requests tha
 
 1. Starts a MySQL 8 service container and seeds it by running the scripts in `src/main/resources/initialize_db/` in order: `create_authentication_tables.sql` → `create_client_table.sql` → `create_one_time_tokens_table.sql` → `initialize_test_users.sql`.
 2. Builds the JAR with `mvn package -DskipTests` (includes the Nuxt frontend build — done once).
-3. Starts auth-server in the background with `java -jar`.
+3. Starts auth-server in the background with `java -jar`, under `SPRING_PROFILES_ACTIVE=test` (so `emailSender.enabled=false` — no real emails sent) with real `SPRING_MAIL_*` secrets so the mail bean and health indicator have valid credentials.
 4. Polls `GET /actuator/health` until the server reports `UP` (up to 150 s).
 5. Runs integration tests with `mvn surefire:test`.
 
@@ -149,8 +168,10 @@ The workflow at `.github/workflows/auth-server-ci.yml` runs on pull requests tha
 |---|---|
 | `MYSQL_AUTH_SERVER_ROOT_USERNAME` | `root` (the MySQL service container only creates a root user) |
 | `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | any password |
-| `SPRING_MAIL_USERNAME` | Gmail address used by the server |
-| `SPRING_MAIL_PASSWORD` | Gmail App Password for that address |
+| `SPRING_MAIL_USERNAME` | a real Gmail address |
+| `SPRING_MAIL_PASSWORD` | a Gmail App Password for that address |
+
+`SPRING_MAIL_USERNAME`/`SPRING_MAIL_PASSWORD` **are** required in CI: although the `test` profile disables outbound email, the `JavaMailSender` is built in every profile and the Actuator mail health indicator opens an SMTP connection on each `/actuator/health` poll, so the `Wait for auth-server` step needs valid Gmail credentials. They are supplied as GitHub secrets.
 
 `MYSQL_AUTH_SERVER_DB_URL` is hardcoded in the workflow to `jdbc:mysql://localhost:3306/auth-server-db` (the GitHub Actions MySQL container exposes port 3306, not 3307).
 
@@ -255,7 +276,7 @@ MFA is **optional per user**, controlled by the `is_mfa_enabled` column in `user
 1. User submits credentials on `/login` (or browser sends a remember-me cookie automatically).
 2. Spring Security validates the first factor. Because `is_mfa_enabled = true`, the session holds a `MfaPendingAuthenticationToken` — the user is **not yet authenticated** and has no granted authorities.
 3. The `MfaRedirectAuthenticationSuccessHandler` detects the pending token and redirects to `/ott/login`.
-4. The `/ott/login` Nuxt page loads and immediately calls `POST /ott/generate`. This generates a one-time token, **prints it to the server console** (for debugging), and **emails it to the user** via `EmailService` (Gmail SMTP).
+4. The `/ott/login` Nuxt page loads and immediately calls `POST /ott/generate`. This generates a one-time token and hands it to `EmailService`, which **emails it** via Gmail SMTP (qa/prod), **logs the value at INFO** to the server console (dev — copy it from there, no inbox needed), or skips it (test).
 5. The user copies the token from the console, enters it in the OTT form, and submits `POST /ott/login`. The form also includes a "Remember this browser?" checkbox.
 6. `SpaController` verifies the token. If "Remember this browser?" was checked, it sets `is_mfa_enabled = false` for the user in the database. The session is upgraded to a fully authenticated `MfaAuthenticationToken` and the user is redirected back to the original OAuth2 authorization request.
 
@@ -274,12 +295,12 @@ MFA is **optional per user**, controlled by the `is_mfa_enabled` column in `user
 | `MfaAwareDaoAuthenticationProvider` | `component/` | Validates password; checks `is_mfa_enabled` and returns either `MfaPendingAuthenticationToken` or `MfaAuthenticationToken` |
 | `MfaAwareRememberMeAuthenticationProvider` | `component/` | Validates remember-me cookie; same conditional MFA logic |
 | `MfaRedirectAuthenticationSuccessHandler` | `component/` | Redirects to `/ott/login` when the result is a pending token; falls through to saved-request redirect otherwise |
-| `MfaController` | `controller/` | `POST /ott/generate` — generates the OTT, logs it to stdout, and calls `EmailService.sendOTTEmail` |
+| `MfaController` | `controller/` | `POST /ott/generate` — generates the OTT and calls `EmailService.sendOTTEmail` (which emails it, logs it at INFO in dev, or skips it in test) |
 | `SpaController` | `controller/` | `GET /ott/login` (forward to Nuxt page) + `POST /ott/login` (verify OTT, optionally disable MFA, and upgrade session) |
 | `UserCredential` | `model/` | Record representing a row from `user_credential` |
 | `UserCredentialRepository` | `repository/` | JdbcTemplate-based repo; `findByEmail` and `setMfaEnabled` |
 | `UserCredentialService` | `service/` | `isMfaEnabled(email)` and `disableMfa(email)`; injected into both authentication providers and `SpaController` |
-| `EmailService` | `service/` | `sendOTTEmail(to, ott)` — sends the OTT to the user's email via Gmail SMTP using `JavaMailSender` |
+| `EmailService` | `service/` | `sendOTTEmail(to, ott)` — sends the OTT to the user's email via Gmail SMTP using a required `MailSender` (auto-configured `JavaMailSenderImpl`, built in every profile) |
 
 ### OTT storage
 

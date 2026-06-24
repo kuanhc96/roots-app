@@ -1,4 +1,9 @@
+# ── Shared configuration (applies to every profile) ──────────────────────────
+# `dev` is the default profile, so a bare `mvn spring-boot:run` (no profile set)
+# runs as dev with email sending enabled.
 spring:
+  profiles:
+    default: dev
   application:
     name: auth-server
   datasource:
@@ -12,6 +17,11 @@ spring:
   mail:
     host: smtp.gmail.com
     port: 587
+    # No defaults: the JavaMailSender is auto-configured in every profile, so these
+    # credentials must be provided as env/JVM vars in every environment (including CI,
+    # which carries them as GitHub secrets) — a missing value fails fast at startup.
+    # Note the Actuator mail health indicator opens a real SMTP connection on each
+    # /actuator/health call, so the credentials must be valid wherever health is polled.
     username: ${SPRING_MAIL_USERNAME}
     password: ${SPRING_MAIL_PASSWORD}
     properties:
@@ -44,3 +54,49 @@ remember-me:
 
 web-client:
   location: ${WEB_CLIENT_LOCATION:http://localhost:3000}
+
+# ── dev (default) ─────────────────────────────────────────────────────────────
+# The JavaMailSender is still built (auto-config runs in every profile), but email
+# is off in dev: instead the OTT/magic-link token values are logged at INFO so they
+# can be copied from the console without an inbox.
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+emailSender:
+  enabled: false
+  logToken: true
+
+# ── test (activated in CI; disables outbound email) ──────────────────────────
+# The JavaMailSender is built here too; emailSender.enabled=false stops actual sends.
+# CI supplies SPRING_MAIL_USERNAME/PASSWORD as secrets so the bean and the Actuator
+# mail health check have valid credentials.
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+emailSender:
+  enabled: false
+  logToken: false
+
+# ── qa (placeholder until a deploy target exists) ─────────────────────────────
+---
+spring:
+  config:
+    activate:
+      on-profile: qa
+emailSender:
+  enabled: true
+  logToken: false
+
+# ── prod (placeholder until a deploy target exists) ───────────────────────────
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+emailSender:
+  enabled: true
+  logToken: false
