@@ -11,20 +11,6 @@ jobs:
   integration-test:
     runs-on: ubuntu-latest
 
-    services:
-      mysql:
-        image: mysql:8
-        env:
-          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
-          MYSQL_DATABASE: auth-server-db
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=3
-
     steps:
       - uses: actions/checkout@v4
 
@@ -36,102 +22,58 @@ jobs:
 
       # The unit tests (com.roots.account_management.unit.*) are pure Mockito / standalone
       # MockMvc — no DB or running services — so run them first as a fast gate, before
-      # anything is built or booted. Uses `mvn test` (not surefire:test) so it compiles the
-      # sources itself; the regex selects only the unit package, skipping the integration
-      # tests and the @SpringBootTest context-load test (which need the DB/services below).
+      # anything is built or booted.
       - name: Run unit tests
         working-directory: account-management
         run: mvn test '-Dtest=%regex[.*unit.*]'
 
-      # The integration tests need the shared auth-server DB: the user_credential/role
-      # tables that account-management writes to, and the INTEGRATION_TEST_CLIENT seeded
-      # in create_client_table.sql (which issues the client_credentials token). Seed the
-      # full auth-server schema so auth-server itself boots cleanly too.
-      - name: Seed database
-        run: |
-          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/create_authentication_tables.sql
-          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/create_client_table.sql
-          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/create_one_time_tokens_table.sql
-          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/initialize_test_users.sql
+      # auth-server is an unchanged dependency for this workflow (the paths filter means a
+      # triggering PR only touched account-management), so pull its published :latest image
+      # rather than rebuilding it. The auth-server image repo is private, so authenticate.
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # auth-server issues the client_credentials token and serves the JWK set that
-      # account-management uses to validate it, so it must be running for the tests.
-      - name: Build auth-server
-        working-directory: auth-server
+      # account-management is the subject of this PR, so build its image from the PR source.
+      # package -DskipTests compiles main + test sources (the integration tests run later
+      # via surefire:test) and produces the jar; jib:dockerBuild then builds the image
+      # straight into the local Docker daemon (no registry push).
+      - name: Build account-management jar and test classes
+        working-directory: account-management
         run: mvn package -DskipTests
         env:
           MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
           MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
-          MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
 
-      # Run auth-server under the test profile (emailSender.enabled=false): these tests
-      # never drive auth-server's signup/OTT flow, so no mail is sent. The JavaMailSender
-      # is still built in every profile, so SPRING_MAIL_* secrets are supplied to satisfy
-      # the mail bean and the Actuator mail health indicator (matching auth-server-ci.yml).
-      - name: Start auth-server
-        working-directory: auth-server
-        run: java -jar target/auth-server-*.jar &
+      - name: Build account-management image
+        working-directory: account-management
+        run: mvn jib:dockerBuild -Djib.to.image=${{ secrets.DOCKERHUB_USERNAME }}/account-management:ci
+
+      # Bring up DB + auth-server + account-management on the shared docker network. The DB
+      # self-seeds from initialize_db/ (mounted into /docker-entrypoint-initdb.d). depends_on
+      # chains in the DB and auth-server (pulled :latest); account-management uses the local
+      # :ci image. --wait blocks until all are healthy, so no curl wait-loops are needed.
+      # SPRING_MAIL_* are supplied for auth-server's mail bean + Actuator mail health check.
+      - name: Start services
+        run: docker compose up -d --wait account-management
         env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          ACCOUNT_MANAGEMENT_TAG: ci
           SPRING_PROFILES_ACTIVE: test
           MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
           MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
-          MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
           SPRING_MAIL_USERNAME: ${{ secrets.SPRING_MAIL_USERNAME }}
           SPRING_MAIL_PASSWORD: ${{ secrets.SPRING_MAIL_PASSWORD }}
 
-      - name: Wait for auth-server
-        run: |
-          echo "Waiting for auth-server to be ready..."
-          for i in {1..30}; do
-            if curl -sf http://localhost:9000/actuator/health; then
-              echo ""
-              echo "Auth-server is ready."
-              exit 0
-            fi
-            echo "Attempt $i/30, retrying in 5s..."
-            sleep 5
-          done
-          echo "Auth-server failed to start within 150s."
-          exit 1
-
-      # Build with -DskipTests: this compiles the test sources (so surefire:test can run
-      # them later) and produces the runnable jar, without executing the integration
-      # tests before account-management is up.
-      - name: Build account-management
-        working-directory: account-management
-        run: mvn package -DskipTests
-        env:
-          MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
-          MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
-          MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
-
-      - name: Start account-management
-        working-directory: account-management
-        run: java -jar target/account-management-*.jar &
-        env:
-          MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
-          MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
-          MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
-
-      - name: Wait for account-management
-        run: |
-          echo "Waiting for account-management to be ready..."
-          for i in {1..30}; do
-            if curl -sf http://localhost:8082/actuator/health; then
-              echo ""
-              echo "account-management is ready."
-              exit 0
-            fi
-            echo "Attempt $i/30, retrying in 5s..."
-            sleep 5
-          done
-          echo "account-management failed to start within 150s."
-          exit 1
-
+      # The test client runs on the host and hits the published ports (localhost:8082 and
+      # localhost:9000). Scoped to the integration package — the unit tests already ran as
+      # the gate above, and no host-run test touches the DB.
       - name: Run integration tests
         working-directory: account-management
-        run: mvn surefire:test
-        env:
-          MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
-          MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
-          MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
+        run: mvn surefire:test '-Dtest=%regex[.*integration.*]'
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose logs --no-color
