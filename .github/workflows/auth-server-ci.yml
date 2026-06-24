@@ -12,20 +12,6 @@ jobs:
   integration-test:
     runs-on: ubuntu-latest
 
-    services:
-      mysql:
-        image: mysql:8
-        env:
-          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
-          MYSQL_DATABASE: auth-server-db
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=3
-
     steps:
       - uses: actions/checkout@v4
 
@@ -35,52 +21,41 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Seed database
-        run: |
-          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/create_authentication_tables.sql
-          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/create_client_table.sql
-          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/create_one_time_tokens_table.sql
-          mysql -h 127.0.0.1 -u ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }} -p${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }} auth-server-db < auth-server/src/main/resources/initialize_db/initialize_test_users.sql
-
-      - name: Build auth-server
+      # auth-server is the subject of this PR, so build its image from the PR source.
+      # package -DskipTests compiles main + test sources (the integration tests run later
+      # via surefire:test) and produces the jar; jib:dockerBuild then builds the image
+      # straight into the local Docker daemon (no registry push).
+      - name: Build auth-server jar and test classes
         working-directory: auth-server
         run: mvn package -DskipTests
         env:
           MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
           MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
-          MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
 
-      # SPRING_PROFILES_ACTIVE=test disables outbound email (emailSender.enabled=false), so
-      # integration tests mint OTT/magic-link tokens via the /…/test endpoints rather than
-      # reading an inbox. The JavaMailSender is still built in every profile, so real
-      # SPRING_MAIL_* secrets are supplied: they satisfy the mail bean and the Actuator
-      # mail health indicator (which opens an SMTP connection on each /actuator/health poll).
-      - name: Start auth-server
+      - name: Build auth-server image
         working-directory: auth-server
-        run: java -jar target/auth-server-*.jar &
+        run: mvn jib:dockerBuild -Djib.to.image=${{ secrets.DOCKERHUB_USERNAME }}/auth-server:ci
+
+      # Bring up the DB + auth-server on the shared docker network. The DB self-seeds from
+      # initialize_db/ (mounted into /docker-entrypoint-initdb.d). --wait blocks until both
+      # report healthy, so no curl wait-loop is needed. Only the public mysql:8 base image
+      # is pulled here (auth-server uses the local :ci image), so no docker login is needed.
+      - name: Start services
+        run: docker compose up -d --wait auth-server
         env:
-          SPRING_PROFILES_ACTIVE: test
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          AUTH_SERVER_TAG: ci
           MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
           MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
-          MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://localhost:3306/auth-server-db
           SPRING_MAIL_USERNAME: ${{ secrets.SPRING_MAIL_USERNAME }}
           SPRING_MAIL_PASSWORD: ${{ secrets.SPRING_MAIL_PASSWORD }}
 
-      - name: Wait for auth-server
-        run: |
-          echo "Waiting for auth-server to be ready..."
-          for i in {1..30}; do
-            if curl -sf http://localhost:9000/actuator/health; then
-              echo ""
-              echo "Auth-server is ready."
-              exit 0
-            fi
-            echo "Attempt $i/30, retrying in 5s..."
-            sleep 5
-          done
-          echo "Auth-server failed to start within 150s."
-          exit 1
-
+      # The test client runs on the host and hits the published port (localhost:9000),
+      # exactly as before — test application.yml is unchanged.
       - name: Run integration tests
         working-directory: auth-server
         run: mvn surefire:test
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose logs --no-color

@@ -2,8 +2,6 @@ services:
   auth-server-db:
     image: mysql:8
     container_name: auth-server-db
-    ports:
-      - "3307:3307"
     expose:
       - "3307"
     deploy:
@@ -16,6 +14,12 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
       MYSQL_TCP_PORT: 3307
       MYSQL_DATABASE: auth-server-db
+    volumes:
+      # Auto-seeds the schema + test data on first init. MySQL runs every .sql here in
+      # alphabetical order, which already matches the dependency order:
+      # create_authentication_tables -> create_client_table -> create_one_time_tokens_table
+      # -> initialize_test_users.
+      - ./auth-server/src/main/resources/initialize_db:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --port 3307 -uroot -p$$MYSQL_ROOT_PASSWORD"]
       interval: 10s
@@ -24,7 +28,7 @@ services:
       start_period: 30s
 
   auth-server:
-    image: ${DOCKERHUB_USERNAME}/auth-server:latest
+    image: ${DOCKERHUB_USERNAME}/auth-server:${AUTH_SERVER_TAG:-latest}
     container_name: auth-server
     ports:
       - "9000:9000"
@@ -34,6 +38,7 @@ services:
       auth-server-db:
         condition: service_healthy
     environment:
+      SPRING_PROFILES_ACTIVE: test
       MYSQL_AUTH_SERVER_ROOT_USERNAME: ${MYSQL_AUTH_SERVER_ROOT_USERNAME}
       MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
       MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://auth-server-db:3307/auth-server-db
@@ -46,6 +51,31 @@ services:
       timeout: 5s
       retries: 10
       start_period: 90s
+
+  account-management:
+    image: ${DOCKERHUB_USERNAME}/account-management:${ACCOUNT_MANAGEMENT_TAG:-latest}
+    container_name: account-management
+    ports:
+      - "8082:8082"
+    networks:
+      - roots_backend
+    depends_on:
+      auth-server-db:
+        condition: service_healthy
+      auth-server:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: test
+      MYSQL_AUTH_SERVER_ROOT_USERNAME: ${MYSQL_AUTH_SERVER_ROOT_USERNAME}
+      MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
+      MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://auth-server-db:3307/auth-server-db
+      AUTH_SERVER_JWK_URI: http://auth-server:9000/oauth2/jwks
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent localhost:8082/actuator/health | grep UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
 
 networks:
   roots_backend:
