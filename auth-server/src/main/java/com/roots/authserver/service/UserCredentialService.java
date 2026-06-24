@@ -41,6 +41,7 @@ public class UserCredentialService {
                 request.name(),
                 passwordEncoder.encode(request.password()),
                 true,
+                false,
                 false
         );
 
@@ -62,11 +63,21 @@ public class UserCredentialService {
                 .orElse(false);
     }
 
+    public boolean isPasswordChangeRequired(String email) {
+        return userCredentialRepository.findByEmail(email)
+                .map(uc -> uc.passwordChangeRequired())
+                .orElse(false);
+    }
+
     public void disableMfa(String email) {
         userCredentialRepository.setMfaEnabled(email, false);
     }
 
     public void verifyEmail(String email) {
         userCredentialRepository.verifyEmail(email);
+    }
+
+    public void setPasswordChangeRequired(String email) {
+        userCredentialRepository.setPasswordChangeRequired(email);
     }
 }
