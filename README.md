@@ -12,9 +12,21 @@ A Spring Cloud microservices application providing authentication, authorization
 | `auth-server` | Spring Boot + Nuxt/Vue | 9000 | Authentication + embedded SSR frontend |
 | `bff-server` | Spring Boot | — | Backend-for-frontend |
 | `simple-resource-server` | Spring Boot | 8081 | Example protected resource with role endpoints |
+| `account-management` | Spring Boot | 8082 | Account CRUD resource server (integration-test-only endpoints so far) |
 | `web-client` | Nuxt 4 / Vue 3 | 3000 | Standalone frontend |
 
-**Startup order:** config-server → eureka-server → gateway-server → auth-server → bff-server → simple-resource-server → web-client.
+**Startup order:** `auth-server` must start before `account-management` — it provides the JWK set and owns the shared DB schema/seed that account-management depends on.
+
+## Docker Compose
+
+`docker-compose.yml` defines the integration-test stack on a shared `roots_backend` bridge network: `auth-server-db` (MySQL 8, internal port `3307`), `auth-server` (`9000`), and `account-management` (`8082`). It is the same compose file the CI workflows use to stand up services for integration testing.
+
+- **DB self-seeds.** `auth-server/src/main/resources/initialize_db/` is mounted into the DB container's `/docker-entrypoint-initdb.d`, so MySQL runs the schema + seed scripts automatically on first init (in dependency order, by filename) — no manual seed step.
+- **App images.** `auth-server` and `account-management` reference `${DOCKERHUB_USERNAME}/<service>:${<SERVICE>_TAG:-latest}`, so by default they pull the published `:latest`. CI overrides the relevant tag to a locally-built `:ci` image.
+- **Profile is env-driven.** Both app services read `SPRING_PROFILES_ACTIVE` from the environment (CI sets it to `test`).
+- **Healthchecks + `depends_on`.** `account-management` waits for both `auth-server-db` and `auth-server` to be healthy; `docker compose up --wait` blocks until everything reports healthy.
+
+Environment expected by `docker compose up`: `DOCKERHUB_USERNAME`, `MYSQL_AUTH_SERVER_ROOT_USERNAME`, `MYSQL_AUTH_SERVER_ROOT_PASSWORD`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`, and `SPRING_PROFILES_ACTIVE` (plus optional `AUTH_SERVER_TAG` / `ACCOUNT_MANAGEMENT_TAG` to override the default `:latest`).
 
 ## CI / CD
 
@@ -24,7 +36,8 @@ GitHub Actions workflows are defined in `.github/workflows/`.
 
 | Workflow | Trigger path | What it does |
 |---|---|---|
-| `auth-server-ci.yml` | `auth-server/**` | Starts a MySQL service container, seeds the DB, builds the JAR, starts auth-server, and runs integration tests |
+| `auth-server-ci.yml` | `auth-server/**` | Builds a local `:ci` auth-server image (`mvn jib:dockerBuild`), brings up DB + auth-server via `docker compose up --wait` (DB self-seeds from `initialize_db/`), and runs integration tests against `localhost:9000` |
+| `account-management-ci.yml` | `account-management/src/**`, `account-management/pom.xml` | Runs unit tests, builds a local `:ci` account-management image, then `docker compose up --wait` brings up DB + auth-server (pulled `:latest`) + account-management before running integration tests against `localhost:8082`/`localhost:9000` |
 | `simple-resource-server-ci.yml` | `simple-resource-server/**` | Runs `mvn test` to verify the service context loads |
 
 ### CD — runs on push to `main`
