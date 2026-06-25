@@ -8,6 +8,7 @@
       <v-card-text>
         <v-text-field name="email" label="Email" type="email" form="login-form" />
         <v-text-field name="password" label="Password" type="password" form="login-form" />
+        <NuxtLink to="/forgot-password">Forgot?</NuxtLink>
         <v-checkbox name="remember-me" value="true" label="Remember Me?" form="login-form" />
       </v-card-text>
       <v-card-actions>
