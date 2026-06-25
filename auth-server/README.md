@@ -156,24 +156,27 @@ The workflow at `.github/workflows/auth-server-ci.yml` runs on pull requests tha
 
 ### What it does
 
-1. Starts a MySQL 8 service container and seeds it by running the scripts in `src/main/resources/initialize_db/` in order: `create_authentication_tables.sql` → `create_client_table.sql` → `create_one_time_tokens_table.sql` → `initialize_test_users.sql`.
-2. Builds the JAR with `mvn package -DskipTests` (includes the Nuxt frontend build — done once).
-3. Starts auth-server in the background with `java -jar`, under `SPRING_PROFILES_ACTIVE=test` (so `emailSender.enabled=false` — no real emails sent) with real `SPRING_MAIL_*` secrets so the mail bean and health indicator have valid credentials.
-4. Polls `GET /actuator/health` until the server reports `UP` (up to 150 s).
-5. Runs integration tests with `mvn surefire:test`.
+1. Builds the JAR with `mvn package -DskipTests` (includes the Nuxt frontend build — done once).
+2. Builds a local Docker image for auth-server via Jib: `mvn jib:dockerBuild -Djib.to.image=${DOCKERHUB_USERNAME}/auth-server:ci`. The image is loaded straight into the local Docker daemon — no registry push.
+3. Brings up the DB + auth-server on the shared `roots_backend` docker network with `docker compose up -d --wait auth-server` (env: `AUTH_SERVER_TAG=ci`, `SPRING_PROFILES_ACTIVE=test`, `MYSQL_AUTH_SERVER_ROOT_USERNAME`/`MYSQL_AUTH_SERVER_ROOT_PASSWORD`, `SPRING_MAIL_USERNAME`/`SPRING_MAIL_PASSWORD`). The DB self-seeds from `src/main/resources/initialize_db/` (mounted into `/docker-entrypoint-initdb.d` by `docker-compose.yml`); MySQL runs every `.sql` there in alphabetical order, which already matches the dependency order (`create_authentication_tables` → `create_client_table` → `create_one_time_tokens_table` → `initialize_test_users`). `--wait` blocks until both services report healthy, so no curl wait-loop is needed.
+4. Runs integration tests on the host (which hit `localhost:9000` against the running container) with `mvn surefire:test`.
+5. On failure, dumps all container logs (`docker compose logs --no-color`).
+
+No `docker login` step is needed in this workflow — only the public `mysql:8` base image is pulled (auth-server uses the locally-built `:ci` image).
 
 ### Required GitHub secrets
 
 | Secret | Value in CI |
 |---|---|
-| `MYSQL_AUTH_SERVER_ROOT_USERNAME` | `root` (the MySQL service container only creates a root user) |
+| `DOCKERHUB_USERNAME` | Your Docker Hub username — used as the Jib image prefix (`${DOCKERHUB_USERNAME}/auth-server:ci`) and matches the `docker-compose.yml` image template |
+| `MYSQL_AUTH_SERVER_ROOT_USERNAME` | `root` (the MySQL container only creates a root user) |
 | `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | any password |
 | `SPRING_MAIL_USERNAME` | a real Gmail address |
 | `SPRING_MAIL_PASSWORD` | a Gmail App Password for that address |
 
-`SPRING_MAIL_USERNAME`/`SPRING_MAIL_PASSWORD` **are** required in CI: although the `test` profile disables outbound email, the `JavaMailSender` is built in every profile and the Actuator mail health indicator opens an SMTP connection on each `/actuator/health` poll, so the `Wait for auth-server` step needs valid Gmail credentials. They are supplied as GitHub secrets.
+`SPRING_MAIL_USERNAME`/`SPRING_MAIL_PASSWORD` **are** required in CI: although the `test` profile disables outbound email, the `JavaMailSender` is built in every profile and the Actuator mail health indicator opens an SMTP connection on each `/actuator/health` poll, so the `--wait` step needs valid Gmail credentials. They are supplied as GitHub secrets.
 
-`MYSQL_AUTH_SERVER_DB_URL` is hardcoded in the workflow to `jdbc:mysql://localhost:3306/auth-server-db` (the GitHub Actions MySQL container exposes port 3306, not 3307).
+The DB is reached over the shared docker network at `auth-server-db:3307` — `MYSQL_AUTH_SERVER_DB_URL` is set inside `docker-compose.yml` and is no longer overridden by the workflow.
 
 ### Notes
 

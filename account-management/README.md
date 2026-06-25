@@ -49,7 +49,7 @@ mvn test                   # run tests
 mvn test -Dtest="AccountLifecycleIntegrationTest"
 ```
 
-Connection targets are configured in `src/test/resources/application.yml` (`auth-server-location`, `account-management-location`, `integration-test-client-secret`); override on the command line with `-D<property>=<value>`. These tests are **not** run by CI (see below).
+Connection targets are configured in `src/test/resources/application.yml` (`auth-server-location`, `account-management-location`, `integration-test-client-secret`); override on the command line with `-D<property>=<value>`. These tests **are** run by CI (see below) — they are the whole point of the workflow.
 
 ## CI
 
@@ -59,22 +59,26 @@ CI runs the [integration tests](#integration-tests) and fails the job if any of 
 
 ### What it does
 
-1. Starts a MySQL 8 service container (port 3306) with an `auth-server-db` database.
-2. **Seeds the shared schema** by running the `auth-server` scripts in `auth-server/src/main/resources/initialize_db/` (`create_authentication_tables.sql` → `create_client_table.sql` → `create_one_time_tokens_table.sql` → `initialize_test_users.sql`). This creates the `user_credential`/`role` tables account-management writes to and seeds the `INTEGRATION_TEST_CLIENT` that issues the `client_credentials` token.
-3. Builds and starts **auth-server** (`mvn package -DskipTests` → `java -jar`), then polls `GET http://localhost:9000/actuator/health` until `UP` (up to 150 s).
-4. Builds and starts **account-management** (`mvn package -DskipTests` — this also compiles the test sources → `java -jar`), then polls `GET http://localhost:8082/actuator/health` until `UP` (up to 150 s).
-5. Runs the integration tests with `mvn surefire:test`. A failure fails the job.
+1. **Runs the unit tests first as a fast gate** with `mvn test '-Dtest=%regex[.*unit.*]'`. The unit tests under `com.roots.account_management.unit.*` are pure Mockito / standalone MockMvc — no DB or running services required — so they run before anything is built or booted. If they fail, the job fails immediately and no images are built.
+2. Logs in to Docker Hub (`docker/login-action@v3`). The `account-management/**` paths filter means a triggering PR only touched account-management, so auth-server is an unchanged dependency — the workflow **pulls** the published `auth-server:latest` image (its repo is private, hence the login) rather than rebuilding it.
+3. Builds the account-management JAR + test classes with `mvn package -DskipTests` (the integration tests run later via `surefire:test`).
+4. Builds the account-management Docker image locally via Jib: `mvn jib:dockerBuild -Djib.to.image=${DOCKERHUB_USERNAME}/account-management:ci`. The image is loaded straight into the local Docker daemon — no registry push.
+5. Brings up DB + auth-server + account-management on the shared `roots_backend` docker network with `docker compose up -d --wait account-management` (env: `ACCOUNT_MANAGEMENT_TAG=ci`, `SPRING_PROFILES_ACTIVE=test`, `MYSQL_AUTH_SERVER_ROOT_USERNAME`/`MYSQL_AUTH_SERVER_ROOT_PASSWORD`, `SPRING_MAIL_USERNAME`/`SPRING_MAIL_PASSWORD`). The DB self-seeds from `auth-server/src/main/resources/initialize_db/` (mounted into `/docker-entrypoint-initdb.d` by `docker-compose.yml`); MySQL runs each `.sql` there in alphabetical order, which already matches the dependency order (`create_authentication_tables` → `create_client_table` → `create_one_time_tokens_table` → `initialize_test_users`). `--wait` blocks until **all three** services report healthy, so no curl wait-loop is needed. auth-server is started under `SPRING_PROFILES_ACTIVE=test` (no real emails sent), but it still builds the `JavaMailSender` and runs the Actuator mail health indicator, hence the `SPRING_MAIL_*` secrets.
+6. Runs the integration tests on the host (the client hits the published `localhost:8082` and `localhost:9000` against the running containers) with `mvn surefire:test '-Dtest=%regex[.*integration.*]'`. A failure fails the job.
+7. On failure, dumps all container logs (`docker compose logs --no-color`).
 
 ### Required GitHub secrets
 
 | Secret | Value in CI |
 |---|---|
-| `MYSQL_AUTH_SERVER_ROOT_USERNAME` | `root` (the MySQL service container only creates a root user) |
+| `DOCKERHUB_USERNAME` | Your Docker Hub username — used both for `docker/login-action` (pulling private `auth-server:latest`) and as the Jib image prefix (`${DOCKERHUB_USERNAME}/account-management:ci`) |
+| `DOCKERHUB_TOKEN` | Docker Hub access token — used to log in and pull `auth-server:latest` |
+| `MYSQL_AUTH_SERVER_ROOT_USERNAME` | `root` (the MySQL container only creates a root user) |
 | `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | any password |
-| `SPRING_MAIL_USERNAME` | Gmail username — required because auth-server is started in this job and validates the mail config at startup |
-| `SPRING_MAIL_PASSWORD` | Gmail App Password (same reason) |
+| `SPRING_MAIL_USERNAME` | Gmail username — required because auth-server is started in this job and the Actuator mail health indicator opens an SMTP connection on every `/actuator/health` poll |
+| `SPRING_MAIL_PASSWORD` | Gmail App Password for the above account |
 
-`MYSQL_AUTH_SERVER_DB_URL` is hardcoded in the workflow to `jdbc:mysql://localhost:3306/auth-server-db` (the GitHub Actions MySQL container exposes port 3306, not 3307). `AUTH_SERVER_JWK_URI` is left at its default (`http://localhost:9000/oauth2/jwks`) — auth-server is running on that port, so account-management can fetch the JWK set to validate the bearer token.
+The DB is reached over the shared docker network at `auth-server-db:3307`; `MYSQL_AUTH_SERVER_DB_URL` and `AUTH_SERVER_JWK_URI` are set inside `docker-compose.yml` (`http://auth-server:9000/oauth2/jwks` between containers) and are no longer overridden by the workflow.
 
 ## CD
 
