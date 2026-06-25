@@ -6,7 +6,23 @@ export default defineNuxtConfig({
   ssr: true,
 
   modules: ['vuetify-nuxt-module'],
-
+  vuetify: {
+    vuetifyOptions: {
+      theme: {
+        defaultTheme: 'church',
+        themes: {
+          church: {
+            dark: false,
+            colors: {
+              primary: '#1C985E',
+              background: '#f5f3ec',
+              surface: '#ffffff',
+            },
+          },
+        },
+      },
+    },
+  },
   routeRules: {
     '/': { redirect: '/login' },
   },
