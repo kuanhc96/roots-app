@@ -18,10 +18,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import com.roots.authserver.exception.InvalidRequestException;
 import com.roots.authserver.principal.CreateAccountPendingAuthenticationToken;
 import com.roots.authserver.principal.GuestAuthenticationToken;
 import com.roots.authserver.principal.MfaAuthenticationToken;
 import com.roots.authserver.principal.MfaPendingAuthenticationToken;
+import com.roots.authserver.principal.PasswordChangePendingAuthenticationToken;
 import com.roots.authserver.service.InMemoryOneTimePinService;
 import com.roots.authserver.service.UserCredentialService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -78,6 +80,11 @@ public class SpaController {
     @GetMapping("/signup/success")
     public String forwardSignupSuccess() {
         return "forward:/signup/success/index.html";
+    }
+
+    @GetMapping("/reset-password")
+    public String forwardResetPassword() {
+        return "forward:/reset-password/index.html";
     }
 
     @PostMapping("/ott/login")
@@ -156,6 +163,40 @@ public class SpaController {
                 // authenticated, so a code is issued and the callback succeeds.
                 return "redirect:" + webClientLocation;
             }
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public String resetPassword(
+            @RequestParam String newPassword,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (!(authentication instanceof PasswordChangePendingAuthenticationToken pending)) {
+            return "redirect:/login";
+        }
+
+        UserDetails user = (UserDetails) pending.getPrincipal();
+        try {
+            // Validates the new password against the shared complexity policy (throws
+            // InvalidRequestException on failure), stores it, clears the password-change
+            // flag, and marks the email verified.
+            userCredentialService.completePasswordReset(user.getUsername(), newPassword);
+        } catch (InvalidRequestException e) {
+            return "redirect:/reset-password?error=invalidPassword";
+        }
+
+        MfaAuthenticationToken full = new MfaAuthenticationToken(user, user.getAuthorities());
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(full);
+        SecurityContextHolder.setContext(securityContext);
+        securityContextRepository.saveContext(securityContext, request, response);
+
+        SavedRequest savedRequest = new HttpSessionRequestCache().getRequest(request, response);
+        if (savedRequest != null) {
+            return "redirect:" + savedRequest.getRedirectUrl();
+        } else {
+            return "redirect:" + webClientLocation;
         }
     }
 

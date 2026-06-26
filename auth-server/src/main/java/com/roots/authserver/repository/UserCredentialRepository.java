@@ -73,10 +73,17 @@ public class UserCredentialRepository {
         );
     }
 
-    public void setPasswordChangeRequired(String email) {
+    public void setPasswordChangeRequired(String email, boolean required) {
         jdbcTemplate.update(
                 "UPDATE user_credential SET is_password_change_required = ? WHERE email = ?",
-                true, email
+                required, email
+        );
+    }
+
+    public void updatePassword(String email, String encodedPassword) {
+        jdbcTemplate.update(
+                "UPDATE user_credential SET password = ? WHERE email = ?",
+                encodedPassword, email
         );
     }
 }
