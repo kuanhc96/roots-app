@@ -7,8 +7,13 @@ import org.springframework.stereotype.Component;
 import com.roots.authserver.dto.request.CreateAccountRequest;
 import com.roots.authserver.exception.InvalidRequestException;
 
+/**
+ * Holds validation logic shared across flows. {@link #validatePassword} is the
+ * single source of truth for the password complexity policy, reused by account
+ * creation ({@link #validateCreateAccountRequest}) and the forgot-password reset flow.
+ */
 @Component
-public class CreateAccountValidator {
+public class Validator {
 
     private static final int MAX_NAME_LENGTH = 255;
     private static final int MIN_PASSWORD_LENGTH = 8;
@@ -16,10 +21,28 @@ public class CreateAccountValidator {
     private static final Pattern LOWERCASE = Pattern.compile("[a-z]");
     private static final Pattern DIGIT = Pattern.compile("[0-9]");
 
-    public void validate(CreateAccountRequest request) {
+    public void validateCreateAccountRequest(CreateAccountRequest request) {
         validateName(request.name());
         validateEmail(request.email());
         validatePassword(request.password());
+    }
+
+    public void validatePassword(String password) {
+        if (password == null || password.isBlank()) {
+            throw new InvalidRequestException("Password is required");
+        }
+        if (password.length() < MIN_PASSWORD_LENGTH) {
+            throw new InvalidRequestException("Password must be at least 8 characters");
+        }
+        if (!UPPERCASE.matcher(password).find()) {
+            throw new InvalidRequestException("Password must include at least one uppercase letter");
+        }
+        if (!LOWERCASE.matcher(password).find()) {
+            throw new InvalidRequestException("Password must include at least one lowercase letter");
+        }
+        if (!DIGIT.matcher(password).find()) {
+            throw new InvalidRequestException("Password must include at least one number");
+        }
     }
 
     private void validateName(String name) {
@@ -37,24 +60,6 @@ public class CreateAccountValidator {
         }
         if (!email.contains("@")) {
             throw new InvalidRequestException("Email must contain an \"@\"");
-        }
-    }
-
-    private void validatePassword(String password) {
-        if (password == null || password.isBlank()) {
-            throw new InvalidRequestException("Password is required");
-        }
-        if (password.length() < MIN_PASSWORD_LENGTH) {
-            throw new InvalidRequestException("Password must be at least 8 characters");
-        }
-        if (!UPPERCASE.matcher(password).find()) {
-            throw new InvalidRequestException("Password must include at least one uppercase letter");
-        }
-        if (!LOWERCASE.matcher(password).find()) {
-            throw new InvalidRequestException("Password must include at least one lowercase letter");
-        }
-        if (!DIGIT.matcher(password).find()) {
-            throw new InvalidRequestException("Password must include at least one number");
         }
     }
 }
