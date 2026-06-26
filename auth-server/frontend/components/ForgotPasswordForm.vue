@@ -14,25 +14,25 @@ const schema = toTypedSchema(
 
 const { handleSubmit, isSubmitting } = useForm({ validationSchema: schema })
 const { value: email, errorMessage: emailError } = useField<string>('email')
-const submitError = ref('')
+
 const onSubmit = handleSubmit(async (values) => {
-  submitError.value = ''
+  // The endpoint always responds 200 (it never reveals whether the email is on file),
+  // so regardless of the outcome we send the user back to /login with the email
+  // pre-filled and a neutral notice. Errors are swallowed for the same reason — the UX
+  // must not differ based on whether an account exists. navigateTo is in-SPA client
+  // navigation, so the query survives (a full reload would strip it on hydration).
   try {
-    const response = await fetch('/api/temp-password', {
+    await fetch('/api/temp-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: values.email,
       }),
     })
-
-    if (!response.ok) {
-      submitError.value = 'Temp Password Generation Failed. Please try again.'
-      return
-    }
-
   } catch (e) {
-    submitError.value = 'Temp Password Generation Failed. Please try again.'
+    // Intentionally ignored — see above.
+  } finally {
+    await navigateTo({ path: '/login', query: { email: values.email, notice: 'tempPasswordSent' } })
   }
 })
 </script>
@@ -42,9 +42,6 @@ const onSubmit = handleSubmit(async (values) => {
     <v-form @submit.prevent="onSubmit">
       <v-card-title>Forgot Password</v-card-title>
       <v-card-text>
-        <v-alert v-if="submitError" type="error" density="compact" class="mb-4">
-          {{ submitError }}
-        </v-alert>
         <v-text-field
             v-model="email"
             name="email"
