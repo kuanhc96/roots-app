@@ -1,0 +1,23 @@
+{
+  "servers": [
+    {
+      "name": "local-filesystem",
+      "type": "filesystem",
+      "root": "/c/Users/chenkuansk/work/rootsApp",
+      "read_only": false
+    },
+    {
+      "name": "github-mcp",
+      "type": "github",
+      "repo": "https://github.com/kuanhc96/roots-app.git",
+      "token_env": "GITHUB_TOKEN",
+      "read_only": true
+    },
+    {
+      "name": "git-local",
+      "type": "git",
+      "root": "/c/Users/chenkuansk/work/rootsApp",
+      "read_only": true
+    }
+  ]
+}
