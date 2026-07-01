@@ -215,7 +215,7 @@ New users self-register through the Nuxt `/signup` page, which POSTs to `POST /a
 
 1. The `/signup` Nuxt page (`SignupForm.vue`) collects name, email, password, and confirm-password, validating them client-side with **vee-validate** + **yup**. On success it POSTs `{ name, email, password }` as JSON to `/api/accounts`.
 2. `AccountController.createAccount()` delegates to `UserCredentialService.createAccount()` (`@Transactional`).
-3. `CreateAccountValidator` re-validates the request server-side — name required and ≤ 255 chars; email required and contains `@`; password required, ≥ 8 chars, with at least one uppercase letter, one lowercase letter, and one number. Any violation throws `InvalidRequestException` → **400**.
+3. `Validator.validateCreateAccountRequest` re-validates the request server-side — name required and ≤ 255 chars; email required and contains `@`; password required, ≥ 8 chars, with at least one uppercase letter, one lowercase letter, and one number. Any violation throws `InvalidRequestException` → **400**. (The password rule lives in `Validator.validatePassword`, shared with the reset flow; the earlier `CreateAccountValidator` class was folded into `Validator`.)
 4. Duplicate emails are rejected: if `findByEmail` already returns a row, the service throws `EmailAlreadyExistsException` → **409** (the `UNIQUE(email)` constraint is the final race backstop).
 5. The password is hashed with the `PasswordEncoder` bean (delegating encoder → `{bcrypt}`). A `user_guid` is generated with `UUID`, `is_mfa_enabled` is set to `true`, and `is_email_verified` to `false`.
 6. `UserCredentialRepository.insert()` inserts the `user_credential` row (returning the generated id via `GeneratedKeyHolder`), then `RoleRepository.insert()` adds a default `member` role for that credential — both inside the same transaction.
@@ -244,7 +244,7 @@ Rather than make the new user re-type their credentials on the login form, the s
 | `AccountController` | `controller/` | `POST /api/accounts`; `@ResponseStatus(CREATED)`; delegates to `UserCredentialService` |
 | `CreateAccountRequest` | `dto/request/` | Record `(name, email, password)` — request body |
 | `CreateAccountResponse` | `dto/response/` | Record `(name, email)` — response body |
-| `CreateAccountValidator` | `service/` | Server-side field validation; throws `InvalidRequestException` |
+| `Validator` | `validator/` | Server-side field validation (`validateCreateAccountRequest`) and the shared password policy (`validatePassword`); throws `InvalidRequestException` |
 | `UserCredentialService` | `service/` | `createAccount(request)` (`@Transactional`); `verifyEmail(email)` sets `is_email_verified = true` |
 | `UserCredentialRepository` | `repository/` | `insert(UserCredential)` returns the generated id via `GeneratedKeyHolder`; `verifyEmail(email)` |
 | `RoleRepository` | `repository/` | `insert(credentialId, roleName)` — adds a role row with a generated `role_guid` |
@@ -262,13 +262,68 @@ Rather than make the new user re-type their credentials on the login form, the s
 | `AccountController` | `controller/` | `POST /api/accounts`; `@ResponseStatus(CREATED)`; delegates to `UserCredentialService` |
 | `CreateAccountRequest` | `dto/request/` | Record `(name, email, password)` — request body |
 | `CreateAccountResponse` | `dto/response/` | Record `(name, email)` — response body |
-| `CreateAccountValidator` | `service/` | Server-side field validation; throws `InvalidRequestException` |
+| `Validator` | `validator/` | Server-side field validation (`validateCreateAccountRequest`) and the shared password policy (`validatePassword`); throws `InvalidRequestException` |
 | `UserCredentialService` | `service/` | `createAccount(request)` — orchestrates validation, duplicate check, hashing, and both inserts (`@Transactional`) |
 | `UserCredentialRepository` | `repository/` | `insert(UserCredential)` returns the generated id via `GeneratedKeyHolder` |
 | `RoleRepository` | `repository/` | `insert(credentialId, roleName)` — adds a role row with a generated `role_guid` |
 | `InvalidRequestException` | `exception/` | Generic bad-request signal → **400** |
 | `EmailAlreadyExistsException` | `exception/` | Duplicate email → **409** |
 | `GlobalExceptionHandler` | `exception/` | `@RestControllerAdvice` mapping the two exceptions to 400 / 409 with a `{"error": "..."}` body |
+
+## Forgot Password / Reset Password
+
+A self-service password reset for users who have forgotten their password. It is deliberately wired as a **means of MFA login**: a temporary password is emailed, and entering it forces the user to set a new password — that forced change stands in for (and **replaces**) the normal OTT second factor for that login, rather than stacking on top of it.
+
+The flow is gated by the `is_password_change_required` column on `user_credential` (boolean, default `false`; mirrored as `UserCredential.passwordChangeRequired`).
+
+### Requesting a temporary password
+
+1. The login page (`LoginForm.vue`) links to `/forgot-password` ("Forgot?"). That page mounts `ForgotPasswordForm.vue`, which validates the email client-side (vee-validate + yup; must contain `@`) and `fetch`-POSTs `{ email }` to `POST /api/temp-password`.
+2. `TempPasswordController` delegates to `UserCredentialService.requestTempPassword(email)` (`@Transactional`). If the email matches an account, it:
+   - generates a **`SecureRandom`, complexity-compliant** temporary password (12 chars, guaranteed at least one uppercase, lowercase, and digit — so it satisfies the same policy as account creation),
+   - overwrites the `password` column with its bcrypt hash (**the original password is destroyed — the user must reset**), and
+   - sets `is_password_change_required = true`.
+
+   It returns the plaintext temp password (for emailing), or `null` if no account matches. The controller then calls `EmailService.sendTempPasswordEmail(to, tempPassword)`.
+3. **The endpoint always returns 200**, whether or not the email exists — the response never reveals which addresses are registered (no account enumeration). `ForgotPasswordForm` therefore ignores the result and (in a `finally`) calls `navigateTo({ path: '/login', query: { email, notice: 'tempPasswordSent' } })`.
+
+   Because that is **in-SPA client navigation** (not a full page reload), the query string survives hydration. `LoginForm.vue` reads it via `useRoute()` to **pre-fill the email field** and show a success `v-snackbar`: *"If the email provided matches one we have on file, you will receive an email with a temporary password."* (Contrast the magic-link flow, where a full-page load forced the token to be captured server-side — here a client-side `navigateTo` keeps the query intact.)
+
+### Logging in with the temporary password and setting a new one
+
+4. The user logs in with the temporary password on the normal `/login` form. `MfaAwareDaoAuthenticationProvider` validates it via the usual DAO check, then — **checking `isPasswordChangeRequired` first, before the email-verified and MFA checks** — returns a `PasswordChangePendingAuthenticationToken` (no authorities, `isAuthenticated() = false`). Checking this flag *first* is what makes the reset replace the OTT step instead of adding to it.
+5. `MfaRedirectAuthenticationSuccessHandler` detects that token and `sendRedirect("/reset-password")`. **No token or email is minted here** — the temporary password was already sent in step 2.
+6. `SpaController.forwardResetPassword` (`GET /reset-password`) forwards to the Nuxt page (unguarded, like the OTT and magic-link GETs). The page mounts `ResetPasswordForm.vue` — "New Password" / "Confirm New Password", validated with vee-validate against the **same rules as account creation** plus a confirm-match. On valid submit it submits a **hidden native `<form method="post" action="/reset-password">`** carrying only `newPassword`.
+
+   A native form (not `fetch`) is required so the browser follows the server's final 302 into the saved OAuth2 request — a `fetch` follows a redirect in the background and can't drive a top-level navigation. Confirm-match is enforced **client-side only**, mirroring how account creation doesn't re-check its confirm field server-side.
+7. `SpaController.resetPassword` (`POST /reset-password`, `@RequestParam newPassword`) requires a `PasswordChangePendingAuthenticationToken` in the `SecurityContext` (otherwise `redirect:/login`), then calls `UserCredentialService.completePasswordReset(email, newPassword)` (`@Transactional`):
+   - re-validates the new password via `Validator.validatePassword` (failure → `redirect:/reset-password?error=invalidPassword`),
+   - stores the new bcrypt password,
+   - sets `is_password_change_required = false`, **and**
+   - sets `is_email_verified = true`.
+
+   It then upgrades the session to a fully authenticated `MfaAuthenticationToken` and redirects to the **saved OAuth2 request** (or `web-client.location` if none exists), completing the flow.
+
+> **Why a successful reset also verifies the email.** Receiving and correctly entering a temporary password that was emailed to the address proves the user controls that inbox — so a completed reset is itself proof of email ownership, and the account ends up `is_email_verified = true`. This also matters because the provider checks `isPasswordChangeRequired` *before* `isEmailVerified`: without verifying on reset, an account that had never verified its email could finish a reset in an inconsistent `is_email_verified = false` state. Verifying on reset closes that gap.
+
+> **Remember-me interaction.** No change is needed in `MfaAwareRememberMeAuthenticationProvider`. `TokenBasedRememberMeServices` signs its cookie with the password hash, so issuing a temporary password (which changes that hash) automatically invalidates any existing remember-me cookie — a just-reset user can never be silently re-authenticated by an old cookie.
+
+### Key classes
+
+| Class | Package | Role |
+|---|---|---|
+| `TempPasswordController` | `controller/` | `POST /api/temp-password`; always returns 200; on a matching email, triggers temp-password generation and the email send |
+| `TempPasswordRequest` | `dto/request/` | Record `(email)` — request body |
+| `UserCredentialService` | `service/` | `requestTempPassword(email)` (generate/persist/return temp password), `completePasswordReset(email, newPassword)` (validate, store, clear flag, verify email), `isPasswordChangeRequired(email)` — all backed by the repository |
+| `UserCredentialRepository` | `repository/` | `updatePassword(email, encoded)` and `setPasswordChangeRequired(email, required)` |
+| `Validator` | `validator/` | `validatePassword` — the shared password-policy check, reused by both account creation and reset |
+| `PasswordChangePendingAuthenticationToken` | `principal/` | Temp password accepted but new password not yet set; `isAuthenticated() = false`, no authorities |
+| `MfaAwareDaoAuthenticationProvider` | `component/` | Checks `isPasswordChangeRequired` **first**; returns the pending token, bypassing the OTT step |
+| `MfaRedirectAuthenticationSuccessHandler` | `component/` | For the pending token, redirects to `/reset-password` (no token minted) |
+| `SpaController` | `controller/` | `forwardResetPassword` (`GET /reset-password`) serves the form; `resetPassword` (`POST /reset-password`) verifies the pending token, stores the new password, clears the flag, verifies email, upgrades the session, redirects to the saved request |
+| `EmailService` | `service/` | `sendTempPasswordEmail(to, tempPassword)` — emails the temp password (qa/prod), logs it at INFO (dev), or skips it (test) |
+
+Frontend additions: `pages/forgot-password/index.vue` + `ForgotPasswordForm.vue`, `pages/reset-password/index.vue` + `ResetPasswordForm.vue`, and the "Forgot?" link / email pre-fill / success snackbar in `LoginForm.vue`.
 
 ## Multi-Factor Authentication (MFA)
 
@@ -375,6 +430,6 @@ Connects to a MySQL 8 instance on port **3307** by default. The schema is define
 
 | Table | Columns |
 |---|---|
-| `user_credential` | `id`, `user_guid`, `email`, `name`, `password`, `is_mfa_enabled` (default `true`), `is_email_verified` (default `false`), `creation_date`, `update_date` |
+| `user_credential` | `id`, `user_guid`, `email`, `name`, `password`, `is_mfa_enabled` (default `true`), `is_email_verified` (default `false`), `is_password_change_required` (default `false`), `creation_date`, `update_date` |
 | `role` | `id`, `role_guid`, `credential_id` (FK → `user_credential`), `role_name`, `creation_date`, `update_date` |
 | `oauth2_registered_client` | `id`, `client_id`, `client_id_issued_at`, `client_secret`, `client_secret_expires_at`, `client_name`, `client_authentication_methods`, `authorization_grant_types`, `redirect_uris`, `post_logout_redirect_uris`, `scopes`, `client_settings`, `token_settings` |
