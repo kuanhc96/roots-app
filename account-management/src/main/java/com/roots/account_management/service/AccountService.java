@@ -13,6 +13,7 @@ import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.response.CreateAccountResponse;
 import com.roots.account_management.enums.Role;
 import com.roots.account_management.exception.EmailAlreadyExistsException;
+import com.roots.account_management.exception.UserCredentialNotFoundException;
 import com.roots.account_management.model.UserCredential;
 import com.roots.account_management.repository.RoleRepository;
 import com.roots.account_management.repository.UserCredentialRepository;
@@ -63,6 +64,24 @@ public class AccountService {
                 request.passwordChangeRequired(),
                 roles
         );
+    }
+
+    // Returns every field of the user's credential, looked up by email; throws when no
+    // account matches.
+    @Transactional(readOnly = true)
+    public UserCredential getUserCredentialByEmail(String email) throws UserCredentialNotFoundException {
+        return userCredentialRepository.findByEmail(email)
+                .orElseThrow(() -> new UserCredentialNotFoundException(
+                        "No account found for email " + email));
+    }
+
+    // Returns every field of the user's credential, looked up by userGUID; throws when no
+    // account matches.
+    @Transactional(readOnly = true)
+    public UserCredential getUserCredentialByUserGUID(String userGUID) throws UserCredentialNotFoundException {
+        return userCredentialRepository.findByUserGUID(userGUID)
+                .orElseThrow(() -> new UserCredentialNotFoundException(
+                        "No account found for userGUID " + userGUID));
     }
 
     // Idempotent: no match is a no-op so test teardown can run safely more than once.
