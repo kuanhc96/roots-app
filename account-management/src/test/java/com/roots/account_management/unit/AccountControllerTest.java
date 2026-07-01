@@ -122,7 +122,7 @@ class AccountControllerTest {
         mockMvc.perform(delete("/api/account/test").param("email", "jane@example.com"))
                 .andExpect(status().isNoContent());
 
-        verify(validator).validateDeleteAccountRequest("jane@example.com", null);
+        verify(validator).validateAccountLookup("jane@example.com", null);
         verify(accountService).deleteTestAccountByEmail("jane@example.com");
         verify(accountService, never()).deleteTestAccountByUserGUID(anyString());
     }
@@ -132,7 +132,7 @@ class AccountControllerTest {
         mockMvc.perform(delete("/api/account/test").param("userGUID", "some-guid"))
                 .andExpect(status().isNoContent());
 
-        verify(validator).validateDeleteAccountRequest(null, "some-guid");
+        verify(validator).validateAccountLookup(null, "some-guid");
         verify(accountService).deleteTestAccountByUserGUID("some-guid");
         verify(accountService, never()).deleteTestAccountByEmail(anyString());
     }
@@ -140,7 +140,7 @@ class AccountControllerTest {
     @Test
     void deleteTestAccount_whenValidationFails_returns400WithError() throws Exception {
         doThrow(new InvalidRequestException("Provide either email or userGUID, not both"))
-                .when(validator).validateDeleteAccountRequest(anyString(), anyString());
+                .when(validator).validateAccountLookup(anyString(), anyString());
 
         mockMvc.perform(delete("/api/account/test")
                         .param("email", "jane@example.com")

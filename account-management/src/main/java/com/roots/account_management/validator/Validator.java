@@ -22,7 +22,7 @@ public class Validator {
         validatePassword(request.password());
     }
 
-    public void validateDeleteAccountRequest(String email, String userGUID) {
+    public void validateAccountLookup(String email, String userGUID) {
         boolean hasEmail = email != null && !email.isBlank();
         boolean hasUserGUID = userGUID != null && !userGUID.isBlank();
 
