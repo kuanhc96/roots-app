@@ -66,6 +66,9 @@ public class AccountManagementClient {
         body.put("passwordChangeRequired", passwordChangeRequired);
         body.put("roles", roles);
 
+        HttpHeaders headers = bearerHeaders(accessToken);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
         return restTemplate.exchange(
                 baseUrl + "/api/account/test",
                 HttpMethod.POST,
