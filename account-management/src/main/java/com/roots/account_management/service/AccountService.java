@@ -43,7 +43,8 @@ public class AccountService {
                 request.name(),
                 passwordEncoder.encode(request.password()),
                 request.mfaEnabled(),
-                request.emailVerified()
+                request.emailVerified(),
+                request.passwordChangeRequired()
         );
 
         long credentialId = userCredentialRepository.insert(userCredential);
@@ -59,6 +60,7 @@ public class AccountService {
                 userGUID,
                 request.mfaEnabled(),
                 request.emailVerified(),
+                request.passwordChangeRequired(),
                 roles
         );
     }

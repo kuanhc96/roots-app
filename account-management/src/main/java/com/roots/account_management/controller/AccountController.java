@@ -30,7 +30,7 @@ public class AccountController {
     @Operation(
             summary = "Create a test account",
             description = "Integration-test-only endpoint: lets the INTEGRATION_TEST_CLIENT "
-                    + "(client_credentials) create an account with arbitrary mfa/emailVerified/roles."
+                    + "(client_credentials) create an account with arbitrary mfa/emailVerified/passwordChangeRequired/roles."
     )
     @PostMapping("/test")
     @PreAuthorize("hasAuthority('INTEGRATION_TEST_CLIENT_WRITE')")
