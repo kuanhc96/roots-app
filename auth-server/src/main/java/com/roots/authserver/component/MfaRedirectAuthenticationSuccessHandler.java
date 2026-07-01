@@ -14,6 +14,7 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import com.roots.authserver.principal.CreateAccountPendingAuthenticationToken;
 import com.roots.authserver.principal.MfaPendingAuthenticationToken;
+import com.roots.authserver.principal.PasswordChangePendingAuthenticationToken;
 import com.roots.authserver.service.EmailService;
 import com.roots.authserver.service.InMemoryOneTimePinService;
 import jakarta.servlet.ServletException;
@@ -35,7 +36,12 @@ public class MfaRedirectAuthenticationSuccessHandler extends SavedRequestAwareAu
             @NonNull HttpServletResponse response,
             @NonNull Authentication auth
     ) throws IOException, ServletException {
-        if (auth instanceof MfaPendingAuthenticationToken) {
+        if (auth instanceof PasswordChangePendingAuthenticationToken) {
+            // Temp password accepted; force the user to set a new one. The temporary
+            // password was already emailed during the forgot-password request, so nothing
+            // is generated here — just send them to the reset form.
+            response.sendRedirect("/reset-password");
+        } else if (auth instanceof MfaPendingAuthenticationToken) {
             GenerateOneTimeTokenRequest generateOneTimeTokenRequest = new GenerateOneTimeTokenRequest(auth.getName());
             OneTimeToken oneTimeToken = inMemoryOneTimePinService.generate(generateOneTimeTokenRequest);
             emailService.sendOTTEmail(auth.getName(), oneTimeToken.getTokenValue());

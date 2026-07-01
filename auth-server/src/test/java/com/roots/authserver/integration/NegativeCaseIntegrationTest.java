@@ -46,8 +46,8 @@ class NegativeCaseIntegrationTest extends IntegrationTestBase {
     @Nested
     class CreateAccountValidation {
 
-        // Each row exercises a distinct CreateAccountValidator branch. "Required"
-        // branches are driven with empty strings (the validator checks isBlank()).
+        // Each row exercises a distinct Validator.validateCreateAccountRequest branch.
+        // "Required" branches are driven with empty strings (the validator checks isBlank()).
         static Stream<Arguments> invalidCreateAccountRequests() {
             String validEmail = "valid@example.com";
             return Stream.of(

@@ -6,8 +6,9 @@
     <v-card width="400">
       <v-card-title>Login</v-card-title>
       <v-card-text>
-        <v-text-field name="email" label="Email" type="email" form="login-form" />
+        <v-text-field v-model="email" name="email" label="Email" type="email" form="login-form" />
         <v-text-field name="password" label="Password" type="password" form="login-form" />
+        <NuxtLink to="/forgot-password">Forgot?</NuxtLink>
         <v-checkbox name="remember-me" value="true" label="Remember Me?" form="login-form" />
       </v-card-text>
       <v-card-actions>
@@ -19,8 +20,21 @@
         <NuxtLink to="/signup">Create an account</NuxtLink>
       </v-card-actions>
     </v-card>
+
+    <v-snackbar v-model="showNotice" :timeout="8000" location="top">
+      <template #prepend>
+        <v-icon icon="mdi-check-circle" color="success" />
+      </template>
+      If the email provided matches one we have on file, you will receive an email with a temporary password
+    </v-snackbar>
   </div>
 </template>
 
 <script setup lang="ts">
+// When the user arrives from the forgot-password page, the email is pre-filled and a
+// neutral notice is shown. navigateTo passes these as route query params (in-SPA nav, so
+// they survive); useRoute reads them here.
+const route = useRoute()
+const email = ref((route.query.email as string) ?? '')
+const showNotice = ref(route.query.notice === 'tempPasswordSent')
 </script>

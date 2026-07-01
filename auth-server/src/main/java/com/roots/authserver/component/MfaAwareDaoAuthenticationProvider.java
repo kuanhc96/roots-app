@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import com.roots.authserver.principal.CreateAccountPendingAuthenticationToken;
 import com.roots.authserver.principal.MfaAuthenticationToken;
 import com.roots.authserver.principal.MfaPendingAuthenticationToken;
+import com.roots.authserver.principal.PasswordChangePendingAuthenticationToken;
 import com.roots.authserver.service.UserCredentialService;
 import lombok.RequiredArgsConstructor;
 
@@ -30,6 +31,13 @@ public class MfaAwareDaoAuthenticationProvider implements AuthenticationProvider
 
         if (!passwordEncoder.matches(presented, user.getPassword())) {
             throw new BadCredentialsException("Invalid credentials");
+        }
+
+        // Forgot-password reset takes precedence over both MFA and email verification:
+        // the user authenticated with a temporary password and must set a new one. This
+        // half-authenticated state replaces the OTT second factor for this login.
+        if (userCredentialService.isPasswordChangeRequired(username)) {
+            return new PasswordChangePendingAuthenticationToken(user);
         }
 
         if (!userCredentialService.isEmailVerified(username)) {

@@ -50,6 +50,24 @@ public class EmailService {
     }
 
     @Async
+    public void sendTempPasswordEmail(String to, String tempPassword) {
+        if (!emailSenderEnabled) {
+            if (logToken) {
+                log.info("Email sending disabled; temporary password for {} is {}", to, tempPassword);
+            } else {
+                log.warn("Email sending disabled (emailSender.enabled=false); skipping temporary-password email to {}", to);
+            }
+            return;
+        }
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(to);
+        message.setSubject("Your Temporary Password for Roots");
+        message.setText("Your temporary password is: " + tempPassword
+                + "\nUse it to log in, then you will be prompted to set a new password.");
+        mailSender.send(message);
+    }
+
+    @Async
     public void sendMagicLinkEmail(String to, String magicLink) {
         if (!emailSenderEnabled) {
             if (logToken) {

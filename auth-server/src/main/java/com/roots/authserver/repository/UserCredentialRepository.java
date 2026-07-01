@@ -26,12 +26,13 @@ public class UserCredentialRepository {
             rs.getString("name"),
             rs.getString("password"),
             rs.getBoolean("is_mfa_enabled"),
-            rs.getBoolean("is_email_verified")
+            rs.getBoolean("is_email_verified"),
+            rs.getBoolean("is_password_change_required")
     );
 
     public Optional<UserCredential> findByEmail(String email) {
         var results = jdbcTemplate.query(
-                "SELECT id, user_guid, email, name, password, is_mfa_enabled, is_email_verified FROM user_credential WHERE email = ?",
+                "SELECT id, user_guid, email, name, password, is_mfa_enabled, is_email_verified, is_password_change_required FROM user_credential WHERE email = ?",
                 ROW_MAPPER,
                 email
         );
@@ -42,8 +43,8 @@ public class UserCredentialRepository {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO user_credential (user_guid, email, name, password, is_mfa_enabled, is_email_verified) " +
-                            "VALUES (?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO user_credential (user_guid, email, name, password, is_mfa_enabled, is_email_verified, is_password_change_required) " +
+                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
                     Statement.RETURN_GENERATED_KEYS
             );
             ps.setString(1, userCredential.userGuid());
@@ -52,6 +53,7 @@ public class UserCredentialRepository {
             ps.setString(4, userCredential.password());
             ps.setBoolean(5, userCredential.mfaEnabled());
             ps.setBoolean(6, userCredential.emailVerified());
+            ps.setBoolean(7, userCredential.passwordChangeRequired());
             return ps;
         }, keyHolder);
         return keyHolder.getKey().longValue();
@@ -68,6 +70,20 @@ public class UserCredentialRepository {
         jdbcTemplate.update(
                 "UPDATE user_credential SET is_email_verified = ? WHERE email = ?",
                 true, email
+        );
+    }
+
+    public void setPasswordChangeRequired(String email, boolean required) {
+        jdbcTemplate.update(
+                "UPDATE user_credential SET is_password_change_required = ? WHERE email = ?",
+                required, email
+        );
+    }
+
+    public void updatePassword(String email, String encodedPassword) {
+        jdbcTemplate.update(
+                "UPDATE user_credential SET password = ? WHERE email = ?",
+                encodedPassword, email
         );
     }
 }
