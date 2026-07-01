@@ -27,13 +27,19 @@ abstract class IntegrationTestBase {
     @Value("${auth-server-location}")
     protected String authServerLocation;
 
+    @Value("${account-management-location}")
+    protected String accountManagementLocation;
+
     protected AuthServerClient authServerClient;
     protected OAuth2Client oAuth2Client;
+    protected AccountManagementClient accountManagementClient;
 
     @BeforeEach
     void buildClients() {
         authServerClient = new AuthServerClient(authServerLocation);
         oAuth2Client = new OAuth2Client(authServerLocation);
+        // RestTemplate-backed, no pooled connections to reap — nothing to close in @AfterEach.
+        accountManagementClient = new AccountManagementClient(accountManagementLocation);
     }
 
     @AfterEach
