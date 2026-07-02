@@ -35,11 +35,18 @@ public class AccountManagementClient {
     private final String baseUrl;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final HttpHeaders httpHeaders;
+    private final String accessToken;
 
-    public AccountManagementClient(String baseUrl) {
+    public AccountManagementClient(String baseUrl, String accessToken) {
         this.baseUrl = baseUrl;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
+        this.accessToken = accessToken;
+
+        httpHeaders = bearerHeaders(accessToken);
+        httpHeaders.setContentType(MediaType.APPLICATION_JSON);
+
     }
 
     /**
@@ -47,7 +54,7 @@ public class AccountManagementClient {
      * the boolean flags and roles. Returns the raw response so the test can assert on the
      * status (201) and read the userGUID from the body.
      */
-    public ResponseEntity<String> createTestAccount(String accessToken, String name, String email, String password,
+    public ResponseEntity<String> createTestAccount(String name, String email, String password,
                                                     boolean mfaEnabled, boolean emailVerified, boolean passwordChangeRequired,
                                                     List<String> roles) {
         Map<String, Object> body = new HashMap<>();
@@ -59,13 +66,10 @@ public class AccountManagementClient {
         body.put("passwordChangeRequired", passwordChangeRequired);
         body.put("roles", roles);
 
-        HttpHeaders headers = bearerHeaders(accessToken);
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
         return restTemplate.exchange(
                 baseUrl + "/api/account/test",
                 HttpMethod.POST,
-                new HttpEntity<>(body, headers),
+                new HttpEntity<>(body, httpHeaders),
                 String.class
         );
     }
@@ -75,8 +79,8 @@ public class AccountManagementClient {
      * GET /api/account/test?email=... (requires the INTEGRATION_TEST_CLIENT_READ scope).
      * Returns the raw response (200 body is UserCredentialTestingResponse JSON, incl. password).
      */
-    public ResponseEntity<String> getTestAccountByEmail(String accessToken, String email) {
-        return getTestAccount(accessToken, "email=" + email);
+    public ResponseEntity<String> getTestAccountByEmail(String email) {
+        return getTestAccount("email=" + email);
     }
 
     /**
@@ -84,40 +88,40 @@ public class AccountManagementClient {
      * GET /api/account/test?userGUID=... (requires the INTEGRATION_TEST_CLIENT_READ scope).
      * Returns the raw response (200 body is UserCredentialTestingResponse JSON, incl. password).
      */
-    public ResponseEntity<String> getTestAccountByUserGUID(String accessToken, String userGUID) {
-        return getTestAccount(accessToken, "userGUID=" + userGUID);
+    public ResponseEntity<String> getTestAccountByUserGUID(String userGUID) {
+        return getTestAccount("userGUID=" + userGUID);
     }
 
     /**
      * Deletes a test account by email via DELETE /api/account/test?email=...
      * Returns the raw response (204 on success).
      */
-    public ResponseEntity<String> deleteByEmail(String accessToken, String email) {
-        return delete(accessToken, "email=" + email);
+    public ResponseEntity<String> deleteByEmail(String email) {
+        return delete("email=" + email);
     }
 
     /**
      * Deletes a test account by userGUID via DELETE /api/account/test?userGUID=...
      * Returns the raw response (204 on success).
      */
-    public ResponseEntity<String> deleteByUserGUID(String accessToken, String userGUID) {
-        return delete(accessToken, "userGUID=" + userGUID);
+    public ResponseEntity<String> deleteByUserGUID(String userGUID) {
+        return delete("userGUID=" + userGUID);
     }
 
     /**
      * Deletes with both email and userGUID present — an invalid combination the
      * validator rejects with 400.
      */
-    public ResponseEntity<String> deleteByEmailAndUserGUID(String accessToken, String email, String userGUID) {
-        return delete(accessToken, "email=" + email + "&userGUID=" + userGUID);
+    public ResponseEntity<String> deleteByEmailAndUserGUID(String email, String userGUID) {
+        return delete("email=" + email + "&userGUID=" + userGUID);
     }
 
     /**
      * Deletes with neither email nor userGUID — an invalid combination the validator
      * rejects with 400.
      */
-    public ResponseEntity<String> deleteWithoutParams(String accessToken) {
-        return delete(accessToken, "");
+    public ResponseEntity<String> deleteWithoutParams() {
+        return delete("");
     }
 
     /**
@@ -127,7 +131,7 @@ public class AccountManagementClient {
         return objectMapper.readTree(createResponseBody).get("userGUID").asText();
     }
 
-    private ResponseEntity<String> getTestAccount(String accessToken, String query) {
+    private ResponseEntity<String> getTestAccount(String query) {
         return restTemplate.exchange(
                 baseUrl + "/api/account/test?" + query,
                 HttpMethod.GET,
@@ -136,7 +140,7 @@ public class AccountManagementClient {
         );
     }
 
-    private ResponseEntity<String> delete(String accessToken, String query) {
+    private ResponseEntity<String> delete(String query) {
         return restTemplate.exchange(
                 baseUrl + "/api/account/test?" + query,
                 HttpMethod.DELETE,
