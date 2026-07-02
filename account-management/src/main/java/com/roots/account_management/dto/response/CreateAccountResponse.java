@@ -10,5 +10,6 @@ public record CreateAccountResponse(
         String userGUID,
         boolean mfaEnabled,
         boolean emailVerified,
+        boolean passwordChangeRequired,
         List<Role> roles
 ) {}

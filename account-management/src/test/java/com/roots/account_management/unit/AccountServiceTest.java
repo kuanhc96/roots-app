@@ -53,7 +53,7 @@ class AccountServiceTest {
     @Test
     void createTestAccount_persistsEncodedCredentialAndRoles_andReturnsResponse() {
         CreateAccountRequest request = new CreateAccountRequest(
-                "Jane", "jane@example.com", "Password123", false, true, List.of(Role.PASTOR));
+                "Jane", "jane@example.com", "Password123", false, true, true, List.of(Role.PASTOR));
         when(userCredentialRepository.findByEmail("jane@example.com")).thenReturn(Optional.empty());
         when(passwordEncoder.encode("Password123")).thenReturn("ENCODED");
         when(userCredentialRepository.insert(any(UserCredential.class))).thenReturn(CREDENTIAL_ID);
@@ -70,6 +70,7 @@ class AccountServiceTest {
         assertThat(inserted.password()).isEqualTo("ENCODED");
         assertThat(inserted.mfaEnabled()).isFalse();
         assertThat(inserted.emailVerified()).isTrue();
+        assertThat(inserted.passwordChangeRequired()).isTrue();
         assertThat(inserted.userGUID()).isNotBlank();
 
         // MEMBER floor first, then the requested PASTOR.
@@ -82,14 +83,16 @@ class AccountServiceTest {
         assertThat(response.userGUID()).isEqualTo(inserted.userGUID());
         assertThat(response.mfaEnabled()).isFalse();
         assertThat(response.emailVerified()).isTrue();
+        assertThat(response.passwordChangeRequired()).isTrue();
         assertThat(response.roles()).containsExactly(Role.MEMBER, Role.PASTOR);
     }
 
     @Test
     void createTestAccount_withNullRoles_assignsOnlyMember_andDefaultsFlags() {
-        // mfaEnabled/emailVerified null -> the record's compact constructor applies defaults (true/false).
+        // mfaEnabled/emailVerified/passwordChangeRequired null -> the record's compact
+        // constructor applies defaults (true/false/false).
         CreateAccountRequest request = new CreateAccountRequest(
-                "Jane", "jane@example.com", "Password123", null, null, null);
+                "Jane", "jane@example.com", "Password123", null, null, null, null);
         when(userCredentialRepository.findByEmail(any())).thenReturn(Optional.empty());
         when(passwordEncoder.encode(any())).thenReturn("ENCODED");
         when(userCredentialRepository.insert(any(UserCredential.class))).thenReturn(CREDENTIAL_ID);
@@ -99,6 +102,7 @@ class AccountServiceTest {
         assertThat(response.roles()).containsExactly(Role.MEMBER);
         assertThat(response.mfaEnabled()).isTrue();
         assertThat(response.emailVerified()).isFalse();
+        assertThat(response.passwordChangeRequired()).isFalse();
         verify(roleRepository).insert(CREDENTIAL_ID, "member");
         verify(roleRepository, times(1)).insert(anyLong(), anyString());
     }
@@ -106,7 +110,7 @@ class AccountServiceTest {
     @Test
     void createTestAccount_deduplicatesRolesPreservingOrder() {
         CreateAccountRequest request = new CreateAccountRequest(
-                "Jane", "jane@example.com", "Password123", true, false,
+                "Jane", "jane@example.com", "Password123", true, false, false,
                 List.of(Role.DEACON, Role.MEMBER, Role.DEACON));
         when(userCredentialRepository.findByEmail(any())).thenReturn(Optional.empty());
         when(passwordEncoder.encode(any())).thenReturn("ENCODED");
@@ -121,9 +125,9 @@ class AccountServiceTest {
     @Test
     void createTestAccount_withExistingEmail_throwsAndDoesNotPersist() {
         CreateAccountRequest request = new CreateAccountRequest(
-                "Jane", "jane@example.com", "Password123", true, false, List.of());
+                "Jane", "jane@example.com", "Password123", true, false, false, List.of());
         UserCredential existing = new UserCredential(
-                1L, "existing-guid", "jane@example.com", "Jane", "hash", true, true);
+                1L, "existing-guid", "jane@example.com", "Jane", "hash", true, true, false);
         when(userCredentialRepository.findByEmail("jane@example.com")).thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> accountService.createTestAccount(request))
@@ -136,7 +140,7 @@ class AccountServiceTest {
     @Test
     void deleteTestAccountByEmail_whenFound_deletesRolesThenCredential() {
         UserCredential credential = new UserCredential(
-                7L, "guid", "jane@example.com", "Jane", "hash", true, true);
+                7L, "guid", "jane@example.com", "Jane", "hash", true, true, false);
         when(userCredentialRepository.findByEmail("jane@example.com")).thenReturn(Optional.of(credential));
 
         accountService.deleteTestAccountByEmail("jane@example.com");
@@ -160,7 +164,7 @@ class AccountServiceTest {
     @Test
     void deleteTestAccountByUserGUID_whenFound_deletesRolesThenCredential() {
         UserCredential credential = new UserCredential(
-                9L, "the-guid", "jane@example.com", "Jane", "hash", true, true);
+                9L, "the-guid", "jane@example.com", "Jane", "hash", true, true, false);
         when(userCredentialRepository.findByUserGUID("the-guid")).thenReturn(Optional.of(credential));
 
         accountService.deleteTestAccountByUserGUID("the-guid");

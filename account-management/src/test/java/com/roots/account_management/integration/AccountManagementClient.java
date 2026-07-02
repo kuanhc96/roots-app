@@ -48,6 +48,24 @@ public class AccountManagementClient {
     }
 
     /**
+     * Reads all fields of a test account by email via the protected
+     * GET /api/account/test?email=... (requires the INTEGRATION_TEST_CLIENT_READ scope).
+     * Returns the raw response (200 body is UserCredentialTestingResponse JSON, incl. password).
+     */
+    public HttpResponse<String> getTestAccountByEmail(String accessToken, String email) throws Exception {
+        return getTestAccount(accessToken, "email=" + encode(email));
+    }
+
+    /**
+     * Reads all fields of a test account by userGUID via the protected
+     * GET /api/account/test?userGUID=... (requires the INTEGRATION_TEST_CLIENT_READ scope).
+     * Returns the raw response (200 body is UserCredentialTestingResponse JSON, incl. password).
+     */
+    public HttpResponse<String> getTestAccountByUserGUID(String accessToken, String userGUID) throws Exception {
+        return getTestAccount(accessToken, "userGUID=" + encode(userGUID));
+    }
+
+    /**
      * Deletes a test account by email via DELETE /api/account/test?email=...
      * Returns the raw response (204 on success).
      */
@@ -84,6 +102,16 @@ public class AccountManagementClient {
      */
     public String extractUserGUID(String createResponseBody) throws Exception {
         return objectMapper.readTree(createResponseBody).get("userGUID").asText();
+    }
+
+    private HttpResponse<String> getTestAccount(String accessToken, String query) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/account/test?" + query))
+                .header("Authorization", "Bearer " + accessToken)
+                .GET()
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     private HttpResponse<String> delete(String accessToken, String query) throws Exception {

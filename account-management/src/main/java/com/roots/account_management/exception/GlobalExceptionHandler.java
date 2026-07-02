@@ -21,4 +21,10 @@ public class GlobalExceptionHandler {
     public Map<String, String> handleEmailAlreadyExists(EmailAlreadyExistsException ex) {
         return Map.of("error", ex.getMessage());
     }
+
+    @ExceptionHandler(UserCredentialNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, String> handleUserCredentialNotFound(UserCredentialNotFoundException ex) {
+        return Map.of("error", ex.getMessage());
+    }
 }

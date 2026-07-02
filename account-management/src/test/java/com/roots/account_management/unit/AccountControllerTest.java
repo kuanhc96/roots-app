@@ -63,9 +63,9 @@ class AccountControllerTest {
     @Test
     void createTestAccount_withValidRequest_returns201AndBody() throws Exception {
         CreateAccountRequest request = new CreateAccountRequest(
-                "Jane", "jane@example.com", "Password123", false, true, List.of(Role.PASTOR));
+                "Jane", "jane@example.com", "Password123", false, true, true, List.of(Role.PASTOR));
         CreateAccountResponse response = new CreateAccountResponse(
-                "Jane", "jane@example.com", "generated-guid", false, true, List.of(Role.MEMBER, Role.PASTOR));
+                "Jane", "jane@example.com", "generated-guid", false, true, true, List.of(Role.MEMBER, Role.PASTOR));
         when(accountService.createTestAccount(any())).thenReturn(response);
 
         mockMvc.perform(post("/api/account/test")
@@ -77,6 +77,7 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$.userGUID").value("generated-guid"))
                 .andExpect(jsonPath("$.mfaEnabled").value(false))
                 .andExpect(jsonPath("$.emailVerified").value(true))
+                .andExpect(jsonPath("$.passwordChangeRequired").value(true))
                 .andExpect(jsonPath("$.roles[0]").value("member"))
                 .andExpect(jsonPath("$.roles[1]").value("pastor"));
 
@@ -90,7 +91,7 @@ class AccountControllerTest {
                 .when(validator).validateCreateAccountRequest(any());
 
         CreateAccountRequest request = new CreateAccountRequest(
-                "", "jane@example.com", "Password123", false, true, List.of());
+                "", "jane@example.com", "Password123", false, true, false, List.of());
 
         mockMvc.perform(post("/api/account/test")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -107,7 +108,7 @@ class AccountControllerTest {
                 .thenThrow(new EmailAlreadyExistsException("An account with this email already exists"));
 
         CreateAccountRequest request = new CreateAccountRequest(
-                "Jane", "jane@example.com", "Password123", false, true, List.of());
+                "Jane", "jane@example.com", "Password123", false, true, false, List.of());
 
         mockMvc.perform(post("/api/account/test")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -121,7 +122,7 @@ class AccountControllerTest {
         mockMvc.perform(delete("/api/account/test").param("email", "jane@example.com"))
                 .andExpect(status().isNoContent());
 
-        verify(validator).validateDeleteAccountRequest("jane@example.com", null);
+        verify(validator).validateAccountLookup("jane@example.com", null);
         verify(accountService).deleteTestAccountByEmail("jane@example.com");
         verify(accountService, never()).deleteTestAccountByUserGUID(anyString());
     }
@@ -131,7 +132,7 @@ class AccountControllerTest {
         mockMvc.perform(delete("/api/account/test").param("userGUID", "some-guid"))
                 .andExpect(status().isNoContent());
 
-        verify(validator).validateDeleteAccountRequest(null, "some-guid");
+        verify(validator).validateAccountLookup(null, "some-guid");
         verify(accountService).deleteTestAccountByUserGUID("some-guid");
         verify(accountService, never()).deleteTestAccountByEmail(anyString());
     }
@@ -139,7 +140,7 @@ class AccountControllerTest {
     @Test
     void deleteTestAccount_whenValidationFails_returns400WithError() throws Exception {
         doThrow(new InvalidRequestException("Provide either email or userGUID, not both"))
-                .when(validator).validateDeleteAccountRequest(anyString(), anyString());
+                .when(validator).validateAccountLookup(anyString(), anyString());
 
         mockMvc.perform(delete("/api/account/test")
                         .param("email", "jane@example.com")
