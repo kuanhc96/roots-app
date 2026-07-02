@@ -157,6 +157,44 @@ public class AuthServerClient implements AutoCloseable {
     }
 
     /**
+     * Calls the integration-test-only POST /ott/generate/test endpoint with a
+     * client_credentials access token to mint the MFA one-time token for the given
+     * email. Runs on the cookie-less machine client; the email is passed explicitly
+     * rather than read from a session. Returns the raw response (200 body is the OTT
+     * value).
+     */
+    public HttpResponse<String> generateOtt(String email) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/ott/generate/test?email=" + encode(email)))
+                .header("Authorization", "Bearer " + accessToken)
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+
+        return machineClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Submits the MFA one-time token on the browser session (POST /ott/login).
+     * Requires a prior {@link #login(String, String)} that left a
+     * MfaPendingAuthenticationToken in the session. When {@code rememberBrowser} is
+     * true the form posts {@code rememberBrowser=true}, which disables MFA for the
+     * user. Returns the auth-server's immediate 302 response; the caller follows the
+     * redirect chain and asserts on the status / Location.
+     */
+    public HttpResponse<String> verifyOtt(String ott, boolean rememberBrowser) throws Exception {
+        String body = "ott=" + encode(ott)
+                + (rememberBrowser ? "&rememberBrowser=true" : "");
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/ott/login"))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
      * Calls the integration-test-only POST /magic-link/generate/test endpoint with a
      * client_credentials access token to mint a magic-link token for the given email.
      * Runs on the cookie-less client; the email is passed explicitly rather than
