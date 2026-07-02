@@ -1,20 +1,25 @@
-package com.roots.authserver.integration;
+package com.roots.authserver.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.roots.authserver.dto.request.CreateAccountRequest;
 
 import java.net.CookieManager;
+import java.net.CookieStore;
+import java.net.HttpCookie;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 
 public class AuthServerClient implements AutoCloseable {
 
     private final String baseUrl;
+    private final CookieManager cookieManager;
     private final HttpClient httpClient;
     // Cookie-less client for machine-to-machine calls (client_credentials token
     // exchange and the bearer-authenticated test endpoints). Carries no session
@@ -26,8 +31,9 @@ public class AuthServerClient implements AutoCloseable {
 
     public AuthServerClient(String baseUrl, String accessToken) {
         this.baseUrl = baseUrl;
+        this.cookieManager = new CookieManager();
         this.httpClient = HttpClient.newBuilder()
-                .cookieHandler(new CookieManager())
+                .cookieHandler(cookieManager)
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
         this.machineClient = HttpClient.newBuilder()
@@ -73,13 +79,13 @@ public class AuthServerClient implements AutoCloseable {
      * test can assert on the status (201 on success).
      */
     public HttpResponse<String> createAccount(String name, String email, String password) throws Exception {
-        String json = objectMapper.writeValueAsString(
-                Map.of("name", name, "email", email, "password", password));
+
+        CreateAccountRequest requestBody = CreateAccountRequest.builder().name(name).email(email).password(password).build();
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/accounts"))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
                 .build();
 
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
@@ -91,10 +97,96 @@ public class AuthServerClient implements AutoCloseable {
      * the "check your email" page).
      */
     public HttpResponse<String> login(String email, String password) throws Exception {
-        String body = "email=" + encode(email) + "&password=" + encode(password);
+        return login(email, password, false);
+    }
+
+    /**
+     * Form login with the "remember me" checkbox state. When {@code rememberMe} is
+     * true the form posts {@code remember-me=true} (the parameter
+     * TokenBasedRememberMeServices looks for), so a successful login also issues the
+     * persistent {@code remember-me} cookie on the response.
+     */
+    public HttpResponse<String> login(String email, String password, boolean rememberMe) throws Exception {
+        String body = "email=" + encode(email) + "&password=" + encode(password)
+                + (rememberMe ? "&remember-me=true" : "");
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/login"))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Calls the integration-test-only POST /api/temp-password/test endpoint with a
+     * client_credentials access token to mint a temporary password for the given email.
+     * Runs on the cookie-less machine client; the email is passed explicitly. Returns the
+     * raw response (200 body is the plaintext temp password).
+     */
+    public HttpResponse<String> requestTempPassword(String email) throws Exception {
+        String json = objectMapper.writeValueAsString(Map.of("email", email));
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/temp-password/test"))
+                .header("Authorization", "Bearer " + accessToken)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+        return machineClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Completes the forgot-password reset on the browser session. Requires a prior
+     * {@link #login(String, String)} with the temp password so the session holds a
+     * PasswordChangePendingAuthenticationToken. Posts the new password to
+     * POST /reset-password; returns the auth-server's immediate 302 response.
+     */
+    public HttpResponse<String> resetPassword(String newPassword) throws Exception {
+        String body = "newPassword=" + encode(newPassword);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/reset-password"))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Calls the integration-test-only POST /ott/generate/test endpoint with a
+     * client_credentials access token to mint the MFA one-time token for the given
+     * email. Runs on the cookie-less machine client; the email is passed explicitly
+     * rather than read from a session. Returns the raw response (200 body is the OTT
+     * value).
+     */
+    public HttpResponse<String> generateOtt(String email) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/ott/generate/test?email=" + encode(email)))
+                .header("Authorization", "Bearer " + accessToken)
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+
+        return machineClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Submits the MFA one-time token on the browser session (POST /ott/login).
+     * Requires a prior {@link #login(String, String)} that left a
+     * MfaPendingAuthenticationToken in the session. When {@code rememberBrowser} is
+     * true the form posts {@code rememberBrowser=true}, which disables MFA for the
+     * user. Returns the auth-server's immediate 302 response; the caller follows the
+     * redirect chain and asserts on the status / Location.
+     */
+    public HttpResponse<String> verifyOtt(String ott, boolean rememberBrowser) throws Exception {
+        String body = "ott=" + encode(ott)
+                + (rememberBrowser ? "&rememberBrowser=true" : "");
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/ott/login"))
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
@@ -158,6 +250,21 @@ public class AuthServerClient implements AutoCloseable {
                 .build();
 
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Simulates closing and reopening the browser: drops all session cookies (those
+     * carrying no Max-Age, e.g. JSESSIONID) from the browser session's cookie jar
+     * while keeping persistent ones (the remember-me cookie carries a Max-Age). The
+     * next request therefore arrives with no HTTP session but still presents the
+     * remember-me cookie.
+     */
+    public void clearSessionCookies() {
+        CookieStore cookieStore = cookieManager.getCookieStore();
+        List<HttpCookie> sessionCookies = cookieStore.getCookies().stream()
+                .filter(cookie -> cookie.getMaxAge() < 0)
+                .toList();
+        sessionCookies.forEach(cookie -> cookieStore.remove(null, cookie));
     }
 
     /**

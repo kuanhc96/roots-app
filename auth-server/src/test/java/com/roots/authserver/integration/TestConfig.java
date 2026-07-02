@@ -1,6 +1,9 @@
 package com.roots.authserver.integration;
 
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
  * Empty configuration that anchors the integration tests' Spring context so
@@ -10,4 +13,8 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 public class TestConfig {
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
 }

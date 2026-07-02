@@ -2,6 +2,9 @@ package com.roots.authserver.integration;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.roots.authserver.dto.TokenResponse;
+import com.roots.authserver.util.HttpFlowUtils;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -51,8 +54,8 @@ class GuestLoginIntegrationTest extends IntegrationTestBase {
         List<String> roles = (List<String>) claims.get("roles");
         List<String> scopes = (List<String>) claims.get("scope");
 
-        assertThat(roles.contains("GUEST"));
-        assertThat(scopes.contains("openid"));
-        assertThat(scopes.contains("WEB_CLIENT_READ"));
+        assertThat(roles).contains("GUEST");
+        assertThat(scopes).contains("openid");
+        assertThat(scopes).contains("WEB_CLIENT_READ");
     }
 }

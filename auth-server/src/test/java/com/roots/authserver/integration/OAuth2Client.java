@@ -2,6 +2,8 @@ package com.roots.authserver.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.roots.authserver.client.AuthServerClient;
+import com.roots.authserver.dto.TokenResponse;
 
 import java.net.URI;
 import java.net.URLEncoder;
