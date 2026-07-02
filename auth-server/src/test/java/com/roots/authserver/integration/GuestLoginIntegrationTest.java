@@ -54,8 +54,8 @@ class GuestLoginIntegrationTest extends IntegrationTestBase {
         List<String> roles = (List<String>) claims.get("roles");
         List<String> scopes = (List<String>) claims.get("scope");
 
-        assertThat(roles.contains("GUEST"));
-        assertThat(scopes.contains("openid"));
-        assertThat(scopes.contains("WEB_CLIENT_READ"));
+        assertThat(roles).contains("GUEST");
+        assertThat(scopes).contains("openid");
+        assertThat(scopes).contains("WEB_CLIENT_READ");
     }
 }
