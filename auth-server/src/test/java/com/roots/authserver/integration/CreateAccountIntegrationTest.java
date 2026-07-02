@@ -23,7 +23,7 @@ class CreateAccountIntegrationTest extends IntegrationTestBase {
     @BeforeEach
     void startOAuth2AuthorizationFlow() throws Exception {
         redirectUri = webClientLocation + "/callback";
-        email = "itest+" + UUID.randomUUID() + "@example.com";
+        email = "itest_" + UUID.randomUUID() + "@example.com";
 
         // Start the authorization-code flow so a SavedRequest is held in the session;
         // magic-link verification redirects back to it (and thus to the callback).
@@ -38,6 +38,9 @@ class CreateAccountIntegrationTest extends IntegrationTestBase {
         // 1. Create the account with placeholder values.
         HttpResponse<String> createResponse = authServerClient.createAccount(TEST_NAME, email, TEST_PASSWORD);
         assertThat(createResponse.statusCode()).isEqualTo(201);
+        UserCredentialTestingResponse testAccount =  accountManagementClient.getTestAccountByEmail(email).getBody();
+        assertThat(testAccount).isNotNull();
+        assertThat(testAccount.emailVerified()).isFalse();
 
         // 2. Auto-login with the same credentials. The email is unverified, so we are
         //    redirected to the "check your email" page.
@@ -60,5 +63,9 @@ class CreateAccountIntegrationTest extends IntegrationTestBase {
         String callback = response.headers().firstValue("Location").orElseThrow();
         assertThat(callback).startsWith(redirectUri);
         assertThat(callback).contains("code=");
+
+        testAccount =  accountManagementClient.getTestAccountByEmail(email).getBody();
+        assertThat(testAccount).isNotNull();
+        assertThat(testAccount.emailVerified()).isTrue();
     }
 }

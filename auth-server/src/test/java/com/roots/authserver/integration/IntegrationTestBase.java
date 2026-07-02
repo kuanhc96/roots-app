@@ -45,7 +45,8 @@ abstract class IntegrationTestBase {
 
         // Client-credentials token exchange for the integration-test client.
         TokenResponse ccToken = oAuth2Client.getClientCredentialsToken(
-                "INTEGRATION_TEST_CLIENT", integrationTestClientSecret, "INTEGRATION_TEST_CLIENT_WRITE");
+                "INTEGRATION_TEST_CLIENT", integrationTestClientSecret,
+                "INTEGRATION_TEST_CLIENT_WRITE INTEGRATION_TEST_CLIENT_READ INTEGRATION_TEST_CLIENT_DELETE");
         assertThat(ccToken.accessToken()).isNotBlank();
 
         authServerClient = new AuthServerClient(authServerLocation, ccToken.accessToken());

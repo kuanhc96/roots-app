@@ -2,6 +2,8 @@ package com.roots.authserver.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.roots.authserver.dto.request.CreateAccountRequest;
+import com.roots.authserver.dto.response.CreateAccountResponse;
 
 import java.net.CookieManager;
 import java.net.URI;
@@ -73,13 +75,13 @@ public class AuthServerClient implements AutoCloseable {
      * test can assert on the status (201 on success).
      */
     public HttpResponse<String> createAccount(String name, String email, String password) throws Exception {
-        String json = objectMapper.writeValueAsString(
-                Map.of("name", name, "email", email, "password", password));
+
+        CreateAccountRequest requestBody = CreateAccountRequest.builder().name(name).email(email).password(password).build();
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/accounts"))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
                 .build();
 
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
@@ -95,6 +97,43 @@ public class AuthServerClient implements AutoCloseable {
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/login"))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Calls the integration-test-only POST /api/temp-password/test endpoint with a
+     * client_credentials access token to mint a temporary password for the given email.
+     * Runs on the cookie-less machine client; the email is passed explicitly. Returns the
+     * raw response (200 body is the plaintext temp password).
+     */
+    public HttpResponse<String> requestTempPassword(String email) throws Exception {
+        String json = objectMapper.writeValueAsString(Map.of("email", email));
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/temp-password/test"))
+                .header("Authorization", "Bearer " + accessToken)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+        return machineClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Completes the forgot-password reset on the browser session. Requires a prior
+     * {@link #login(String, String)} with the temp password so the session holds a
+     * PasswordChangePendingAuthenticationToken. Posts the new password to
+     * POST /reset-password; returns the auth-server's immediate 302 response.
+     */
+    public HttpResponse<String> resetPassword(String newPassword) throws Exception {
+        String body = "newPassword=" + encode(newPassword);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/reset-password"))
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
