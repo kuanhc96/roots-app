@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.roots.authserver.dto.CreateTestAccountResponse;
 import com.roots.authserver.dto.TokenResponse;
+import com.roots.authserver.dto.UserCredentialTestingResponse;
 import com.roots.authserver.util.HttpFlowUtils;
 
 import org.junit.jupiter.api.AfterEach;
@@ -175,6 +176,290 @@ class LoginIntegrationTest extends IntegrationTestBase {
             assertThat(claims.get("sub")).isEqualTo(email);
         }
 
+    }
+
+    @Nested
+    class MfaEnabled_EmailVerified_PasswordChangeNotRequired {
+        @BeforeEach
+        void createTestAccount() {
+            // 1. Create an account with default roles and MFA enabled — the first factor
+            //    alone must not complete the login.
+            email = "itest_" + UUID.randomUUID() + "@example.com";
+            ResponseEntity<CreateTestAccountResponse> createResponse = accountManagementClient.createTestAccount(
+                    TEST_NAME, email, TEST_PASSWORD,
+                    true /* mfaEnabled */, true /* emailVerified */, false /* passwordChangeRequired */);
+            assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
+            assertThat(createResponse.getBody()).isNotNull();
+            userGUID = createResponse.getBody().userGUID();
+            assertThat(userGUID).isNotBlank();
+        }
+
+        @Test
+        void login_noRememberMe_browserNotRemembered() throws Exception {
+            // 2. Start the authorization-code flow and log in (no remember-me).
+            String redirectUri = webClientLocation + "/callback";
+            HttpResponse<String> authorizeResponse =
+                    authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
+            assertThat(authorizeResponse.statusCode()).isEqualTo(302);
+            HttpFlowUtils.followRedirects(authServerClient, authServerLocation, authorizeResponse, redirectUri);
+
+            // 3. The first factor alone lands on the MFA page, not the callback.
+            HttpResponse<String> loginResponse = authServerClient.login(email, TEST_PASSWORD);
+            assertThat(loginResponse.statusCode()).isEqualTo(302);
+            assertThat(loginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/ott/login");
+            HttpResponse<String> ottPage = authServerClient.getOnSession(authServerLocation + "/ott/login");
+            assertThat(ottPage.statusCode()).isEqualTo(200);
+
+            // 4. Obtain the OTT out-of-band and submit it, leaving "Remember this
+            //    browser?" unchecked so MFA stays enabled.
+            HttpResponse<String> ottResponse = authServerClient.generateOtt(email);
+            assertThat(ottResponse.statusCode()).isEqualTo(200);
+            String ott = ottResponse.body();
+            assertThat(ott).isNotBlank();
+
+            HttpResponse<String> verifyResponse = authServerClient.verifyOtt(ott, false /* rememberBrowser */);
+            assertThat(verifyResponse.statusCode()).isEqualTo(302);
+
+            // 5. The upgraded session completes the flow to the callback.
+            HttpResponse<String> firstCallback = HttpFlowUtils.followRedirects(
+                    authServerClient, authServerLocation, verifyResponse, redirectUri);
+            assertThat(firstCallback.statusCode()).isEqualTo(302);
+            String callback = firstCallback.headers().firstValue("Location").orElseThrow();
+            assertThat(callback).startsWith(redirectUri);
+            assertThat(HttpFlowUtils.extractQueryParam(callback, "code")).isNotBlank();
+
+            // 6. The browser was not remembered, so MFA must still be enabled in the DB…
+            ResponseEntity<UserCredentialTestingResponse> accountResponse =
+                    accountManagementClient.getTestAccountByUserGUID(userGUID);
+            assertThat(accountResponse.getStatusCode().value()).isEqualTo(200);
+            assertThat(accountResponse.getBody()).isNotNull();
+            assertThat(accountResponse.getBody().mfaEnabled()).isTrue();
+
+            // 7. …and a second login after a "browser restart" is gated by the MFA page
+            //    again.
+            authServerClient.clearSessionCookies();
+
+            HttpResponse<String> secondAuthorize =
+                    authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state-2");
+            assertThat(secondAuthorize.statusCode()).isEqualTo(302);
+            HttpFlowUtils.followRedirects(authServerClient, authServerLocation, secondAuthorize, redirectUri);
+
+            HttpResponse<String> secondLoginResponse = authServerClient.login(email, TEST_PASSWORD);
+            assertThat(secondLoginResponse.statusCode()).isEqualTo(302);
+            assertThat(secondLoginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/ott/login");
+        }
+
+        @Test
+        void login_noRememberMe_browserRemembered() throws Exception {
+            // 2. Start the authorization-code flow and log in (no remember-me).
+            String redirectUri = webClientLocation + "/callback";
+            HttpResponse<String> authorizeResponse =
+                    authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
+            assertThat(authorizeResponse.statusCode()).isEqualTo(302);
+            HttpFlowUtils.followRedirects(authServerClient, authServerLocation, authorizeResponse, redirectUri);
+
+            // 3. The first factor alone lands on the MFA page, not the callback.
+            HttpResponse<String> loginResponse = authServerClient.login(email, TEST_PASSWORD);
+            assertThat(loginResponse.statusCode()).isEqualTo(302);
+            assertThat(loginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/ott/login");
+            HttpResponse<String> ottPage = authServerClient.getOnSession(authServerLocation + "/ott/login");
+            assertThat(ottPage.statusCode()).isEqualTo(200);
+
+            // 4. Obtain the OTT out-of-band and submit it with "Remember this browser?"
+            //    checked, which disables MFA for the user.
+            HttpResponse<String> ottResponse = authServerClient.generateOtt(email);
+            assertThat(ottResponse.statusCode()).isEqualTo(200);
+            String ott = ottResponse.body();
+            assertThat(ott).isNotBlank();
+
+            HttpResponse<String> verifyResponse = authServerClient.verifyOtt(ott, true /* rememberBrowser */);
+            assertThat(verifyResponse.statusCode()).isEqualTo(302);
+
+            // 5. The upgraded session completes the flow to the callback.
+            HttpResponse<String> firstCallback = HttpFlowUtils.followRedirects(
+                    authServerClient, authServerLocation, verifyResponse, redirectUri);
+            assertThat(firstCallback.statusCode()).isEqualTo(302);
+            String callback = firstCallback.headers().firstValue("Location").orElseThrow();
+            assertThat(callback).startsWith(redirectUri);
+            assertThat(HttpFlowUtils.extractQueryParam(callback, "code")).isNotBlank();
+
+            // 6. The browser was remembered, so MFA must now be disabled in the DB…
+            ResponseEntity<UserCredentialTestingResponse> accountResponse =
+                    accountManagementClient.getTestAccountByUserGUID(userGUID);
+            assertThat(accountResponse.getStatusCode().value()).isEqualTo(200);
+            assertThat(accountResponse.getBody()).isNotNull();
+            assertThat(accountResponse.getBody().mfaEnabled()).isFalse();
+
+            // 7. …and a second login after a "browser restart" completes without an OTT:
+            //    the first factor redirects straight back to the saved authorize request
+            //    and through to the callback.
+            authServerClient.clearSessionCookies();
+
+            HttpResponse<String> secondAuthorize =
+                    authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state-2");
+            assertThat(secondAuthorize.statusCode()).isEqualTo(302);
+            HttpFlowUtils.followRedirects(authServerClient, authServerLocation, secondAuthorize, redirectUri);
+
+            HttpResponse<String> secondLoginResponse = authServerClient.login(email, TEST_PASSWORD);
+            assertThat(secondLoginResponse.statusCode()).isEqualTo(302);
+            assertThat(secondLoginResponse.headers().firstValue("Location").orElseThrow()).contains("/oauth2/authorize");
+
+            HttpResponse<String> secondCallback = HttpFlowUtils.followRedirects(
+                    authServerClient, authServerLocation, secondLoginResponse, redirectUri);
+            assertThat(secondCallback.statusCode()).isEqualTo(302);
+            String secondCallbackLocation = secondCallback.headers().firstValue("Location").orElseThrow();
+            assertThat(secondCallbackLocation).startsWith(redirectUri);
+            assertThat(HttpFlowUtils.extractQueryParam(secondCallbackLocation, "code")).isNotBlank();
+        }
+
+        @Test
+        void login_withRememberMe_browserNotRemembered() throws Exception {
+            // 2. Start the authorization-code flow and log in with "remember me" checked.
+            String redirectUri = webClientLocation + "/callback";
+            HttpResponse<String> authorizeResponse =
+                    authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
+            assertThat(authorizeResponse.statusCode()).isEqualTo(302);
+            HttpFlowUtils.followRedirects(authServerClient, authServerLocation, authorizeResponse, redirectUri);
+
+            // 3. The first factor lands on the MFA page and issues the persistent
+            //    remember-me cookie (the cookie covers the first factor only — the
+            //    remember-me provider applies the same MFA check as the password one).
+            HttpResponse<String> loginResponse = authServerClient.login(email, TEST_PASSWORD, true /* rememberMe */);
+            assertThat(loginResponse.statusCode()).isEqualTo(302);
+            assertThat(loginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/ott/login");
+            String rememberMeSetCookie = loginResponse.headers().allValues("set-cookie").stream()
+                    .filter(header -> header.startsWith("remember-me="))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("No remember-me cookie issued on the login response"));
+            assertThat(HttpCookie.parse(rememberMeSetCookie).get(0).getValue()).isNotBlank();
+            HttpResponse<String> ottPage = authServerClient.getOnSession(authServerLocation + "/ott/login");
+            assertThat(ottPage.statusCode()).isEqualTo(200);
+
+            // 4. Obtain the OTT out-of-band and submit it, leaving "Remember this
+            //    browser?" unchecked so MFA stays enabled.
+            HttpResponse<String> ottResponse = authServerClient.generateOtt(email);
+            assertThat(ottResponse.statusCode()).isEqualTo(200);
+            String ott = ottResponse.body();
+            assertThat(ott).isNotBlank();
+
+            HttpResponse<String> verifyResponse = authServerClient.verifyOtt(ott, false /* rememberBrowser */);
+            assertThat(verifyResponse.statusCode()).isEqualTo(302);
+
+            // 5. The upgraded session completes the flow to the callback.
+            HttpResponse<String> firstCallback = HttpFlowUtils.followRedirects(
+                    authServerClient, authServerLocation, verifyResponse, redirectUri);
+            assertThat(firstCallback.statusCode()).isEqualTo(302);
+            String callback = firstCallback.headers().firstValue("Location").orElseThrow();
+            assertThat(callback).startsWith(redirectUri);
+            assertThat(HttpFlowUtils.extractQueryParam(callback, "code")).isNotBlank();
+
+            // 6. The browser was not remembered, so MFA must still be enabled in the DB…
+            ResponseEntity<UserCredentialTestingResponse> accountResponse =
+                    accountManagementClient.getTestAccountByUserGUID(userGUID);
+            assertThat(accountResponse.getStatusCode().value()).isEqualTo(200);
+            assertThat(accountResponse.getBody()).isNotNull();
+            assertThat(accountResponse.getBody().mfaEnabled()).isTrue();
+
+            // 7. …so after a "browser restart" the remember-me cookie satisfies the first
+            //    factor (no login form, no credentials posted) but the flow is still
+            //    gated by the MFA page: the chain dead-ends with the OTT page displayed.
+            authServerClient.clearSessionCookies();
+
+            HttpResponse<String> secondAuthorize =
+                    authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state-2");
+            assertThat(secondAuthorize.statusCode()).isEqualTo(302);
+            HttpResponse<String> secondOttPage = HttpFlowUtils.followRedirects(
+                    authServerClient, authServerLocation, secondAuthorize, redirectUri);
+            assertThat(secondOttPage.statusCode()).isEqualTo(200);
+            assertThat(secondOttPage.uri().getPath()).isEqualTo("/ott/login");
+
+            // 8. A fresh OTT completes the second login to the callback.
+            HttpResponse<String> secondOttResponse = authServerClient.generateOtt(email);
+            assertThat(secondOttResponse.statusCode()).isEqualTo(200);
+            String secondOtt = secondOttResponse.body();
+            assertThat(secondOtt).isNotBlank();
+
+            HttpResponse<String> secondVerifyResponse = authServerClient.verifyOtt(secondOtt, false /* rememberBrowser */);
+            assertThat(secondVerifyResponse.statusCode()).isEqualTo(302);
+            HttpResponse<String> secondCallback = HttpFlowUtils.followRedirects(
+                    authServerClient, authServerLocation, secondVerifyResponse, redirectUri);
+            assertThat(secondCallback.statusCode()).isEqualTo(302);
+            String secondCallbackLocation = secondCallback.headers().firstValue("Location").orElseThrow();
+            assertThat(secondCallbackLocation).startsWith(redirectUri);
+            assertThat(HttpFlowUtils.extractQueryParam(secondCallbackLocation, "code")).isNotBlank();
+        }
+
+        @Test
+        void login_withRememberMe_browserRemembered() throws Exception {
+            // 2. Start the authorization-code flow and log in with "remember me" checked.
+            String redirectUri = webClientLocation + "/callback";
+            HttpResponse<String> authorizeResponse =
+                    authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
+            assertThat(authorizeResponse.statusCode()).isEqualTo(302);
+            HttpFlowUtils.followRedirects(authServerClient, authServerLocation, authorizeResponse, redirectUri);
+
+            // 3. The first factor lands on the MFA page and issues the persistent
+            //    remember-me cookie.
+            HttpResponse<String> loginResponse = authServerClient.login(email, TEST_PASSWORD, true /* rememberMe */);
+            assertThat(loginResponse.statusCode()).isEqualTo(302);
+            assertThat(loginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/ott/login");
+            String rememberMeSetCookie = loginResponse.headers().allValues("set-cookie").stream()
+                    .filter(header -> header.startsWith("remember-me="))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("No remember-me cookie issued on the login response"));
+            assertThat(HttpCookie.parse(rememberMeSetCookie).get(0).getValue()).isNotBlank();
+            HttpResponse<String> ottPage = authServerClient.getOnSession(authServerLocation + "/ott/login");
+            assertThat(ottPage.statusCode()).isEqualTo(200);
+
+            // 4. Obtain the OTT out-of-band and submit it with "Remember this browser?"
+            //    checked, which disables MFA for the user.
+            HttpResponse<String> ottResponse = authServerClient.generateOtt(email);
+            assertThat(ottResponse.statusCode()).isEqualTo(200);
+            String ott = ottResponse.body();
+            assertThat(ott).isNotBlank();
+
+            HttpResponse<String> verifyResponse = authServerClient.verifyOtt(ott, true /* rememberBrowser */);
+            assertThat(verifyResponse.statusCode()).isEqualTo(302);
+
+            // 5. The upgraded session completes the flow to the callback.
+            HttpResponse<String> firstCallback = HttpFlowUtils.followRedirects(
+                    authServerClient, authServerLocation, verifyResponse, redirectUri);
+            assertThat(firstCallback.statusCode()).isEqualTo(302);
+            String callback = firstCallback.headers().firstValue("Location").orElseThrow();
+            assertThat(callback).startsWith(redirectUri);
+            assertThat(HttpFlowUtils.extractQueryParam(callback, "code")).isNotBlank();
+
+            // 6. The browser was remembered, so MFA must now be disabled in the DB…
+            ResponseEntity<UserCredentialTestingResponse> accountResponse =
+                    accountManagementClient.getTestAccountByUserGUID(userGUID);
+            assertThat(accountResponse.getStatusCode().value()).isEqualTo(200);
+            assertThat(accountResponse.getBody()).isNotNull();
+            assertThat(accountResponse.getBody().mfaEnabled()).isFalse();
+
+            // 7. …so after a "browser restart" the second flow completes with no
+            //    interaction at all: the remember-me cookie satisfies the first factor
+            //    (no login form, no credentials posted) and MFA is off (no OTT step) —
+            //    the redirect chain runs straight through to the callback.
+            authServerClient.clearSessionCookies();
+
+            HttpResponse<String> secondAuthorize =
+                    authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state-2");
+            assertThat(secondAuthorize.statusCode()).isEqualTo(302);
+            HttpResponse<String> secondCallback = HttpFlowUtils.followRedirects(
+                    authServerClient, authServerLocation, secondAuthorize, redirectUri);
+            assertThat(secondCallback.statusCode()).isEqualTo(302);
+            String secondCallbackLocation = secondCallback.headers().firstValue("Location").orElseThrow();
+            assertThat(secondCallbackLocation).startsWith(redirectUri);
+            String code = HttpFlowUtils.extractQueryParam(secondCallbackLocation, "code");
+            assertThat(code).isNotBlank();
+
+            // 8. Exchange the code and confirm the cookie-only login is the same user.
+            TokenResponse tokens = oAuth2Client.getAuthorizationGrantToken(code, "WEB_CLIENT", webClientSecret, redirectUri);
+            assertThat(tokens.accessToken()).isNotBlank();
+            byte[] payloadBytes = Base64.getUrlDecoder().decode(tokens.accessToken().split("\\.")[1]);
+            Map<String, Object> claims = new ObjectMapper().readValue(payloadBytes, new TypeReference<>() {});
+            assertThat(claims.get("sub")).isEqualTo(email);
+        }
     }
 
 }
