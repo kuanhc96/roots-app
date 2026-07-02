@@ -9,11 +9,10 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.ClientHttpResponse;
-import org.springframework.web.client.ResponseErrorHandler;
 import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.roots.authserver.enums.Role;
 
 /**
  * Client for account-management's endpoints, used from the auth-server integration
@@ -34,14 +33,12 @@ public class AccountManagementClient {
 
     private final String baseUrl;
     private final RestTemplate restTemplate;
-    private final ObjectMapper objectMapper;
     private final HttpHeaders httpHeaders;
     private final String accessToken;
 
     public AccountManagementClient(String baseUrl, String accessToken) {
         this.baseUrl = baseUrl;
         this.restTemplate = new RestTemplate();
-        this.objectMapper = new ObjectMapper();
         this.accessToken = accessToken;
 
         httpHeaders = bearerHeaders(accessToken);
@@ -50,13 +47,22 @@ public class AccountManagementClient {
     }
 
     /**
+     * Convenience overload for tests that don't care about roles: delegates with an empty
+     * roles list (account-management's resolveRoles still adds MEMBER as the floor).
+     */
+    public ResponseEntity<CreateTestAccountResponse> createTestAccount(String name, String email, String password,
+                                                                   boolean mfaEnabled, boolean emailVerified, boolean passwordChangeRequired) {
+        return createTestAccount(name, email, password, mfaEnabled, emailVerified, passwordChangeRequired, List.of());
+    }
+
+    /**
      * Creates a test account via POST /api/account/test with the caller in full control of
      * the boolean flags and roles. Returns the raw response so the test can assert on the
      * status (201) and read the userGUID from the body.
      */
-    public ResponseEntity<String> createTestAccount(String name, String email, String password,
+    public ResponseEntity<CreateTestAccountResponse> createTestAccount(String name, String email, String password,
                                                     boolean mfaEnabled, boolean emailVerified, boolean passwordChangeRequired,
-                                                    List<String> roles) {
+                                                    List<Role> roles) {
         Map<String, Object> body = new HashMap<>();
         body.put("name", name);
         body.put("email", email);
@@ -70,7 +76,7 @@ public class AccountManagementClient {
                 baseUrl + "/api/account/test",
                 HttpMethod.POST,
                 new HttpEntity<>(body, httpHeaders),
-                String.class
+                CreateTestAccountResponse.class
         );
     }
 
@@ -79,7 +85,7 @@ public class AccountManagementClient {
      * GET /api/account/test?email=... (requires the INTEGRATION_TEST_CLIENT_READ scope).
      * Returns the raw response (200 body is UserCredentialTestingResponse JSON, incl. password).
      */
-    public ResponseEntity<String> getTestAccountByEmail(String email) {
+    public ResponseEntity<UserCredentialTestingResponse> getTestAccountByEmail(String email) {
         return getTestAccount("email=" + email);
     }
 
@@ -88,7 +94,7 @@ public class AccountManagementClient {
      * GET /api/account/test?userGUID=... (requires the INTEGRATION_TEST_CLIENT_READ scope).
      * Returns the raw response (200 body is UserCredentialTestingResponse JSON, incl. password).
      */
-    public ResponseEntity<String> getTestAccountByUserGUID(String userGUID) {
+    public ResponseEntity<UserCredentialTestingResponse> getTestAccountByUserGUID(String userGUID) {
         return getTestAccount("userGUID=" + userGUID);
     }
 
@@ -124,19 +130,12 @@ public class AccountManagementClient {
         return delete("");
     }
 
-    /**
-     * Extracts the userGUID field from a create-account 201 response body.
-     */
-    public String extractUserGUID(String createResponseBody) throws Exception {
-        return objectMapper.readTree(createResponseBody).get("userGUID").asText();
-    }
-
-    private ResponseEntity<String> getTestAccount(String query) {
+    private ResponseEntity<UserCredentialTestingResponse> getTestAccount(String query) {
         return restTemplate.exchange(
                 baseUrl + "/api/account/test?" + query,
                 HttpMethod.GET,
                 new HttpEntity<>(bearerHeaders(accessToken)),
-                String.class
+                UserCredentialTestingResponse.class
         );
     }
 
