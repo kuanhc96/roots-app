@@ -1,6 +1,8 @@
 package com.roots.authserver.controller;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -33,4 +35,13 @@ public class TempPasswordController {
             emailService.sendTempPasswordEmail(request.email(), tempPassword);
         }
     }
+
+    @PostMapping("/test")
+    @ResponseStatus(HttpStatus.OK)
+    @PreAuthorize("hasAuthority('INTEGRATION_TEST_CLIENT_WRITE')")
+    public ResponseEntity<String> requestTempPasswordForTest(@RequestBody TempPasswordRequest request) {
+        String tempPassword = userCredentialService.requestTempPassword(request.email());
+        return ResponseEntity.ok().body(tempPassword);
+    }
+
 }
