@@ -1,4 +1,4 @@
-package com.roots.authserver.integration;
+package com.roots.authserver.client;
 
 import java.util.HashMap;
 import java.util.List;
@@ -11,8 +11,9 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.roots.authserver.enums.Role;
+import com.roots.authserver.dto.CreateTestAccountResponse;
+import com.roots.authserver.dto.UserCredentialTestingResponse;
 
 /**
  * Client for account-management's endpoints, used from the auth-server integration
@@ -51,7 +52,7 @@ public class AccountManagementClient {
      * roles list (account-management's resolveRoles still adds MEMBER as the floor).
      */
     public ResponseEntity<CreateTestAccountResponse> createTestAccount(String name, String email, String password,
-                                                                   boolean mfaEnabled, boolean emailVerified, boolean passwordChangeRequired) {
+                                                                       boolean mfaEnabled, boolean emailVerified, boolean passwordChangeRequired) {
         return createTestAccount(name, email, password, mfaEnabled, emailVerified, passwordChangeRequired, List.of());
     }
 

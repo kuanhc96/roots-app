@@ -10,6 +10,10 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
+import com.roots.authserver.client.AccountManagementClient;
+import com.roots.authserver.client.AuthServerClient;
+import com.roots.authserver.dto.TokenResponse;
+
 /**
  * Base for the live-server integration tests. Builds a fresh {@link AuthServerClient} and
  * {@link OAuth2Client} before every test and closes them afterwards.

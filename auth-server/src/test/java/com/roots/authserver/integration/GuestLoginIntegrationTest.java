@@ -2,6 +2,9 @@ package com.roots.authserver.integration;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.roots.authserver.dto.TokenResponse;
+import com.roots.authserver.util.HttpFlowUtils;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Value;
 

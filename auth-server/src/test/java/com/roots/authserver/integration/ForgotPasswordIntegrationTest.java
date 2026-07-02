@@ -1,7 +1,7 @@
 package com.roots.authserver.integration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.roots.authserver.dto.response.CreateAccountResponse;
+import com.roots.authserver.dto.CreateTestAccountResponse;
+import com.roots.authserver.dto.UserCredentialTestingResponse;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

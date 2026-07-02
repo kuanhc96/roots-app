@@ -1,9 +1,11 @@
-package com.roots.authserver.integration;
+package com.roots.authserver.util;
 
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+
+import com.roots.authserver.client.AuthServerClient;
 
 /**
  * Static helpers shared across the integration test suites for navigating the
@@ -45,7 +47,7 @@ public final class HttpFlowUtils {
      * a redirect. Returns the final response.
      */
     public static HttpResponse<String> followRedirects(AuthServerClient client, String baseUrl,
-            HttpResponse<String> response, String targetPrefix) throws Exception {
+                                                       HttpResponse<String> response, String targetPrefix) throws Exception {
         while (response.statusCode() == 302) {
             String location = response.headers().firstValue("Location").orElseThrow();
             if (location.startsWith(targetPrefix)) {
