@@ -5,17 +5,21 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.roots.authserver.dto.request.CreateAccountRequest;
 
 import java.net.CookieManager;
+import java.net.CookieStore;
+import java.net.HttpCookie;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 
 public class AuthServerClient implements AutoCloseable {
 
     private final String baseUrl;
+    private final CookieManager cookieManager;
     private final HttpClient httpClient;
     // Cookie-less client for machine-to-machine calls (client_credentials token
     // exchange and the bearer-authenticated test endpoints). Carries no session
@@ -27,8 +31,9 @@ public class AuthServerClient implements AutoCloseable {
 
     public AuthServerClient(String baseUrl, String accessToken) {
         this.baseUrl = baseUrl;
+        this.cookieManager = new CookieManager();
         this.httpClient = HttpClient.newBuilder()
-                .cookieHandler(new CookieManager())
+                .cookieHandler(cookieManager)
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
         this.machineClient = HttpClient.newBuilder()
@@ -92,7 +97,18 @@ public class AuthServerClient implements AutoCloseable {
      * the "check your email" page).
      */
     public HttpResponse<String> login(String email, String password) throws Exception {
-        String body = "email=" + encode(email) + "&password=" + encode(password);
+        return login(email, password, false);
+    }
+
+    /**
+     * Form login with the "remember me" checkbox state. When {@code rememberMe} is
+     * true the form posts {@code remember-me=true} (the parameter
+     * TokenBasedRememberMeServices looks for), so a successful login also issues the
+     * persistent {@code remember-me} cookie on the response.
+     */
+    public HttpResponse<String> login(String email, String password, boolean rememberMe) throws Exception {
+        String body = "email=" + encode(email) + "&password=" + encode(password)
+                + (rememberMe ? "&remember-me=true" : "");
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/login"))
@@ -196,6 +212,21 @@ public class AuthServerClient implements AutoCloseable {
                 .build();
 
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Simulates closing and reopening the browser: drops all session cookies (those
+     * carrying no Max-Age, e.g. JSESSIONID) from the browser session's cookie jar
+     * while keeping persistent ones (the remember-me cookie carries a Max-Age). The
+     * next request therefore arrives with no HTTP session but still presents the
+     * remember-me cookie.
+     */
+    public void clearSessionCookies() {
+        CookieStore cookieStore = cookieManager.getCookieStore();
+        List<HttpCookie> sessionCookies = cookieStore.getCookies().stream()
+                .filter(cookie -> cookie.getMaxAge() < 0)
+                .toList();
+        sessionCookies.forEach(cookie -> cookieStore.remove(null, cookie));
     }
 
     /**
