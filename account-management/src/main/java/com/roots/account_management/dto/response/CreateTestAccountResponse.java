@@ -4,7 +4,7 @@ import java.util.List;
 
 import com.roots.account_management.enums.Role;
 
-public record CreateAccountResponse(
+public record CreateTestAccountResponse(
         String name,
         String email,
         String userGUID,

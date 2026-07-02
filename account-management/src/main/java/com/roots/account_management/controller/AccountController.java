@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
-import com.roots.account_management.dto.response.CreateAccountResponse;
+import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.dto.response.UserCredentialResponse;
 import com.roots.account_management.dto.response.UserCredentialTestingResponse;
 import com.roots.account_management.exception.UserCredentialNotFoundException;
@@ -40,7 +40,7 @@ public class AccountController {
     @PostMapping("/test")
     @PreAuthorize("hasAuthority('INTEGRATION_TEST_CLIENT_WRITE')")
     @ResponseStatus(HttpStatus.CREATED)
-    public CreateAccountResponse createTestAccount(@RequestBody CreateAccountRequest createAccountRequest) {
+    public CreateTestAccountResponse createTestAccount(@RequestBody CreateAccountRequest createAccountRequest) {
         validator.validateCreateAccountRequest(createAccountRequest);
         return accountService.createTestAccount(createAccountRequest);
     }

@@ -14,7 +14,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.roots.account_management.controller.AccountController;
 import com.roots.account_management.dto.request.CreateAccountRequest;
-import com.roots.account_management.dto.response.CreateAccountResponse;
+import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.enums.Role;
 import com.roots.account_management.exception.EmailAlreadyExistsException;
 import com.roots.account_management.exception.GlobalExceptionHandler;
@@ -64,7 +64,7 @@ class AccountControllerTest {
     void createTestAccount_withValidRequest_returns201AndBody() throws Exception {
         CreateAccountRequest request = new CreateAccountRequest(
                 "Jane", "jane@example.com", "Password123", false, true, true, List.of(Role.PASTOR));
-        CreateAccountResponse response = new CreateAccountResponse(
+        CreateTestAccountResponse response = new CreateTestAccountResponse(
                 "Jane", "jane@example.com", "generated-guid", false, true, true, List.of(Role.MEMBER, Role.PASTOR));
         when(accountService.createTestAccount(any())).thenReturn(response);
 
