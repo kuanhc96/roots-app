@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
-import com.roots.account_management.dto.response.CreateAccountResponse;
+import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.enums.Role;
 import com.roots.account_management.exception.EmailAlreadyExistsException;
 import com.roots.account_management.exception.UserCredentialNotFoundException;
@@ -30,7 +30,7 @@ public class AccountService {
     private final PasswordEncoder passwordEncoder;
 
     @Transactional
-    public CreateAccountResponse createTestAccount(CreateAccountRequest request) {
+    public CreateTestAccountResponse createTestAccount(CreateAccountRequest request) {
         if (userCredentialRepository.findByEmail(request.email()).isPresent()) {
             throw new EmailAlreadyExistsException("An account with this email already exists");
         }
@@ -55,7 +55,7 @@ public class AccountService {
             roleRepository.insert(credentialId, role.getValue());
         }
 
-        return new CreateAccountResponse(
+        return new CreateTestAccountResponse(
                 request.name(),
                 request.email(),
                 userGUID,

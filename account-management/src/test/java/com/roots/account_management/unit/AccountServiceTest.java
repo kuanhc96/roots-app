@@ -13,7 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
-import com.roots.account_management.dto.response.CreateAccountResponse;
+import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.enums.Role;
 import com.roots.account_management.exception.EmailAlreadyExistsException;
 import com.roots.account_management.model.UserCredential;
@@ -58,7 +58,7 @@ class AccountServiceTest {
         when(passwordEncoder.encode("Password123")).thenReturn("ENCODED");
         when(userCredentialRepository.insert(any(UserCredential.class))).thenReturn(CREDENTIAL_ID);
 
-        CreateAccountResponse response = accountService.createTestAccount(request);
+        CreateTestAccountResponse response = accountService.createTestAccount(request);
 
         // Credential is inserted with the hashed password, the request flags, and a generated guid.
         ArgumentCaptor<UserCredential> captor = ArgumentCaptor.forClass(UserCredential.class);
@@ -97,7 +97,7 @@ class AccountServiceTest {
         when(passwordEncoder.encode(any())).thenReturn("ENCODED");
         when(userCredentialRepository.insert(any(UserCredential.class))).thenReturn(CREDENTIAL_ID);
 
-        CreateAccountResponse response = accountService.createTestAccount(request);
+        CreateTestAccountResponse response = accountService.createTestAccount(request);
 
         assertThat(response.roles()).containsExactly(Role.MEMBER);
         assertThat(response.mfaEnabled()).isTrue();
@@ -116,7 +116,7 @@ class AccountServiceTest {
         when(passwordEncoder.encode(any())).thenReturn("ENCODED");
         when(userCredentialRepository.insert(any(UserCredential.class))).thenReturn(CREDENTIAL_ID);
 
-        CreateAccountResponse response = accountService.createTestAccount(request);
+        CreateTestAccountResponse response = accountService.createTestAccount(request);
 
         // MEMBER (floor) is added first, then DEACON; the duplicate DEACON is dropped.
         assertThat(response.roles()).containsExactly(Role.MEMBER, Role.DEACON);

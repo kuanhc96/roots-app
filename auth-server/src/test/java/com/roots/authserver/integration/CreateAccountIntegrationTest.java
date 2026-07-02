@@ -17,9 +17,6 @@ class CreateAccountIntegrationTest extends IntegrationTestBase {
     @Value("${web-client-location}")
     private String webClientLocation;
 
-    @Value("${integration-test-client-secret}")
-    private String integrationTestClientSecret;
-
     private String redirectUri;
     private String email;
 
@@ -48,13 +45,8 @@ class CreateAccountIntegrationTest extends IntegrationTestBase {
         assertThat(loginResponse.statusCode()).isEqualTo(302);
         assertThat(loginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/signup/success");
 
-        // 3. Client-credentials token exchange for the integration-test client.
-        TokenResponse ccToken = oAuth2Client.getClientCredentialsToken(
-                "INTEGRATION_TEST_CLIENT", integrationTestClientSecret, "INTEGRATION_TEST_CLIENT_WRITE");
-        assertThat(ccToken.accessToken()).isNotBlank();
-
         // 4. Use the access token to mint the magic-link token for the new account.
-        HttpResponse<String> magicLinkResponse = authServerClient.generateMagicLinkToken(ccToken.accessToken(), email);
+        HttpResponse<String> magicLinkResponse = authServerClient.generateMagicLinkToken(email);
         assertThat(magicLinkResponse.statusCode()).isEqualTo(200);
         String magicLinkToken = magicLinkResponse.body();
         assertThat(magicLinkToken).isNotBlank();

@@ -22,8 +22,9 @@ public class AuthServerClient implements AutoCloseable {
     // httpClient.
     private final HttpClient machineClient;
     private final ObjectMapper objectMapper;
+    private final String accessToken;
 
-    public AuthServerClient(String baseUrl) {
+    public AuthServerClient(String baseUrl, String accessToken) {
         this.baseUrl = baseUrl;
         this.httpClient = HttpClient.newBuilder()
                 .cookieHandler(new CookieManager())
@@ -34,6 +35,7 @@ public class AuthServerClient implements AutoCloseable {
                 .build();
         this.objectMapper = new ObjectMapper()
                 .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
+        this.accessToken = accessToken;
     }
 
     /**
@@ -106,7 +108,7 @@ public class AuthServerClient implements AutoCloseable {
      * Runs on the cookie-less client; the email is passed explicitly rather than
      * inferred from a session. Returns the raw response (200 body is the token value).
      */
-    public HttpResponse<String> generateMagicLinkToken(String accessToken, String email) throws Exception {
+    public HttpResponse<String> generateMagicLinkToken(String email) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/magic-link/generate/test?email=" + encode(email)))
                 .header("Authorization", "Bearer " + accessToken)
@@ -121,12 +123,7 @@ public class AuthServerClient implements AutoCloseable {
      * negative-path tests to assert the endpoint rejects unauthenticated calls.
      */
     public HttpResponse<String> generateMagicLinkTokenWithoutAuth(String email) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/magic-link/generate/test?email=" + encode(email)))
-                .POST(HttpRequest.BodyPublishers.noBody())
-                .build();
-
-        return machineClient.send(request, HttpResponse.BodyHandlers.ofString());
+        return generateMagicLinkTokenWithRawToken("", email);
     }
 
     /**

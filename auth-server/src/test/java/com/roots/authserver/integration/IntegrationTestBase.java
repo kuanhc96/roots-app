@@ -1,5 +1,7 @@
 package com.roots.authserver.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,13 +29,28 @@ abstract class IntegrationTestBase {
     @Value("${auth-server-location}")
     protected String authServerLocation;
 
+    @Value("${account-management-location}")
+    protected String accountManagementLocation;
+
+    @Value("${integration-test-client-secret}")
+    private String integrationTestClientSecret;
+
     protected AuthServerClient authServerClient;
     protected OAuth2Client oAuth2Client;
+    protected AccountManagementClient accountManagementClient;
 
     @BeforeEach
-    void buildClients() {
-        authServerClient = new AuthServerClient(authServerLocation);
+    void buildClients() throws Exception {
         oAuth2Client = new OAuth2Client(authServerLocation);
+
+        // Client-credentials token exchange for the integration-test client.
+        TokenResponse ccToken = oAuth2Client.getClientCredentialsToken(
+                "INTEGRATION_TEST_CLIENT", integrationTestClientSecret, "INTEGRATION_TEST_CLIENT_WRITE");
+        assertThat(ccToken.accessToken()).isNotBlank();
+
+        authServerClient = new AuthServerClient(authServerLocation, ccToken.accessToken());
+        // RestTemplate-backed, no pooled connections to reap — nothing to close in @AfterEach.
+        accountManagementClient = new AccountManagementClient(accountManagementLocation, ccToken.accessToken());
     }
 
     @AfterEach
