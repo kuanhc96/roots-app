@@ -123,12 +123,7 @@ public class AuthServerClient implements AutoCloseable {
      * negative-path tests to assert the endpoint rejects unauthenticated calls.
      */
     public HttpResponse<String> generateMagicLinkTokenWithoutAuth(String email) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/magic-link/generate/test?email=" + encode(email)))
-                .POST(HttpRequest.BodyPublishers.noBody())
-                .build();
-
-        return machineClient.send(request, HttpResponse.BodyHandlers.ofString());
+        return generateMagicLinkTokenWithRawToken("", email);
     }
 
     /**
