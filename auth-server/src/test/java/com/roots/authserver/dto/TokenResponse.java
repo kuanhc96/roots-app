@@ -1,4 +1,4 @@
-package com.roots.authserver.integration;
+package com.roots.authserver.dto;
 
 /**
  * Deserialized OAuth2 token endpoint response. Shared by the authorization_code and

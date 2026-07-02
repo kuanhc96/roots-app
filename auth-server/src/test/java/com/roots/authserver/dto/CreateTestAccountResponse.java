@@ -1,4 +1,4 @@
-package com.roots.authserver.integration;
+package com.roots.authserver.dto;
 
 import java.util.List;
 

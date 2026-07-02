@@ -9,6 +9,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.roots.authserver.dto.UserCredentialTestingResponse;
+import com.roots.authserver.util.HttpFlowUtils;
+
 class CreateAccountIntegrationTest extends IntegrationTestBase {
 
     private static final String TEST_NAME = "Integration Test User";

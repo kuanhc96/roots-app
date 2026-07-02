@@ -1,9 +1,8 @@
-package com.roots.authserver.integration;
+package com.roots.authserver.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.roots.authserver.dto.request.CreateAccountRequest;
-import com.roots.authserver.dto.response.CreateAccountResponse;
 
 import java.net.CookieManager;
 import java.net.URI;
