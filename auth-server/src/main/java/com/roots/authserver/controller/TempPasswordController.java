@@ -12,13 +12,9 @@ import org.springframework.web.bind.annotation.RestController;
 import com.roots.authserver.dto.request.TempPasswordRequest;
 import com.roots.authserver.service.EmailService;
 import com.roots.authserver.service.UserCredentialService;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 
-/**
- * Forgot-password entry point. Always returns 200 regardless of whether the email
- * matches an account, so the response never reveals which addresses are registered.
- * When a match exists, a temporary password is generated, persisted, and emailed.
- */
 @RestController
 @RequestMapping("/api/temp-password")
 @RequiredArgsConstructor
@@ -27,6 +23,13 @@ public class TempPasswordController {
     private final UserCredentialService userCredentialService;
     private final EmailService emailService;
 
+    @Operation(
+            summary = "Request a temporary password (forgot-password)",
+            description = "Forgot-password entry point. Always returns 200 regardless of whether the "
+                    + "email matches an account, so the response never reveals which addresses are "
+                    + "registered. When a match exists, a temporary password is generated, persisted "
+                    + "(overwriting the stored password), and emailed."
+    )
     @PostMapping
     @ResponseStatus(HttpStatus.OK)
     public void requestTempPassword(@RequestBody TempPasswordRequest request) {
@@ -36,6 +39,14 @@ public class TempPasswordController {
         }
     }
 
+    @Operation(
+            summary = "Request a temporary password and return it (integration tests only)",
+            description = "Integration-test-only variant of /api/temp-password: returns the plaintext "
+                    + "temporary password in the response body instead of emailing it. Same side "
+                    + "effects underneath — the stored password is overwritten with the temp password's "
+                    + "hash and is_password_change_required is set to true. Guarded by the "
+                    + "INTEGRATION_TEST_CLIENT_WRITE scope."
+    )
     @PostMapping("/test")
     @ResponseStatus(HttpStatus.OK)
     @PreAuthorize("hasAuthority('INTEGRATION_TEST_CLIENT_WRITE')")

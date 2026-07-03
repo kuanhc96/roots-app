@@ -55,6 +55,15 @@ remember-me:
 web-client:
   location: ${WEB_CLIENT_LOCATION:http://localhost:3000}
 
+# Swagger/OpenAPI docs are dev-only: disabled here so every profile fails closed,
+# re-enabled solely in the dev document below. Both flags are needed — api-docs
+# covers /v3/api-docs, swagger-ui covers /swagger-ui/**.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 # ── dev (default) ─────────────────────────────────────────────────────────────
 # The JavaMailSender is still built (auto-config runs in every profile), but email
 # is off in dev: instead the OTT/magic-link token values are logged at INFO so they
@@ -67,6 +76,11 @@ spring:
 emailSender:
   enabled: false
   logToken: true
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
 
 # ── test (activated in CI; disables outbound email) ──────────────────────────
 # The JavaMailSender is built here too; emailSender.enabled=false stops actual sends.
