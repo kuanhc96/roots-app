@@ -13,7 +13,7 @@
 
     <groupId>com.roots</groupId>
     <artifactId>auth-server</artifactId>
-    <version>0.2.4-SNAPSHOT</version>
+    <version>0.2.5-SNAPSHOT</version>
     <name>auth-server</name>
     <description>Fullstack Vue/Nuxt + Spring Boot application</description>
 
