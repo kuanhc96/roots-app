@@ -37,19 +37,19 @@ public class MfaController {
         return ResponseEntity.ok().build();
     }
 
-    // Integration-test-only variant of /ott/generate. Returns the OTT value in the
-    // response body so tests can complete the MFA flow without reading the email.
-    // Guarded by the INTEGRATION_TEST_CLIENT_WRITE scope (client_credentials).
+    // Integration-test-only variant of /ott/generate. Mints the MFA OTT for the given
+    // email and returns its value in the response body so tests can complete the MFA
+    // flow without reading the email. Stateless like /magic-link/generate/test: the
+    // email is passed explicitly, because the bearer-authenticated caller's context
+    // replaces the session's pending token for this request, so the pending user
+    // cannot be read from the SecurityContextHolder here. Verification is still
+    // session-bound — POST /ott/login checks the consumed token's username against
+    // the session's pending user. Guarded by the INTEGRATION_TEST_CLIENT_WRITE scope.
     @PostMapping("/ott/generate/test")
     @PreAuthorize("hasAuthority('INTEGRATION_TEST_CLIENT_WRITE')")
-    public ResponseEntity<String> generateOneTimeTokenForTest() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (!(authentication instanceof MfaPendingAuthenticationToken)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        }
-        GenerateOneTimeTokenRequest generateOneTimeTokenRequest = new GenerateOneTimeTokenRequest(authentication.getName());
+    public ResponseEntity<String> generateOneTimeTokenForTest(@RequestParam String email) {
+        GenerateOneTimeTokenRequest generateOneTimeTokenRequest = new GenerateOneTimeTokenRequest(email);
         OneTimeToken oneTimeToken = inMemoryOneTimePinService.generate(generateOneTimeTokenRequest);
-        emailService.sendOTTEmail(authentication.getName(), oneTimeToken.getTokenValue());
         return ResponseEntity.ok(oneTimeToken.getTokenValue());
     }
 

@@ -2,6 +2,7 @@ package com.roots.authserver.integration;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.roots.authserver.dto.TokenResponse;
 
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

@@ -10,6 +10,10 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
+import com.roots.authserver.client.AccountManagementClient;
+import com.roots.authserver.client.AuthServerClient;
+import com.roots.authserver.dto.TokenResponse;
+
 /**
  * Base for the live-server integration tests. Builds a fresh {@link AuthServerClient} and
  * {@link OAuth2Client} before every test and closes them afterwards.
@@ -45,7 +49,8 @@ abstract class IntegrationTestBase {
 
         // Client-credentials token exchange for the integration-test client.
         TokenResponse ccToken = oAuth2Client.getClientCredentialsToken(
-                "INTEGRATION_TEST_CLIENT", integrationTestClientSecret, "INTEGRATION_TEST_CLIENT_WRITE");
+                "INTEGRATION_TEST_CLIENT", integrationTestClientSecret,
+                "INTEGRATION_TEST_CLIENT_WRITE INTEGRATION_TEST_CLIENT_READ INTEGRATION_TEST_CLIENT_DELETE");
         assertThat(ccToken.accessToken()).isNotBlank();
 
         authServerClient = new AuthServerClient(authServerLocation, ccToken.accessToken());
