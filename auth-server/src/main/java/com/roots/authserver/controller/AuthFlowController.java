@@ -100,7 +100,7 @@ public class AuthFlowController {
         UserDetails user = (UserDetails) pending.getPrincipal();
         var consumedToken = inMemoryOneTimePinService.consume(new OneTimeTokenAuthenticationToken(ott));
         if (consumedToken == null || !consumedToken.getUsername().equals(user.getUsername())) {
-            return "redirect:/ott/login?error=invalidToken";
+            return "redirect:/ott/login?e=invalid_token";
         } else {
             if (rememberBrowser) {
                 userCredentialService.disableMfa(user.getUsername());
@@ -116,7 +116,7 @@ public class AuthFlowController {
             if (savedRequest != null) {
                 return "redirect:" + savedRequest.getRedirectUrl();
             } else {
-                return "redirect:/ott/login?error=oauthRedirectFailed";
+                return "redirect:/ott/login?e=oauth_redirect_failed";
             }
         }
     }
@@ -131,7 +131,7 @@ public class AuthFlowController {
                     + "cannot burn it. Consumes the token, verifies it belongs to the pending "
                     + "account, marks the email verified, upgrades the session, and redirects to "
                     + "the saved OAuth2 request; a missing or invalid token redirects back with "
-                    + "error=invalidToken.",
+                    + "e=invalid_token.",
             responses = @ApiResponse(responseCode = "302",
                     description = "Redirect to the saved OAuth2 request (or the web-client base URL "
                             + "when none exists), or back to /magic-link/login or /login with an error",
@@ -150,13 +150,13 @@ public class AuthFlowController {
         }
 
         if (magicLinkToken == null || magicLinkToken.isBlank()) {
-            return "redirect:/magic-link/login?error=invalidToken";
+            return "redirect:/magic-link/login?e=invalid_token";
         }
 
         UserDetails user = (UserDetails) pending.getPrincipal();
         var consumedToken = jdbcOneTimeTokenService.consume(new OneTimeTokenAuthenticationToken(magicLinkToken));
         if (consumedToken == null || !consumedToken.getUsername().equals(user.getUsername())) {
-            return "redirect:/magic-link/login?error=invalidToken";
+            return "redirect:/magic-link/login?e=invalid_token";
         } else {
             userCredentialService.verifyEmail(user.getUsername());
 
@@ -183,7 +183,7 @@ public class AuthFlowController {
             description = "Sets the new password for a temp-password login. Requires a "
                     + "PasswordChangePendingAuthenticationToken in the session (else redirect to "
                     + "/login). Validates the new password against the shared complexity policy "
-                    + "(failure redirects back with error=invalidPassword), stores it, clears the "
+                    + "(failure redirects back with e=invalid_password), stores it, clears the "
                     + "password-change flag, marks the email verified, upgrades the session, and "
                     + "redirects to the saved OAuth2 request.",
             responses = @ApiResponse(responseCode = "302",
@@ -206,7 +206,7 @@ public class AuthFlowController {
         try {
             userCredentialService.completePasswordReset(user.getUsername(), newPassword);
         } catch (InvalidRequestException e) {
-            return "redirect:/reset-password?error=invalidPassword";
+            return "redirect:/reset-password?e=invalid_password";
         }
 
         MfaAuthenticationToken full = new MfaAuthenticationToken(user, user.getAuthorities());
@@ -245,7 +245,7 @@ public class AuthFlowController {
         if (savedRequest != null) {
             return "redirect:" + savedRequest.getRedirectUrl();
         } else {
-            return "redirect:/login?error=oauthRedirectFailed";
+            return "redirect:/login?e=oauth_redirect_failed";
         }
     }
 }

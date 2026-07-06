@@ -124,7 +124,7 @@ public class SecurityConfig {
                         // lands on the same code so responses never reveal whether an
                         // email has an account. The Nuxt login page maps the code to
                         // display text (frontend/utils/errorMessages.ts).
-                        .failureUrl("/login?error=invalidLogin")
+                        .failureUrl("/login?e=invalid_login")
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))

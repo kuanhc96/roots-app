@@ -25,6 +25,6 @@
 const route = useRoute()
 const magicLinkToken = (route.query.magicLinkToken as string) ?? ''
 
-// A failed verification 302s back here with ?error=invalidToken.
+// A failed verification 302s back here with ?e=invalid_token.
 const magicLinkErrorMessage = useServerErrorMessage()
 </script>

@@ -7,7 +7,7 @@ onBeforeMount(() => {
     }
   }).then(response => {
     if (response.status === 403) {
-      useRouter().replace('/login?error=noMfaPending')
+      useRouter().replace('/login?e=no_mfa_pending')
     } else if (!response.ok) {
       console.log("Failed to generate OTT token")
     } else {

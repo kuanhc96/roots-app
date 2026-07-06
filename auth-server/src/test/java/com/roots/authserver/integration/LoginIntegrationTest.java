@@ -203,7 +203,7 @@ class LoginIntegrationTest extends IntegrationTestBase {
             HttpResponse<String> loginResponse = authServerClient.login(email, "WrongPassword1");
             assertThat(loginResponse.statusCode()).isEqualTo(302);
             assertThat(loginResponse.headers().firstValue("Location").orElseThrow())
-                    .endsWith("/login?error=invalidLogin");
+                    .endsWith("/login?e=invalid_login");
         }
 
         @Test
@@ -214,7 +214,7 @@ class LoginIntegrationTest extends IntegrationTestBase {
             HttpResponse<String> loginResponse = authServerClient.login(unknownEmail, TEST_PASSWORD);
             assertThat(loginResponse.statusCode()).isEqualTo(302);
             assertThat(loginResponse.headers().firstValue("Location").orElseThrow())
-                    .endsWith("/login?error=invalidLogin");
+                    .endsWith("/login?e=invalid_login");
         }
     }
 

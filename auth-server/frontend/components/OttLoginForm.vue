@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// A failed verification 302s back here with ?error=<code> (e.g. invalidToken).
+// A failed verification 302s back here with ?e=<code> (e.g. invalid_token).
 const ottErrorMessage = useServerErrorMessage()
 </script>
 

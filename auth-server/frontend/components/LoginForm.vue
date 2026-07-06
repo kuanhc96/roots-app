@@ -41,7 +41,7 @@ const route = useRoute()
 const email = ref((route.query.email as string) ?? '')
 const showNotice = ref(route.query.notice === 'tempPasswordSent')
 
-// A failed login 302s here with ?error=<code> (e.g. invalidLogin); the composable
+// A failed login 302s here with ?e=<code> (e.g. invalid_login); the composable
 // maps it to display text and scrubs the code from the URL after mount.
 const loginErrorMessage = useServerErrorMessage()
 </script>

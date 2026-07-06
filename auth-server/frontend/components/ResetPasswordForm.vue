@@ -30,7 +30,7 @@ const { value: confirmNewPassword, errorMessage: confirmNewPasswordError } =
 const resetForm = ref<HTMLFormElement | null>(null)
 
 // A server-side rejection of the new password 302s back here with
-// ?error=invalidPassword (the client-side rules should catch it first).
+// ?e=invalid_password (the client-side rules should catch it first).
 const resetErrorMessage = useServerErrorMessage()
 
 const onSubmit = handleSubmit(() => {
