@@ -2,14 +2,14 @@
 export default defineNuxtConfig({
   devtools: { enabled: true },
 
-  // Generate a fully static site that Spring Boot can serve
-  ssr: true,
+  // Pure SPA: Spring Boot serves one static index.html for every page path and the
+  // client router owns routing from there. With prerendering (ssr: true + generate),
+  // each route hydrated against a build-time payload and dropped its runtime query
+  // string — which forced server-side workarounds (session-stashed tokens, per-route
+  // controller forwards). No hydration means useRoute().query works on full page loads.
+  ssr: false,
 
   modules: ['vuetify-nuxt-module'],
-
-  routeRules: {
-    '/': { redirect: '/login' },
-  },
 
   app: {
     head: {

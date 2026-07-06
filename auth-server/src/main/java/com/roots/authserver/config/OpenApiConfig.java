@@ -3,7 +3,7 @@ package com.roots.authserver.config;
 import org.springdoc.core.utils.SpringDocUtils;
 import org.springframework.context.annotation.Configuration;
 
-import com.roots.authserver.controller.SpaController;
+import com.roots.authserver.controller.AuthFlowController;
 
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.info.Info;
@@ -20,9 +20,9 @@ import io.swagger.v3.oas.annotations.info.Info;
 public class OpenApiConfig {
 
     static {
-        // SpaController is a view-forwarding @Controller (no @ResponseBody), which
+        // AuthFlowController is a view-forwarding @Controller (no @ResponseBody), which
         // springdoc skips by default; register it so the browser-facing login-flow
         // endpoints it hosts appear in the API docs.
-        SpringDocUtils.getConfig().addRestControllers(SpaController.class);
+        SpringDocUtils.getConfig().addRestControllers(AuthFlowController.class);
     }
 }
