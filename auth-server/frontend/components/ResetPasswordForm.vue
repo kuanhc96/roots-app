@@ -29,6 +29,10 @@ const { value: confirmNewPassword, errorMessage: confirmNewPasswordError } =
 
 const resetForm = ref<HTMLFormElement | null>(null)
 
+// A server-side rejection of the new password 302s back here with
+// ?error=invalidPassword (the client-side rules should catch it first).
+const resetErrorMessage = useServerErrorMessage()
+
 const onSubmit = handleSubmit(() => {
   // Submit the native form so the browser navigates and follows the server's 302 into the
   // saved OAuth2 request (a fetch couldn't drive that top-level navigation).
@@ -59,6 +63,9 @@ const onSubmit = handleSubmit(() => {
           type="password"
           :error-messages="confirmNewPasswordError"
         />
+        <v-alert v-if="resetErrorMessage" type="warning" density="compact">
+          {{ resetErrorMessage }}
+        </v-alert>
       </v-card-text>
       <v-card-actions>
         <v-btn type="submit" :loading="isSubmitting" :disabled="isSubmitting">
