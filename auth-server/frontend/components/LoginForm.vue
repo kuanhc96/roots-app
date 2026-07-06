@@ -10,6 +10,9 @@
         <v-text-field name="password" label="Password" type="password" form="login-form" />
         <NuxtLink to="/forgot-password">Forgot?</NuxtLink>
         <v-checkbox name="remember-me" value="true" label="Remember Me?" form="login-form" />
+        <v-alert v-if="loginErrorMessage" type="warning" density="compact">
+          {{ loginErrorMessage }}
+        </v-alert>
       </v-card-text>
       <v-card-actions>
         <v-btn type="submit" form="login-form">Login</v-btn>
@@ -37,4 +40,8 @@
 const route = useRoute()
 const email = ref((route.query.email as string) ?? '')
 const showNotice = ref(route.query.notice === 'tempPasswordSent')
+
+// A failed login 302s here with ?error=<code> (e.g. invalidLogin); the composable
+// maps it to display text and scrubs the code from the URL after mount.
+const loginErrorMessage = useServerErrorMessage()
 </script>
