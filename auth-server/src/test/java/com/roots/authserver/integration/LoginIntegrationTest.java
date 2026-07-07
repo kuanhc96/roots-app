@@ -179,6 +179,46 @@ class LoginIntegrationTest extends IntegrationTestBase {
     }
 
     @Nested
+    class InvalidCredentials {
+        @BeforeEach
+        void createTestAccount() {
+            // 1. Create a fully set-up account (MFA off, verified, no password change) so
+            //    the only thing that can fail the login is the credentials themselves.
+            email = "itest_" + UUID.randomUUID() + "@example.com";
+            ResponseEntity<CreateTestAccountResponse> createResponse = accountManagementClient.createTestAccount(
+                    TEST_NAME, email, TEST_PASSWORD,
+                    false /* mfaEnabled */, true /* emailVerified */, false /* passwordChangeRequired */);
+            assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
+            assertThat(createResponse.getBody()).isNotNull();
+            userGUID = createResponse.getBody().userGUID();
+            assertThat(userGUID).isNotBlank();
+        }
+
+        @Test
+        void login_withWrongPassword_redirectsToLoginWithInvalidLoginError() throws Exception {
+            // 2. Log in with the right email but the wrong password. The failure handler
+            //    redirects to the login page with the generic error code — the same code
+            //    an unknown email produces, so the response never reveals whether the
+            //    email has an account.
+            HttpResponse<String> loginResponse = authServerClient.login(email, "WrongPassword1");
+            assertThat(loginResponse.statusCode()).isEqualTo(302);
+            assertThat(loginResponse.headers().firstValue("Location").orElseThrow())
+                    .endsWith("/login?e=invalid_login");
+        }
+
+        @Test
+        void login_withUnknownEmail_redirectsToLoginWithInvalidLoginError() throws Exception {
+            // 2. Log in with an email no account has. The redirect must be identical to
+            //    the wrong-password case (anti-enumeration).
+            String unknownEmail = "nosuchuser_" + UUID.randomUUID() + "@example.com";
+            HttpResponse<String> loginResponse = authServerClient.login(unknownEmail, TEST_PASSWORD);
+            assertThat(loginResponse.statusCode()).isEqualTo(302);
+            assertThat(loginResponse.headers().firstValue("Location").orElseThrow())
+                    .endsWith("/login?e=invalid_login");
+        }
+    }
+
+    @Nested
     class MfaEnabled_EmailVerified_PasswordChangeNotRequired {
         @BeforeEach
         void createTestAccount() {

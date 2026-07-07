@@ -1,0 +1,10 @@
+// Maps machine-readable error codes (the `e` query param on redirects from the
+// auth-server) to the messages the frontend displays. The server only ever sends a
+// code; the display text is owned here. An unmapped code displays nothing.
+export const errorMessages: Record<string, string> = {
+  invalid_login: 'The provided email/password combination is invalid',
+  invalid_token: 'This verification code or link is invalid or has expired. Please request a new one.',
+  invalid_password: 'The new password does not meet the password requirements',
+  oauth_redirect_failed: 'Something went wrong resuming your sign-in. Please start over.',
+  no_mfa_pending: 'Your login session has expired. Please log in again.',
+}

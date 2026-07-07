@@ -1,5 +1,6 @@
 <script setup lang="ts">
-
+// A failed verification 302s back here with ?e=<code> (e.g. invalid_token).
+const ottErrorMessage = useServerErrorMessage()
 </script>
 
 <template>
@@ -9,6 +10,9 @@
       <v-card-text>
         <v-text-field name="ott" label="One Time Token" type="text" />
         <v-checkbox name="rememberBrowser" value="true" label="Remember this browser?" />
+        <v-alert v-if="ottErrorMessage" type="warning" density="compact">
+          {{ ottErrorMessage }}
+        </v-alert>
       </v-card-text>
       <v-card-actions>
         <v-btn type="submit">Verify</v-btn>
