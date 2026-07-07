@@ -1,7 +1,5 @@
 package com.roots.authserver.integration;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.roots.authserver.dto.TokenResponse;
 
 import org.junit.jupiter.api.Nested;
@@ -20,8 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Negative-path integration tests against a live auth-server (localhost:9000).
  * Two concerns, split into @Nested groups:
- *   - {@link CreateAccountValidation}: POST /api/accounts rejects bad input (400) and
- *     duplicate emails (409).
+ *   - {@link CreateAccountValidation}: the POST /signup form post redirects bad input back
+ *     to /signup with e=invalid_request and duplicate emails with e=email_taken.
  *   - {@link TestEndpointAuthorization}: the bearer-guarded POST /magic-link/generate/test
  *     rejects missing / wrong-scope / malformed tokens (401 / 403).
  */
@@ -29,19 +27,12 @@ class NegativeCaseIntegrationTest extends IntegrationTestBase {
 
     private static final String VALID_NAME = "Integration Test User";
     private static final String VALID_PASSWORD = "Password123";
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Value("${integration-test-client-secret}")
     private String integrationTestClientSecret;
 
     private static String uniqueEmail() {
         return "itest+" + UUID.randomUUID() + "@example.com";
-    }
-
-    private static void assertHasErrorField(String body) throws Exception {
-        JsonNode json = OBJECT_MAPPER.readTree(body);
-        assertThat(json.hasNonNull("error")).isTrue();
-        assertThat(json.get("error").asText()).isNotBlank();
     }
 
     @Nested
@@ -67,26 +58,29 @@ class NegativeCaseIntegrationTest extends IntegrationTestBase {
             );
         }
 
-        @ParameterizedTest(name = "{0} -> 400")
+        @ParameterizedTest(name = "{0} -> e=invalid_request")
         @MethodSource("invalidCreateAccountRequests")
-        void createAccount_withInvalidInput_returns400(
+        void createAccount_withInvalidInput_redirectsWithInvalidRequest(
                 String caseName, String name, String email, String password) throws Exception {
             HttpResponse<String> response = authServerClient.createAccount(name, email, password);
 
-            assertThat(response.statusCode()).isEqualTo(400);
-            assertHasErrorField(response.body());
+            assertThat(response.statusCode()).isEqualTo(302);
+            String location = response.headers().firstValue("Location").orElseThrow();
+            assertThat(location).contains("/signup?").contains("e=invalid_request");
         }
 
         @Test
-        void createAccount_withDuplicateEmail_returns409() throws Exception {
+        void createAccount_withDuplicateEmail_redirectsWithEmailTaken() throws Exception {
             String email = uniqueEmail();
 
             HttpResponse<String> first = authServerClient.createAccount(VALID_NAME, email, VALID_PASSWORD);
-            assertThat(first.statusCode()).isEqualTo(201);
+            assertThat(first.statusCode()).isEqualTo(302);
+            assertThat(first.headers().firstValue("Location").orElseThrow()).endsWith("/signup/success");
 
             HttpResponse<String> duplicate = authServerClient.createAccount(VALID_NAME, email, VALID_PASSWORD);
-            assertThat(duplicate.statusCode()).isEqualTo(409);
-            assertHasErrorField(duplicate.body());
+            assertThat(duplicate.statusCode()).isEqualTo(302);
+            String location = duplicate.headers().firstValue("Location").orElseThrow();
+            assertThat(location).contains("/signup?").contains("e=email_taken");
         }
     }
 

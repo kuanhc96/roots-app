@@ -144,11 +144,10 @@ Each test builds its own `AuthServerClient`/`OAuth2Client` and closes them after
 `CreateAccountIntegrationTest` verifies the full self-service account creation + magic-link verification flow end-to-end:
 
 1. Starts an OAuth2 authorization request to seed the session's saved request.
-2. Creates an account (`POST /api/accounts`) with placeholder values and a **randomized email** (so the test is rerunnable against a persistent DB), asserting `201`.
-3. Auto-logs-in (`POST /login`); the unverified email redirects to `/signup/success` (the "check your email" page).
-4. Obtains an `INTEGRATION_TEST_CLIENT` access token via the `client_credentials` flow.
-5. Calls `POST /magic-link/generate/test` with that token to obtain the magic-link token directly.
-6. Completes verification (`POST /magic-link/login`) and follows the redirect chain to the web-client callback, asserting an authorization `code` is present.
+2. Submits the signup form (form-encoded `POST /signup`) with placeholder values and a **randomized email** (so the test is rerunnable against a persistent DB), asserting the `302` to `/signup/success` — the account is created and the session becomes email-verification pending in that one request (no separate login round trip).
+3. Obtains an `INTEGRATION_TEST_CLIENT` access token via the `client_credentials` flow.
+4. Calls `POST /magic-link/generate/test` with that token to obtain the magic-link token directly.
+5. Completes verification (`POST /magic-link/login`) and follows the redirect chain to the web-client callback, asserting an authorization `code` is present.
 
 ## CI
 
@@ -209,25 +208,24 @@ The workflow at `.github/workflows/auth-server-cd.yml` triggers on every push to
 
 ## Account Creation
 
-New users self-register through the Nuxt `/signup` page, which POSTs to `POST /api/accounts`. The endpoint is public (`permitAll`, CSRF disabled) and is structured controller → service → repository.
+New users self-register through the Nuxt `/signup` page, which submits a **native form `POST /signup`** — a browser navigation, not an AJAX call, so the server owns every redirect. The endpoint is public (`permitAll`, CSRF disabled). `GET /signup` is served by `AuthFlowController.forwardSpaShell` (the path carries a `@PostMapping`, so it can't rely on the static-resource fallback).
 
 ### Flow
 
-1. The `/signup` Nuxt page (`SignupForm.vue`) collects name, email, password, and confirm-password, validating them client-side with **vee-validate** + **yup**. On success it POSTs `{ name, email, password }` as JSON to `/api/accounts`.
-2. `AccountController.createAccount()` delegates to `UserCredentialService.createAccount()` (`@Transactional`).
-3. `Validator.validateCreateAccountRequest` re-validates the request server-side — name required and ≤ 255 chars; email required and contains `@`; password required, ≥ 8 chars, with at least one uppercase letter, one lowercase letter, and one number. Any violation throws `InvalidRequestException` → **400**. (The password rule lives in `Validator.validatePassword`, shared with the reset flow; the earlier `CreateAccountValidator` class was folded into `Validator`.)
-4. Duplicate emails are rejected: if `findByEmail` already returns a row, the service throws `EmailAlreadyExistsException` → **409** (the `UNIQUE(email)` constraint is the final race backstop).
+1. The `/signup` Nuxt page (`SignupForm.vue`) collects name, email, password, and confirm-password, validating them client-side with **vee-validate** + **yup**. The Vuetify fields bind to a native `<form id="signup-form" method="post" action="/signup">` via the HTML `form` attribute (the `LoginForm.vue` pattern); `handleSubmit` intercepts the submit event and, when valid, resumes the native submission — posting `name`/`email`/`password` form-encoded. The confirm field is client-side only and not bound to the form.
+2. `AuthFlowController.signup()` (`POST /signup`) calls `UserCredentialService.createAccount()` (`@Transactional`).
+3. `Validator.validateCreateAccountRequest` re-validates the request server-side — name required and ≤ 255 chars; email required and contains `@`; password required, ≥ 8 chars, with at least one uppercase letter, one lowercase letter, and one number. Any violation raises `InvalidRequestException`, which `signup()` catches and answers with `302 /signup?e=invalid_request&name=…&email=…` (strictly percent-encoded; the page prefills name/email so only the password is re-typed). (The password rule lives in `Validator.validatePassword`, shared with the reset flow.)
+4. Duplicate emails are rejected: if `findByEmail` already returns a row, the service throws `EmailAlreadyExistsException`, caught and answered with `302 /signup?e=email_taken&name=…&email=…` (the `UNIQUE(email)` constraint is the final race backstop). The signup page maps the `e` codes to display text via `utils/errorMessages.ts`.
 5. The password is hashed with the `PasswordEncoder` bean (delegating encoder → `{bcrypt}`). A `user_guid` is generated with `UUID`, `is_mfa_enabled` is set to `true`, and `is_email_verified` to `false`.
 6. `UserCredentialRepository.insert()` inserts the `user_credential` row (returning the generated id via `GeneratedKeyHolder`), then `RoleRepository.insert()` adds a default `member` role for that credential — both inside the same transaction.
-7. On success the endpoint returns **201 Created** with `CreateAccountResponse(name, email)`.
 
-### Auto-login & email verification (magic link)
+### Pending session & email verification (magic link)
 
-Rather than make the new user re-type their credentials on the login form, the signup page **automatically starts the authorization-code flow** with the credentials just entered, which routes the brand-new (unverified) account through email verification:
+The account was created in this very request, so the first factor is proven without a login round trip — the controller establishes the email-verification pending session directly and the password never makes a second trip through the browser:
 
-1. After the `201` from `/api/accounts`, `SignupForm.vue` auto-submits a hidden native `<form method="post" action="/login">` carrying the same `email` + `password` (param names match `usernameParameter("email")` / default `password`; CSRF is disabled). The browser navigates, handing off to Spring Security's form-login pipeline.
-2. `MfaAwareDaoAuthenticationProvider` validates the password, sees `is_email_verified = false`, and returns a `CreateAccountPendingAuthenticationToken` (not yet authenticated).
-3. `MfaRedirectAuthenticationSuccessHandler` builds an absolute magic-link URL — `…/magic-link/login?magicLinkToken=<otp>` via `ServletUriComponentsBuilder.fromCurrentContextPath()` on the request thread — emails it with `EmailService.sendMagicLinkEmail`, and redirects the browser to `/signup/success` ("check your email to continue").
+1. `AuthFlowController.signup()` loads the new account's `UserDetails` via the `UserDetailsService` and stores a `CreateAccountPendingAuthenticationToken` in the session (`HttpSessionSecurityContextRepository.saveContext`) — exactly the state a form login with an unverified email would produce.
+2. It then calls `MagicLinkService.issueAndEmail(email)`, which generates the token via `JdbcOneTimeTokenService`, builds an absolute magic-link URL — `…/magic-link/login?magicLinkToken=<otp>` via `ServletUriComponentsBuilder.fromCurrentContextPath()` on the request thread — and emails it with `EmailService.sendMagicLinkEmail`. The response is a `302` to `/signup/success` ("check your email to continue").
+3. A *manual* login with a still-unverified email takes the classic route to the same place: `MfaAwareDaoAuthenticationProvider` validates the password, sees `is_email_verified = false`, and returns a `CreateAccountPendingAuthenticationToken`; `MfaRedirectAuthenticationSuccessHandler` then delegates to the same `MagicLinkService` and redirects to `/signup/success`.
 4. The user clicks the link → `GET /magic-link/login?magicLinkToken=<otp>`. `AuthFlowController.forwardSpaShell` forwards to the SPA shell (an explicit GET mapping: the path also has a `@PostMapping`, and Spring MVC answers a path-match/method-mismatch with 405 instead of falling through to the static fallback); the Nuxt `magic-link/login` page reads the token from `useRoute().query` — the frontend runs in SPA mode (`ssr: false`), so there is no hydration and the query string survives the full page load — and puts it in a hidden field of the verification form.
 
 5. The page renders a **"Continue with login"** button — a native `<form method="post" action="/magic-link/login">` carrying the hidden `magicLinkToken` field, with **no auto-submit**. The user clicks it → `POST /magic-link/login`. `AuthFlowController.verifyMagicLink` binds the token with `@RequestParam`, consumes it via `JdbcOneTimeTokenService` (a delete-and-return against the `one_time_tokens` table, then checks the returned `username` matches the pending account's email), calls `UserCredentialService.verifyEmail` (sets `is_email_verified = true`), builds a fully authenticated `MfaAuthenticationToken`, saves it to the session, and redirects to the **saved OAuth2 request** — completing the authorization-code grant back to web-client. (A missing/blank token, or one that fails to consume, redirects to `/magic-link/login?e=invalid_token`, which the page displays via `utils/errorMessages.ts`.)
@@ -239,34 +237,20 @@ Rather than make the new user re-type their credentials on the login form, the s
 
 | Class | Package | Role |
 |---|---|---|
-| `AccountController` | `controller/` | `POST /api/accounts`; `@ResponseStatus(CREATED)`; delegates to `UserCredentialService` |
-| `CreateAccountRequest` | `dto/request/` | Record `(name, email, password)` — request body |
-| `CreateAccountResponse` | `dto/response/` | Record `(name, email)` — response body |
+| `AuthFlowController` | `controller/` | `signup` (`POST /signup`) — creates the account, establishes the pending session, issues the magic link, redirects to `/signup/success` (errors: `e=invalid_request` / `e=email_taken` back to `/signup` with name/email prefill); `verifyMagicLink` (`POST /magic-link/login`) binds `magicLinkToken` (`@RequestParam`, posted by the Nuxt page from the link's query string), consumes it, verifies email, upgrades the session, redirects to the saved request or web-client |
+| `MagicLinkService` | `service/` | `issueAndEmail(email)` — generates the magic-link token (`JdbcOneTimeTokenService`), builds the absolute URL from the current request, emails it; shared by `signup()` and the success handler |
+| `CreateAccountRequest` | `dto/request/` | Record `(name, email, password)` — built by `signup()` from the form params |
 | `Validator` | `validator/` | Server-side field validation (`validateCreateAccountRequest`) and the shared password policy (`validatePassword`); throws `InvalidRequestException` |
-| `UserCredentialService` | `service/` | `createAccount(request)` (`@Transactional`); `verifyEmail(email)` sets `is_email_verified = true` |
+| `UserCredentialService` | `service/` | `createAccount(request)` — orchestrates validation, duplicate check, hashing, and both inserts (`@Transactional`); `verifyEmail(email)` sets `is_email_verified = true` |
 | `UserCredentialRepository` | `repository/` | `insert(UserCredential)` returns the generated id via `GeneratedKeyHolder`; `verifyEmail(email)` |
 | `RoleRepository` | `repository/` | `insert(credentialId, roleName)` — adds a role row with a generated `role_guid` |
-| `MfaAwareDaoAuthenticationProvider` | `component/` | Routes an unverified account to `CreateAccountPendingAuthenticationToken` after validating the password |
+| `MfaAwareDaoAuthenticationProvider` | `component/` | Routes an unverified account on a *manual* login to `CreateAccountPendingAuthenticationToken` after validating the password |
 | `CreateAccountPendingAuthenticationToken` | `principal/` | First factor passed but email unverified; `isAuthenticated() = false` |
-| `MfaRedirectAuthenticationSuccessHandler` | `component/` | For the pending token, emails the magic link and redirects to `/signup/success` |
-| `AuthFlowController` | `controller/` | `verifyMagicLink` (`POST /magic-link/login`) binds `magicLinkToken` (`@RequestParam`, posted by the Nuxt page from the link's query string), consumes it, verifies email, upgrades the session, redirects to the saved request or web-client |
+| `MfaRedirectAuthenticationSuccessHandler` | `component/` | For the pending token, delegates to `MagicLinkService` and redirects to `/signup/success` |
 | `EmailService` | `service/` | `sendMagicLinkEmail(to, magicLink)` — sends the verification link via Gmail SMTP |
-| `InvalidRequestException` | `exception/` | Generic bad-request signal → **400** |
-| `EmailAlreadyExistsException` | `exception/` | Duplicate email → **409** |
-| `GlobalExceptionHandler` | `exception/` | `@RestControllerAdvice` mapping the two exceptions to 400 / 409 with a `{"error": "..."}` body |
-
-| Class | Package | Role |
-|---|---|---|
-| `AccountController` | `controller/` | `POST /api/accounts`; `@ResponseStatus(CREATED)`; delegates to `UserCredentialService` |
-| `CreateAccountRequest` | `dto/request/` | Record `(name, email, password)` — request body |
-| `CreateAccountResponse` | `dto/response/` | Record `(name, email)` — response body |
-| `Validator` | `validator/` | Server-side field validation (`validateCreateAccountRequest`) and the shared password policy (`validatePassword`); throws `InvalidRequestException` |
-| `UserCredentialService` | `service/` | `createAccount(request)` — orchestrates validation, duplicate check, hashing, and both inserts (`@Transactional`) |
-| `UserCredentialRepository` | `repository/` | `insert(UserCredential)` returns the generated id via `GeneratedKeyHolder` |
-| `RoleRepository` | `repository/` | `insert(credentialId, roleName)` — adds a role row with a generated `role_guid` |
-| `InvalidRequestException` | `exception/` | Generic bad-request signal → **400** |
-| `EmailAlreadyExistsException` | `exception/` | Duplicate email → **409** |
-| `GlobalExceptionHandler` | `exception/` | `@RestControllerAdvice` mapping the two exceptions to 400 / 409 with a `{"error": "..."}` body |
+| `InvalidRequestException` | `exception/` | Validation failure → caught by `signup()` → `e=invalid_request` redirect |
+| `EmailAlreadyExistsException` | `exception/` | Duplicate email → caught by `signup()` → `e=email_taken` redirect |
+| `GlobalExceptionHandler` | `exception/` | `@RestControllerAdvice` JSON backstop (400 / 409 with an `{"error": "..."}` body) for REST endpoints |
 
 ## Forgot Password / Reset Password
 

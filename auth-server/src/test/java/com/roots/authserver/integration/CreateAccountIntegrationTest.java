@@ -38,26 +38,24 @@ class CreateAccountIntegrationTest extends IntegrationTestBase {
 
     @Test
     void createAccountFlow_verifiesEmailViaMagicLinkAndLandsOnCallback() throws Exception {
-        // 1. Create the account with placeholder values.
+        // 1. Submit the signup form. The account is created and the session becomes
+        //    email-verification pending in the same request — the server redirects
+        //    straight to the "check your email" page (no separate login round trip).
         HttpResponse<String> createResponse = authServerClient.createAccount(TEST_NAME, email, TEST_PASSWORD);
-        assertThat(createResponse.statusCode()).isEqualTo(201);
+        assertThat(createResponse.statusCode()).isEqualTo(302);
+        assertThat(createResponse.headers().firstValue("Location").orElseThrow()).endsWith("/signup/success");
+
         UserCredentialTestingResponse testAccount =  accountManagementClient.getTestAccountByEmail(email).getBody();
         assertThat(testAccount).isNotNull();
         assertThat(testAccount.emailVerified()).isFalse();
 
-        // 2. Auto-login with the same credentials. The email is unverified, so we are
-        //    redirected to the "check your email" page.
-        HttpResponse<String> loginResponse = authServerClient.login(email, TEST_PASSWORD);
-        assertThat(loginResponse.statusCode()).isEqualTo(302);
-        assertThat(loginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/signup/success");
-
-        // 4. Use the access token to mint the magic-link token for the new account.
+        // 2. Use the access token to mint the magic-link token for the new account.
         HttpResponse<String> magicLinkResponse = authServerClient.generateMagicLinkToken(email);
         assertThat(magicLinkResponse.statusCode()).isEqualTo(200);
         String magicLinkToken = magicLinkResponse.body();
         assertThat(magicLinkToken).isNotBlank();
 
-        // 5. Complete verification with the magic-link token, then follow the redirect
+        // 3. Complete verification with the magic-link token, then follow the redirect
         //    chain; we should land on the web-client callback with an authorization code.
         HttpResponse<String> response = HttpFlowUtils.followRedirects(
                 authServerClient, authServerLocation, authServerClient.verifyMagicLink(magicLinkToken), redirectUri);
