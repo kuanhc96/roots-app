@@ -1,5 +1,7 @@
 package com.roots.authserver.controller;
 
+import java.nio.charset.StandardCharsets;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ott.JdbcOneTimeTokenService;
@@ -8,6 +10,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
@@ -16,7 +19,10 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.util.UriUtils;
 
+import com.roots.authserver.dto.request.CreateAccountRequest;
+import com.roots.authserver.exception.EmailAlreadyExistsException;
 import com.roots.authserver.exception.InvalidRequestException;
 import com.roots.authserver.principal.CreateAccountPendingAuthenticationToken;
 import com.roots.authserver.principal.GuestAuthenticationToken;
@@ -24,6 +30,7 @@ import com.roots.authserver.principal.MfaAuthenticationToken;
 import com.roots.authserver.principal.MfaPendingAuthenticationToken;
 import com.roots.authserver.principal.PasswordChangePendingAuthenticationToken;
 import com.roots.authserver.service.InMemoryOneTimePinService;
+import com.roots.authserver.service.MagicLinkService;
 import com.roots.authserver.service.UserCredentialService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -50,6 +57,8 @@ public class AuthFlowController {
     private final InMemoryOneTimePinService inMemoryOneTimePinService;
     private final JdbcOneTimeTokenService jdbcOneTimeTokenService;
     private final UserCredentialService userCredentialService;
+    private final UserDetailsService userDetailsService;
+    private final MagicLinkService magicLinkService;
     private final AuthenticationManager authenticationManager;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
@@ -66,9 +75,63 @@ public class AuthFlowController {
             responses = @ApiResponse(responseCode = "200", description = "The Nuxt SPA shell",
                     content = @Content(mediaType = "text/html"))
     )
-    @GetMapping({"/ott/login", "/magic-link/login", "/reset-password"})
+    @GetMapping({"/ott/login", "/magic-link/login", "/reset-password", "/signup"})
     public String forwardSpaShell() {
         return "forward:/index.html";
+    }
+
+    @Operation(
+            summary = "Create an account (public signup form post)",
+            description = "Browser form post from the Nuxt /signup page. Re-validates the fields "
+                    + "server-side and creates the credential with a default member role, MFA "
+                    + "enabled, and email unverified. On success, establishes the "
+                    + "email-verification pending session (CreateAccountPendingAuthenticationToken), "
+                    + "emails the magic link, and redirects to /signup/success — no separate login "
+                    + "round trip. Rejections redirect back to /signup with an error code and the "
+                    + "submitted name/email for prefill.",
+            responses = @ApiResponse(responseCode = "302",
+                    description = "Redirect to /signup/success on success, or back to /signup with "
+                            + "e=invalid_request (validation failure) or e=email_taken (duplicate email)",
+                    content = @Content)
+    )
+    @PostMapping("/signup")
+    public String signup(
+            @Parameter(description = "Display name; 255 characters or fewer")
+            @RequestParam(required = false) String name,
+            @Parameter(description = "Email address; becomes the login username")
+            @RequestParam(required = false) String email,
+            @Parameter(description = "Password; must satisfy the shared complexity policy")
+            @RequestParam(required = false) String password,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        try {
+            userCredentialService.createAccount(new CreateAccountRequest(name, email, password));
+        } catch (InvalidRequestException e) {
+            return signupErrorRedirect("invalid_request", name, email);
+        } catch (EmailAlreadyExistsException e) {
+            return signupErrorRedirect("email_taken", name, email);
+        }
+
+        // The account was created in this very request, so the first factor is proven
+        // without a second /login round trip: establish the email-verification pending
+        // session directly, exactly as a form login with an unverified email would.
+        UserDetails user = userDetailsService.loadUserByUsername(email);
+        CreateAccountPendingAuthenticationToken pending = new CreateAccountPendingAuthenticationToken(user);
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(pending);
+        SecurityContextHolder.setContext(securityContext);
+        securityContextRepository.saveContext(securityContext, request, response);
+
+        magicLinkService.issueAndEmail(email);
+        return "redirect:/signup/success";
+    }
+
+    private static String signupErrorRedirect(String code, String name, String email) {
+        // Strict percent-encoding (space -> %20, + -> %2B) so the values survive both
+        // the Location header and Vue Router's query parsing on the signup page.
+        return "redirect:/signup?e=" + code
+                + "&name=" + UriUtils.encode(name == null ? "" : name, StandardCharsets.UTF_8)
+                + "&email=" + UriUtils.encode(email == null ? "" : email, StandardCharsets.UTF_8);
     }
 
     @Operation(
