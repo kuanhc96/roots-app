@@ -2,7 +2,6 @@ package com.roots.authserver.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
-import com.roots.authserver.dto.request.CreateAccountRequest;
 
 import java.net.CookieManager;
 import java.net.CookieStore;
@@ -75,17 +74,20 @@ public class AuthServerClient implements AutoCloseable {
     }
 
     /**
-     * Creates a new account via POST /api/accounts. Returns the raw response so the
-     * test can assert on the status (201 on success).
+     * Submits the signup form (POST /signup) on the browser session and returns the raw
+     * response. Success is a 302 to /signup/success with the email-verification pending
+     * session established; a rejection 302s back to /signup with an e code.
      */
     public HttpResponse<String> createAccount(String name, String email, String password) throws Exception {
 
-        CreateAccountRequest requestBody = CreateAccountRequest.builder().name(name).email(email).password(password).build();
+        String form = "name=" + encode(name)
+                + "&email=" + encode(email)
+                + "&password=" + encode(password);
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/accounts"))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
+                .uri(URI.create(baseUrl + "/signup"))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(form))
                 .build();
 
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
