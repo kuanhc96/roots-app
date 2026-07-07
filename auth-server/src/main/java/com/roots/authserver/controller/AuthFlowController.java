@@ -4,7 +4,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ott.JdbcOneTimeTokenService;
 import org.springframework.security.authentication.ott.OneTimeTokenAuthenticationToken;
-import org.springframework.security.authentication.ott.OneTimeTokenService;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -36,103 +35,40 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 
 @Tag(
-        name = "SPA",
-        description = "Forwards all non-file, non-API requests to index.html so that Nuxt's "
-                + "client-side router handles them correctly, and hosts the browser-facing "
-                + "form-post endpoints of the login flows (OTT, magic link, password reset, guest)."
+        name = "Auth flows",
+        description = "Browser-facing form-post endpoints of the interactive login flows: "
+                + "OTT (MFA) verification, account-creation magic-link verification, "
+                + "forgot-password reset, and guest login. Page GETs are generally not "
+                + "handled here — the Nuxt SPA shell is served for any non-API path by the "
+                + "static-resource fallback (SpaFallbackConfig) and the client router takes "
+                + "over. The one exception is the page paths that share a URL with a POST "
+                + "mapping in this class: see forwardSpaShell."
 )
 @Controller
 @RequiredArgsConstructor
-public class SpaController {
+public class AuthFlowController {
     private final InMemoryOneTimePinService inMemoryOneTimePinService;
     private final JdbcOneTimeTokenService jdbcOneTimeTokenService;
     private final UserCredentialService userCredentialService;
     private final AuthenticationManager authenticationManager;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
-    private static final String MAGIC_LINK_TOKEN_SESSION_ATTR = "magicLinkToken";
-
     @Value("${web-client.location:http://localhost:3000}")
     private String webClientLocation;
 
     @Operation(
-            summary = "Root page",
-            description = "Forwards to the Nuxt index page.",
-            responses = @ApiResponse(responseCode = "200", description = "The Nuxt index page",
+            summary = "Serve the SPA shell for page paths that also have a POST mapping",
+            description = "When a URL matches a @RequestMapping path but not its method, "
+                    + "Spring MVC responds 405 instead of falling through to the "
+                    + "static-resource fallback — so the pages living on the same paths as "
+                    + "this controller's form POSTs need an explicit GET forward to the SPA "
+                    + "shell. Every other page path is served by SpaFallbackConfig.",
+            responses = @ApiResponse(responseCode = "200", description = "The Nuxt SPA shell",
                     content = @Content(mediaType = "text/html"))
     )
-    @GetMapping("/")
-    public String forwardRoot() {
+    @GetMapping({"/ott/login", "/magic-link/login", "/reset-password"})
+    public String forwardSpaShell() {
         return "forward:/index.html";
-    }
-
-    @Operation(
-            summary = "Login page",
-            description = "Forwards to the Nuxt login page. Only GET reaches this controller — "
-                    + "POST /login is intercepted by Spring Security's form-login filter before MVC.",
-            responses = @ApiResponse(responseCode = "200", description = "The Nuxt login page",
-                    content = @Content(mediaType = "text/html"))
-    )
-    @GetMapping("/login")
-    public String forwardLogin() {
-        return "forward:/login/index.html";
-    }
-
-    @Operation(
-            summary = "OTT (MFA) login page",
-            description = "Forwards to the Nuxt OTT login page, which calls POST /ott/generate on "
-                    + "mount to trigger delivery of the one-time token.",
-            responses = @ApiResponse(responseCode = "200", description = "The Nuxt OTT login page",
-                    content = @Content(mediaType = "text/html"))
-    )
-    @GetMapping("/ott/login")
-    public String forwardOttSent() {
-        return "forward:/ott/login/index.html";
-    }
-
-    @Operation(
-            summary = "Magic-link landing page",
-            description = "Forwards to the Nuxt magic-link page. The browser reliably sends the "
-                    + "magicLinkToken query parameter to the server here, but the Nuxt SPA strips the "
-                    + "query string during client-side hydration, so the page can't read it — the token "
-                    + "is captured server-side into the HTTP session, from which POST /magic-link/login "
-                    + "later reads it.",
-            responses = @ApiResponse(responseCode = "200", description = "The Nuxt magic-link login page",
-                    content = @Content(mediaType = "text/html"))
-    )
-    @GetMapping("/magic-link/login")
-    public String forwardMagicLinkSent(
-            @Parameter(description = "Magic-link token from the emailed link; stashed in the session for the verifying POST")
-            @RequestParam(required = false) String magicLinkToken,
-            HttpServletRequest request) {
-        if (magicLinkToken != null) {
-            request.getSession().setAttribute(MAGIC_LINK_TOKEN_SESSION_ATTR, magicLinkToken);
-        }
-        return "forward:/magic-link/login/index.html";
-    }
-
-    @Operation(
-            summary = "Signup success page",
-            description = "Forwards to the Nuxt page shown after signup, telling the user to check "
-                    + "their email for the magic link.",
-            responses = @ApiResponse(responseCode = "200", description = "The Nuxt signup-success page",
-                    content = @Content(mediaType = "text/html"))
-    )
-    @GetMapping("/signup/success")
-    public String forwardSignupSuccess() {
-        return "forward:/signup/success/index.html";
-    }
-
-    @Operation(
-            summary = "Reset-password page",
-            description = "Forwards to the Nuxt reset-password page; temp-password logins are "
-                    + "redirected here to set a new password.",
-            responses = @ApiResponse(responseCode = "200", description = "The Nuxt reset-password page",
-                    content = @Content(mediaType = "text/html"))
-    )
-    @GetMapping("/reset-password")
-    public String forwardResetPassword() {
-        return "forward:/reset-password/index.html";
     }
 
     @Operation(
@@ -164,7 +100,7 @@ public class SpaController {
         UserDetails user = (UserDetails) pending.getPrincipal();
         var consumedToken = inMemoryOneTimePinService.consume(new OneTimeTokenAuthenticationToken(ott));
         if (consumedToken == null || !consumedToken.getUsername().equals(user.getUsername())) {
-            return "redirect:/ott/login?error=invalidToken";
+            return "redirect:/ott/login?e=invalid_token";
         } else {
             if (rememberBrowser) {
                 userCredentialService.disableMfa(user.getUsername());
@@ -180,7 +116,7 @@ public class SpaController {
             if (savedRequest != null) {
                 return "redirect:" + savedRequest.getRedirectUrl();
             } else {
-                return "redirect:/ott/login?error=oauthRedirectFailed";
+                return "redirect:/ott/login?e=oauth_redirect_failed";
             }
         }
     }
@@ -189,12 +125,13 @@ public class SpaController {
             summary = "Verify the account-creation magic link",
             description = "Completes email verification for a new account. Requires a "
                     + "CreateAccountPendingAuthenticationToken in the session (else redirect to "
-                    + "/login). The magic-link token was captured from the link's query string by "
-                    + "GET /magic-link/login and stored in the session — this button-triggered POST "
-                    + "carries no token field. Consumes the token, verifies it belongs to the pending "
-                    + "account, marks the email verified, upgrades the session, and redirects to the "
-                    + "saved OAuth2 request; a missing or invalid token redirects back with "
-                    + "error=invalidToken.",
+                    + "/login). The Nuxt magic-link page reads the token from the emailed link's "
+                    + "query string and posts it as a hidden field — consuming the token takes a "
+                    + "deliberate button click, so an email client that merely prefetches the GET "
+                    + "cannot burn it. Consumes the token, verifies it belongs to the pending "
+                    + "account, marks the email verified, upgrades the session, and redirects to "
+                    + "the saved OAuth2 request; a missing or invalid token redirects back with "
+                    + "e=invalid_token.",
             responses = @ApiResponse(responseCode = "302",
                     description = "Redirect to the saved OAuth2 request (or the web-client base URL "
                             + "when none exists), or back to /magic-link/login or /login with an error",
@@ -202,6 +139,8 @@ public class SpaController {
     )
     @PostMapping("/magic-link/login")
     public String verifyMagicLink(
+            @Parameter(description = "The magic-link token from the emailed link, posted by the Nuxt page")
+            @RequestParam(required = false) String magicLinkToken,
             HttpServletRequest request,
             HttpServletResponse response
     ) {
@@ -210,17 +149,15 @@ public class SpaController {
             return "redirect:/login";
         }
 
-        String magicLinkToken = (String) request.getSession().getAttribute(MAGIC_LINK_TOKEN_SESSION_ATTR);
-        if (magicLinkToken == null) {
-            return "redirect:/magic-link/login?error=invalidToken";
+        if (magicLinkToken == null || magicLinkToken.isBlank()) {
+            return "redirect:/magic-link/login?e=invalid_token";
         }
 
         UserDetails user = (UserDetails) pending.getPrincipal();
         var consumedToken = jdbcOneTimeTokenService.consume(new OneTimeTokenAuthenticationToken(magicLinkToken));
         if (consumedToken == null || !consumedToken.getUsername().equals(user.getUsername())) {
-            return "redirect:/magic-link/login?error=invalidToken";
+            return "redirect:/magic-link/login?e=invalid_token";
         } else {
-            request.getSession().removeAttribute(MAGIC_LINK_TOKEN_SESSION_ATTR);
             userCredentialService.verifyEmail(user.getUsername());
 
             MfaAuthenticationToken full = new MfaAuthenticationToken(user, user.getAuthorities());
@@ -246,7 +183,7 @@ public class SpaController {
             description = "Sets the new password for a temp-password login. Requires a "
                     + "PasswordChangePendingAuthenticationToken in the session (else redirect to "
                     + "/login). Validates the new password against the shared complexity policy "
-                    + "(failure redirects back with error=invalidPassword), stores it, clears the "
+                    + "(failure redirects back with e=invalid_password), stores it, clears the "
                     + "password-change flag, marks the email verified, upgrades the session, and "
                     + "redirects to the saved OAuth2 request.",
             responses = @ApiResponse(responseCode = "302",
@@ -269,7 +206,7 @@ public class SpaController {
         try {
             userCredentialService.completePasswordReset(user.getUsername(), newPassword);
         } catch (InvalidRequestException e) {
-            return "redirect:/reset-password?error=invalidPassword";
+            return "redirect:/reset-password?e=invalid_password";
         }
 
         MfaAuthenticationToken full = new MfaAuthenticationToken(user, user.getAuthorities());
@@ -308,7 +245,7 @@ public class SpaController {
         if (savedRequest != null) {
             return "redirect:" + savedRequest.getRedirectUrl();
         } else {
-            return "redirect:/login?error=oauthRedirectFailed";
+            return "redirect:/login?e=oauth_redirect_failed";
         }
     }
 }

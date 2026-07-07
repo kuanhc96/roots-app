@@ -233,20 +233,18 @@ public class AuthServerClient implements AutoCloseable {
     }
 
     /**
-     * Completes magic-link verification on the browser session. The token is first
-     * handed to the server via GET so it is captured into the HTTP session (the SPA
-     * can't read it after hydration), then POST /magic-link/login consumes it from the
-     * session. Returns the auth-server's immediate response to that POST; the caller
+     * Completes magic-link verification on the browser session: POST
+     * /magic-link/login with the token as a form field, mirroring the Nuxt page,
+     * which reads it from the emailed link's query string and posts it as a hidden
+     * field. Returns the auth-server's immediate response to that POST; the caller
      * follows the resulting redirect chain (via {@link #getOnSession(String)}) and
      * asserts on the status / Location.
      */
     public HttpResponse<String> verifyMagicLink(String magicLinkToken) throws Exception {
-        getOnSession(baseUrl + "/magic-link/login?magicLinkToken=" + encode(magicLinkToken));
-
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/magic-link/login"))
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.noBody())
+                .POST(HttpRequest.BodyPublishers.ofString("magicLinkToken=" + encode(magicLinkToken)))
                 .build();
 
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());

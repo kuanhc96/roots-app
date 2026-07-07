@@ -228,14 +228,12 @@ Rather than make the new user re-type their credentials on the login form, the s
 1. After the `201` from `/api/accounts`, `SignupForm.vue` auto-submits a hidden native `<form method="post" action="/login">` carrying the same `email` + `password` (param names match `usernameParameter("email")` / default `password`; CSRF is disabled). The browser navigates, handing off to Spring Security's form-login pipeline.
 2. `MfaAwareDaoAuthenticationProvider` validates the password, sees `is_email_verified = false`, and returns a `CreateAccountPendingAuthenticationToken` (not yet authenticated).
 3. `MfaRedirectAuthenticationSuccessHandler` builds an absolute magic-link URL — `…/magic-link/login?magicLinkToken=<otp>` via `ServletUriComponentsBuilder.fromCurrentContextPath()` on the request thread — emails it with `EmailService.sendMagicLinkEmail`, and redirects the browser to `/signup/success` ("check your email to continue").
-4. The user clicks the link → `GET /magic-link/login?magicLinkToken=<otp>`. `SpaController.forwardMagicLinkSent` binds the token with `@RequestParam` and **saves it as a session attribute** (`magicLinkToken`) before forwarding to the Nuxt page.
+4. The user clicks the link → `GET /magic-link/login?magicLinkToken=<otp>`. `AuthFlowController.forwardSpaShell` forwards to the SPA shell (an explicit GET mapping: the path also has a `@PostMapping`, and Spring MVC answers a path-match/method-mismatch with 405 instead of falling through to the static fallback); the Nuxt `magic-link/login` page reads the token from `useRoute().query` — the frontend runs in SPA mode (`ssr: false`), so there is no hydration and the query string survives the full page load — and puts it in a hidden field of the verification form.
 
-   **Why the session?** The `magic-link/login` page is a statically-generated SSR Nuxt route. When it hydrates in the browser, Vue Router resyncs the address bar to the route's canonical path and **strips the query string** — by the time any component hook runs, `window.location.search` (and `useRoute().query`) is empty, so the page cannot read `magicLinkToken` from the URL. (A Spring `forward:` is server-internal and never changes the browser URL, so this stripping is purely client-side.) The server, however, sees the query reliably on this GET. So we capture the token server-side and stash it in the HTTP session; the token never has to round-trip through client JavaScript.
-
-5. The page renders a **"Continue with login"** button — a native `<form method="post" action="/magic-link/login">` with no token field and **no auto-submit**. The user clicks it → `POST /magic-link/login` carrying no token. `SpaController.verifyMagicLink` reads `magicLinkToken` back **from the session**, consumes it via `JdbcOneTimeTokenService` (a delete-and-return against the `one_time_tokens` table, then checks the returned `username` matches the pending account's email), removes the session attribute, calls `UserCredentialService.verifyEmail` (sets `is_email_verified = true`), builds a fully authenticated `MfaAuthenticationToken`, saves it to the session, and redirects to the **saved OAuth2 request** — completing the authorization-code grant back to web-client. (If the session has no `magicLinkToken`, or it fails to consume, it redirects to `/magic-link/login?error=invalidToken`.)
+5. The page renders a **"Continue with login"** button — a native `<form method="post" action="/magic-link/login">` carrying the hidden `magicLinkToken` field, with **no auto-submit**. The user clicks it → `POST /magic-link/login`. `AuthFlowController.verifyMagicLink` binds the token with `@RequestParam`, consumes it via `JdbcOneTimeTokenService` (a delete-and-return against the `one_time_tokens` table, then checks the returned `username` matches the pending account's email), calls `UserCredentialService.verifyEmail` (sets `is_email_verified = true`), builds a fully authenticated `MfaAuthenticationToken`, saves it to the session, and redirects to the **saved OAuth2 request** — completing the authorization-code grant back to web-client. (A missing/blank token, or one that fails to consume, redirects to `/magic-link/login?e=invalid_token`, which the page displays via `utils/errorMessages.ts`.)
 6. If there is **no** saved request (the user reached `/signup` directly, not via an OAuth2 flow), `verifyMagicLink` instead redirects to the web-client base URL (`web-client.location`, default `http://localhost:3000`). web-client then initiates `/oauth2/authorize` with its own `state`; since the session is already authenticated, a code is issued and its callback succeeds. (The auth-server cannot initiate the flow itself because web-client validates `state` against its own `sessionStorage`.)
 
-> **Limitations.** The magic link must be opened in the **same browser** that signed up — the pending token, the saved request, **and the captured `magicLinkToken`** all live in that one HTTP session. Requiring a button click (instead of auto-submitting on mount) means an email client/scanner that merely prefetches the link cannot trigger the consuming POST.
+> **Limitations.** The magic link must be opened in the **same browser** that signed up — the pending token and the saved request live in that one HTTP session. Requiring a button click (instead of auto-submitting on mount) means an email client/scanner that merely prefetches the link cannot trigger the consuming POST.
 
 ### Key classes
 
@@ -251,7 +249,7 @@ Rather than make the new user re-type their credentials on the login form, the s
 | `MfaAwareDaoAuthenticationProvider` | `component/` | Routes an unverified account to `CreateAccountPendingAuthenticationToken` after validating the password |
 | `CreateAccountPendingAuthenticationToken` | `principal/` | First factor passed but email unverified; `isAuthenticated() = false` |
 | `MfaRedirectAuthenticationSuccessHandler` | `component/` | For the pending token, emails the magic link and redirects to `/signup/success` |
-| `SpaController` | `controller/` | `forwardMagicLinkSent` (`GET /magic-link/login`) captures `magicLinkToken` from the query into the session (the hydrated SPA can't read it); `verifyMagicLink` (`POST /magic-link/login`) reads it back from the session, consumes it, verifies email, upgrades the session, redirects to the saved request or web-client |
+| `AuthFlowController` | `controller/` | `verifyMagicLink` (`POST /magic-link/login`) binds `magicLinkToken` (`@RequestParam`, posted by the Nuxt page from the link's query string), consumes it, verifies email, upgrades the session, redirects to the saved request or web-client |
 | `EmailService` | `service/` | `sendMagicLinkEmail(to, magicLink)` — sends the verification link via Gmail SMTP |
 | `InvalidRequestException` | `exception/` | Generic bad-request signal → **400** |
 | `EmailAlreadyExistsException` | `exception/` | Duplicate email → **409** |
@@ -287,17 +285,17 @@ The flow is gated by the `is_password_change_required` column on `user_credentia
    It returns the plaintext temp password (for emailing), or `null` if no account matches. The controller then calls `EmailService.sendTempPasswordEmail(to, tempPassword)`.
 3. **The endpoint always returns 200**, whether or not the email exists — the response never reveals which addresses are registered (no account enumeration). `ForgotPasswordForm` therefore ignores the result and (in a `finally`) calls `navigateTo({ path: '/login', query: { email, notice: 'tempPasswordSent' } })`.
 
-   Because that is **in-SPA client navigation** (not a full page reload), the query string survives hydration. `LoginForm.vue` reads it via `useRoute()` to **pre-fill the email field** and show a success `v-snackbar`: *"If the email provided matches one we have on file, you will receive an email with a temporary password."* (Contrast the magic-link flow, where a full-page load forced the token to be captured server-side — here a client-side `navigateTo` keeps the query intact.)
+   `LoginForm.vue` reads the query via `useRoute()` to **pre-fill the email field** and show a success `v-snackbar`: *"If the email provided matches one we have on file, you will receive an email with a temporary password."* (The frontend runs in SPA mode, so query params survive full page loads and in-SPA navigations alike.)
 
 ### Logging in with the temporary password and setting a new one
 
 4. The user logs in with the temporary password on the normal `/login` form. `MfaAwareDaoAuthenticationProvider` validates it via the usual DAO check, then — **checking `isPasswordChangeRequired` first, before the email-verified and MFA checks** — returns a `PasswordChangePendingAuthenticationToken` (no authorities, `isAuthenticated() = false`). Checking this flag *first* is what makes the reset replace the OTT step instead of adding to it.
 5. `MfaRedirectAuthenticationSuccessHandler` detects that token and `sendRedirect("/reset-password")`. **No token or email is minted here** — the temporary password was already sent in step 2.
-6. `SpaController.forwardResetPassword` (`GET /reset-password`) forwards to the Nuxt page (unguarded, like the OTT and magic-link GETs). The page mounts `ResetPasswordForm.vue` — "New Password" / "Confirm New Password", validated with vee-validate against the **same rules as account creation** plus a confirm-match. On valid submit it submits a **hidden native `<form method="post" action="/reset-password">`** carrying only `newPassword`.
+6. `GET /reset-password` forwards to the SPA shell via `AuthFlowController.forwardSpaShell` (unguarded, like the OTT and magic-link GETs). The page mounts `ResetPasswordForm.vue` — "New Password" / "Confirm New Password", validated with vee-validate against the **same rules as account creation** plus a confirm-match. On valid submit it submits a **hidden native `<form method="post" action="/reset-password">`** carrying only `newPassword`.
 
    A native form (not `fetch`) is required so the browser follows the server's final 302 into the saved OAuth2 request — a `fetch` follows a redirect in the background and can't drive a top-level navigation. Confirm-match is enforced **client-side only**, mirroring how account creation doesn't re-check its confirm field server-side.
-7. `SpaController.resetPassword` (`POST /reset-password`, `@RequestParam newPassword`) requires a `PasswordChangePendingAuthenticationToken` in the `SecurityContext` (otherwise `redirect:/login`), then calls `UserCredentialService.completePasswordReset(email, newPassword)` (`@Transactional`):
-   - re-validates the new password via `Validator.validatePassword` (failure → `redirect:/reset-password?error=invalidPassword`),
+7. `AuthFlowController.resetPassword` (`POST /reset-password`, `@RequestParam newPassword`) requires a `PasswordChangePendingAuthenticationToken` in the `SecurityContext` (otherwise `redirect:/login`), then calls `UserCredentialService.completePasswordReset(email, newPassword)` (`@Transactional`):
+   - re-validates the new password via `Validator.validatePassword` (failure → `redirect:/reset-password?e=invalid_password`),
    - stores the new bcrypt password,
    - sets `is_password_change_required = false`, **and**
    - sets `is_email_verified = true`.
@@ -320,7 +318,7 @@ The flow is gated by the `is_password_change_required` column on `user_credentia
 | `PasswordChangePendingAuthenticationToken` | `principal/` | Temp password accepted but new password not yet set; `isAuthenticated() = false`, no authorities |
 | `MfaAwareDaoAuthenticationProvider` | `component/` | Checks `isPasswordChangeRequired` **first**; returns the pending token, bypassing the OTT step |
 | `MfaRedirectAuthenticationSuccessHandler` | `component/` | For the pending token, redirects to `/reset-password` (no token minted) |
-| `SpaController` | `controller/` | `forwardResetPassword` (`GET /reset-password`) serves the form; `resetPassword` (`POST /reset-password`) verifies the pending token, stores the new password, clears the flag, verifies email, upgrades the session, redirects to the saved request |
+| `AuthFlowController` | `controller/` | `resetPassword` (`POST /reset-password`) verifies the pending token, stores the new password, clears the flag, verifies email, upgrades the session, redirects to the saved request (the form GET forwards to the shell via `forwardSpaShell`) |
 | `EmailService` | `service/` | `sendTempPasswordEmail(to, tempPassword)` — emails the temp password (qa/prod), logs it at INFO (dev), or skips it (test) |
 
 Frontend additions: `pages/forgot-password/index.vue` + `ForgotPasswordForm.vue`, `pages/reset-password/index.vue` + `ResetPasswordForm.vue`, and the "Forgot?" link / email pre-fill / success snackbar in `LoginForm.vue`.
@@ -336,7 +334,7 @@ MFA is **optional per user**, controlled by the `is_mfa_enabled` column in `user
 3. The `MfaRedirectAuthenticationSuccessHandler` detects the pending token and redirects to `/ott/login`.
 4. The `/ott/login` Nuxt page loads and immediately calls `POST /ott/generate`. This generates a one-time token and hands it to `EmailService`, which **emails it** via Gmail SMTP (qa/prod), **logs the value at INFO** to the server console (dev — copy it from there, no inbox needed), or skips it (test).
 5. The user copies the token from the console, enters it in the OTT form, and submits `POST /ott/login`. The form also includes a "Remember this browser?" checkbox.
-6. `SpaController` verifies the token. If "Remember this browser?" was checked, it sets `is_mfa_enabled = false` for the user in the database. The session is upgraded to a fully authenticated `MfaAuthenticationToken` and the user is redirected back to the original OAuth2 authorization request.
+6. `AuthFlowController` verifies the token. If "Remember this browser?" was checked, it sets `is_mfa_enabled = false` for the user in the database. The session is upgraded to a fully authenticated `MfaAuthenticationToken` and the user is redirected back to the original OAuth2 authorization request.
 
 ### Flow (MFA disabled)
 
@@ -354,10 +352,10 @@ MFA is **optional per user**, controlled by the `is_mfa_enabled` column in `user
 | `MfaAwareRememberMeAuthenticationProvider` | `component/` | Validates remember-me cookie; same conditional MFA logic |
 | `MfaRedirectAuthenticationSuccessHandler` | `component/` | Redirects to `/ott/login` when the result is a pending token; falls through to saved-request redirect otherwise |
 | `MfaController` | `controller/` | `POST /ott/generate` — generates the OTT and calls `EmailService.sendOTTEmail` (which emails it, logs it at INFO in dev, or skips it in test) |
-| `SpaController` | `controller/` | `GET /ott/login` (forward to Nuxt page) + `POST /ott/login` (verify OTT, optionally disable MFA, and upgrade session) |
+| `AuthFlowController` | `controller/` | `POST /ott/login` — verify OTT, optionally disable MFA, and upgrade session; `GET /ott/login` forwards to the SPA shell via `forwardSpaShell` (paths with a `@PostMapping` 405 on GET instead of reaching the static fallback) |
 | `UserCredential` | `model/` | Record representing a row from `user_credential` |
 | `UserCredentialRepository` | `repository/` | JdbcTemplate-based repo; `findByEmail` and `setMfaEnabled` |
-| `UserCredentialService` | `service/` | `isMfaEnabled(email)` and `disableMfa(email)`; injected into both authentication providers and `SpaController` |
+| `UserCredentialService` | `service/` | `isMfaEnabled(email)` and `disableMfa(email)`; injected into both authentication providers and `AuthFlowController` |
 | `EmailService` | `service/` | `sendOTTEmail(to, ott)` — sends the OTT to the user's email via Gmail SMTP using a required `MailSender` (auto-configured `JavaMailSenderImpl`, built in every profile) |
 
 ### OTT storage
@@ -374,9 +372,9 @@ The login page includes a "Continue as Guest" button that allows access without 
 ### Flow
 
 1. The login form (`LoginForm.vue`) contains two separate HTML forms — `#login-form` (email/password) and `#guest-form` (no fields). The "Continue as Guest" button submits `#guest-form`.
-2. `SpaController.loginAsGuest()` receives the request and calls `authenticationManager.authenticate(new GuestAuthenticationToken())`.
+2. `AuthFlowController.loginAsGuest()` receives the request and calls `authenticationManager.authenticate(new GuestAuthenticationToken())`.
 3. `GuestAuthenticationProvider` handles the token. It creates a synthetic `UserDetails` with username `"guest"` and authority `"GUEST"` and returns a fully authenticated `MfaAuthenticationToken` — no password validation or MFA check is performed.
-4. The resulting `SecurityContext` is saved to the HTTP session and the user is redirected to the saved OAuth2 authorization request. If no saved request is found, the user is redirected to `/login?error=oauthRedirectFailed`.
+4. The resulting `SecurityContext` is saved to the HTTP session and the user is redirected to the saved OAuth2 authorization request. If no saved request is found, the user is redirected to `/login?e=oauth_redirect_failed`.
 
 ### Key classes
 
