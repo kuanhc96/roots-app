@@ -267,7 +267,8 @@ auth-server/frontend/
 │   ├── OttLoginForm.vue             # native HTML form (POST /ott/login); OTT text field + "Remember this browser?" checkbox (posts rememberBrowser=true); shows a v-alert for server error codes (e.g. invalid_token)
 │   ├── SignupForm.vue               # account-creation form (name, email, password, confirm password); validated with vee-validate + yup; on submit fetch-POSTs { name, email, password } to /api/accounts; on 201 auto-submits a hidden native form (POST /login) with the same email+password to start the login flow (no credential re-entry); shows an inline v-alert on failure; links to /login
 │   ├── ForgotPasswordForm.vue       # email field (vee-validate + yup); POSTs { email } to /api/temp-password, always navigates back to /login with prefill+notice query
-│   └── ResetPasswordForm.vue        # new/confirm password (same rules as signup + confirm-match); submits hidden native form (POST /reset-password, newPassword only); shows a v-alert for e=invalid_password
+│   ├── ResetPasswordForm.vue        # new/confirm password (same rules as signup + confirm-match); submits hidden native form (POST /reset-password, newPassword only); shows a v-alert for e=invalid_password
+│   └── MagicLinkLoginForm.vue       # "Continue with login" card: reads magicLinkToken from useRoute().query and posts it as a hidden field (native form POST /magic-link/login); the button click (not a prefetchable GET) consumes the token; shows a v-alert for e=invalid_token
 ├── composables/
 │   └── useServerErrorMessage.ts     # reads ?e=<code> from the route, maps it via utils/errorMessages.ts, scrubs the code from the URL after mount (flash semantics)
 ├── utils/
@@ -284,7 +285,7 @@ auth-server/frontend/
 │   ├── reset-password/
 │   │   └── index.vue                # /reset-password — mounts ResetPasswordForm
 │   ├── magic-link/
-│   │   └── login.vue                # /magic-link/login — reads magicLinkToken from useRoute().query and posts it as a hidden field of the "Continue with login" form (native form POST /magic-link/login); the button click (not a prefetchable GET) consumes the token
+│   │   └── login.vue                # /magic-link/login — mounts MagicLinkLoginForm centered on page
 │   └── ott/
 │       └── login.vue                # /ott/login — on mount calls POST /ott/generate to trigger OTT delivery; mounts OttLoginForm centered on page
 ├── nuxt.config.ts                   # ssr: false — pure SPA; one shell, no hydration, query params readable everywhere
