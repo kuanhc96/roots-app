@@ -10,6 +10,7 @@ import com.roots.authserver.component.MfaAwareDaoAuthenticationProvider;
 import com.roots.authserver.component.MfaAwareRememberMeAuthenticationProvider;
 import com.roots.authserver.component.MfaRedirectAuthenticationSuccessHandler;
 import com.roots.authserver.component.RememberMeOidcLogoutAuthenticationSuccessHandler;
+import com.roots.authserver.enums.ErrorCode;
 import com.roots.authserver.service.UserCredentialService;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -124,7 +125,7 @@ public class SecurityConfig {
                         // lands on the same code so responses never reveal whether an
                         // email has an account. The Nuxt login page maps the code to
                         // display text (frontend/utils/errorMessages.ts).
-                        .failureUrl("/login?e=invalid_login")
+                        .failureUrl("/login?e=" + ErrorCode.INVALID_LOGIN)
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))

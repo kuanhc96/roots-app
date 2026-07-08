@@ -1,6 +1,8 @@
 // Maps machine-readable error codes (the `e` query param on redirects from the
 // auth-server) to the messages the frontend displays. The server only ever sends a
 // code; the display text is owned here. An unmapped code displays nothing.
+// Mirrored by the server-side ErrorCode enum (com.roots.authserver.enums.ErrorCode)
+// — keep the two in sync.
 export const errorMessages: Record<string, string> = {
   invalid_login: 'The provided email/password combination is invalid',
   invalid_token: 'This verification code or link is invalid or has expired. Please request a new one.',

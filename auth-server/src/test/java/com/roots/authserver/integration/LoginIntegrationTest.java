@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.roots.authserver.dto.CreateTestAccountResponse;
 import com.roots.authserver.dto.TokenResponse;
 import com.roots.authserver.dto.UserCredentialTestingResponse;
+import com.roots.authserver.enums.ErrorCode;
 import com.roots.authserver.util.HttpFlowUtils;
 
 import org.junit.jupiter.api.AfterEach;
@@ -203,7 +204,7 @@ class LoginIntegrationTest extends IntegrationTestBase {
             HttpResponse<String> loginResponse = authServerClient.login(email, "WrongPassword1");
             assertThat(loginResponse.statusCode()).isEqualTo(302);
             assertThat(loginResponse.headers().firstValue("Location").orElseThrow())
-                    .endsWith("/login?e=invalid_login");
+                    .endsWith("/login?e=" + ErrorCode.INVALID_LOGIN);
         }
 
         @Test
@@ -214,7 +215,7 @@ class LoginIntegrationTest extends IntegrationTestBase {
             HttpResponse<String> loginResponse = authServerClient.login(unknownEmail, TEST_PASSWORD);
             assertThat(loginResponse.statusCode()).isEqualTo(302);
             assertThat(loginResponse.headers().firstValue("Location").orElseThrow())
-                    .endsWith("/login?e=invalid_login");
+                    .endsWith("/login?e=" + ErrorCode.INVALID_LOGIN);
         }
     }
 
