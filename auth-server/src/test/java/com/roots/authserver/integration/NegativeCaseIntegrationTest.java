@@ -1,6 +1,7 @@
 package com.roots.authserver.integration;
 
 import com.roots.authserver.dto.TokenResponse;
+import com.roots.authserver.enums.ErrorCode;
 
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -66,7 +67,7 @@ class NegativeCaseIntegrationTest extends IntegrationTestBase {
 
             assertThat(response.statusCode()).isEqualTo(302);
             String location = response.headers().firstValue("Location").orElseThrow();
-            assertThat(location).contains("/signup?").contains("e=invalid_request");
+            assertThat(location).contains("/signup?").contains("e=" + ErrorCode.INVALID_REQUEST);
         }
 
         @Test
@@ -80,7 +81,7 @@ class NegativeCaseIntegrationTest extends IntegrationTestBase {
             HttpResponse<String> duplicate = authServerClient.createAccount(VALID_NAME, email, VALID_PASSWORD);
             assertThat(duplicate.statusCode()).isEqualTo(302);
             String location = duplicate.headers().firstValue("Location").orElseThrow();
-            assertThat(location).contains("/signup?").contains("e=email_taken");
+            assertThat(location).contains("/signup?").contains("e=" + ErrorCode.EMAIL_TAKEN);
         }
     }
 

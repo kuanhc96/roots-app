@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.util.UriUtils;
 
 import com.roots.authserver.dto.request.CreateAccountRequest;
+import com.roots.authserver.enums.ErrorCode;
 import com.roots.authserver.exception.EmailAlreadyExistsException;
 import com.roots.authserver.exception.InvalidRequestException;
 import com.roots.authserver.principal.CreateAccountPendingAuthenticationToken;
@@ -107,9 +108,9 @@ public class AuthFlowController {
         try {
             userCredentialService.createAccount(new CreateAccountRequest(name, email, password));
         } catch (InvalidRequestException e) {
-            return signupErrorRedirect("invalid_request", name, email);
+            return signupErrorRedirect(ErrorCode.INVALID_REQUEST, name, email);
         } catch (EmailAlreadyExistsException e) {
-            return signupErrorRedirect("email_taken", name, email);
+            return signupErrorRedirect(ErrorCode.EMAIL_TAKEN, name, email);
         }
 
         // The account was created in this very request, so the first factor is proven
@@ -126,7 +127,7 @@ public class AuthFlowController {
         return "redirect:/signup/success";
     }
 
-    private static String signupErrorRedirect(String code, String name, String email) {
+    private static String signupErrorRedirect(ErrorCode code, String name, String email) {
         // Strict percent-encoding (space -> %20, + -> %2B) so the values survive both
         // the Location header and Vue Router's query parsing on the signup page.
         return "redirect:/signup?e=" + code
@@ -163,7 +164,7 @@ public class AuthFlowController {
         UserDetails user = (UserDetails) pending.getPrincipal();
         var consumedToken = inMemoryOneTimePinService.consume(new OneTimeTokenAuthenticationToken(ott));
         if (consumedToken == null || !consumedToken.getUsername().equals(user.getUsername())) {
-            return "redirect:/ott/login?e=invalid_token";
+            return "redirect:/ott/login?e=" + ErrorCode.INVALID_TOKEN;
         } else {
             if (rememberBrowser) {
                 userCredentialService.disableMfa(user.getUsername());
@@ -179,7 +180,7 @@ public class AuthFlowController {
             if (savedRequest != null) {
                 return "redirect:" + savedRequest.getRedirectUrl();
             } else {
-                return "redirect:/ott/login?e=oauth_redirect_failed";
+                return "redirect:/ott/login?e=" + ErrorCode.OAUTH_REDIRECT_FAILED;
             }
         }
     }
@@ -213,13 +214,13 @@ public class AuthFlowController {
         }
 
         if (magicLinkToken == null || magicLinkToken.isBlank()) {
-            return "redirect:/magic-link/login?e=invalid_token";
+            return "redirect:/magic-link/login?e=" + ErrorCode.INVALID_TOKEN;
         }
 
         UserDetails user = (UserDetails) pending.getPrincipal();
         var consumedToken = jdbcOneTimeTokenService.consume(new OneTimeTokenAuthenticationToken(magicLinkToken));
         if (consumedToken == null || !consumedToken.getUsername().equals(user.getUsername())) {
-            return "redirect:/magic-link/login?e=invalid_token";
+            return "redirect:/magic-link/login?e=" + ErrorCode.INVALID_TOKEN;
         } else {
             userCredentialService.verifyEmail(user.getUsername());
 
@@ -269,7 +270,7 @@ public class AuthFlowController {
         try {
             userCredentialService.completePasswordReset(user.getUsername(), newPassword);
         } catch (InvalidRequestException e) {
-            return "redirect:/reset-password?e=invalid_password";
+            return "redirect:/reset-password?e=" + ErrorCode.INVALID_PASSWORD;
         }
 
         MfaAuthenticationToken full = new MfaAuthenticationToken(user, user.getAuthorities());
@@ -308,7 +309,7 @@ public class AuthFlowController {
         if (savedRequest != null) {
             return "redirect:" + savedRequest.getRedirectUrl();
         } else {
-            return "redirect:/login?e=oauth_redirect_failed";
+            return "redirect:/login?e=" + ErrorCode.OAUTH_REDIRECT_FAILED;
         }
     }
 }
