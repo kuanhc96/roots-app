@@ -39,6 +39,15 @@ public class UserCredentialRepository {
         return results.stream().findFirst();
     }
 
+    public Optional<UserCredential> findById(long id) {
+        var results = jdbcTemplate.query(
+                "SELECT id, user_guid, email, name, password, is_mfa_enabled, is_email_verified, is_password_change_required FROM user_credential WHERE id = ?",
+                ROW_MAPPER,
+                id
+        );
+        return results.stream().findFirst();
+    }
+
     public long insert(UserCredential userCredential) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {

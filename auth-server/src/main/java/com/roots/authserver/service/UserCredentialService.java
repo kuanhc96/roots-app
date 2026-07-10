@@ -1,5 +1,7 @@
 package com.roots.authserver.service;
 
+import static com.roots.authserver.AuthServerConstants.DEFAULT_ROLE;
+
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -22,8 +24,6 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class UserCredentialService {
-
-    private static final String DEFAULT_ROLE = "member";
 
     private static final int TEMP_PASSWORD_LENGTH = 12;
     private static final String UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
