@@ -29,9 +29,12 @@ import com.roots.authserver.principal.CreateAccountPendingAuthenticationToken;
 import com.roots.authserver.principal.GuestAuthenticationToken;
 import com.roots.authserver.principal.MfaAuthenticationToken;
 import com.roots.authserver.principal.MfaPendingAuthenticationToken;
+import com.roots.authserver.exception.SocialLoginException;
 import com.roots.authserver.principal.PasswordChangePendingAuthenticationToken;
+import com.roots.authserver.principal.SocialLoginAuthenticationToken;
 import com.roots.authserver.service.InMemoryOneTimePinService;
 import com.roots.authserver.service.MagicLinkService;
+import com.roots.authserver.service.SocialLoginService;
 import com.roots.authserver.service.UserCredentialService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -41,7 +44,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Tag(
         name = "Auth flows",
         description = "Browser-facing form-post endpoints of the interactive login flows: "
@@ -60,6 +65,7 @@ public class AuthFlowController {
     private final UserCredentialService userCredentialService;
     private final UserDetailsService userDetailsService;
     private final MagicLinkService magicLinkService;
+    private final SocialLoginService socialLoginService;
     private final AuthenticationManager authenticationManager;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
@@ -283,6 +289,58 @@ public class AuthFlowController {
         if (savedRequest != null) {
             return "redirect:" + savedRequest.getRedirectUrl();
         } else {
+            return "redirect:" + webClientLocation;
+        }
+    }
+
+    @Operation(
+            summary = "Log in with a Google id_token",
+            description = "Browser form post from the Nuxt /callback page, which exchanged the "
+                    + "Google authorization code for tokens and auto-submits the id_token here. "
+                    + "The token is verified server-side (signature, issuer, expiry, audience) and "
+                    + "resolved to a local account sub-first: an existing social binding wins; "
+                    + "otherwise a verified matching email is linked, or a new account is created "
+                    + "(member role, email verified, unusable random password). The session becomes "
+                    + "a fully authenticated SocialLoginAuthenticationToken — Google is trusted as "
+                    + "both factors, so no OTT step runs regardless of is_mfa_enabled — and the "
+                    + "browser is redirected to the saved OAuth2 authorization request.",
+            responses = @ApiResponse(responseCode = "302",
+                    description = "Redirect to the saved OAuth2 request (or the web-client base URL "
+                            + "when none exists), or to /login with e=social_login_failed",
+                    content = @Content)
+    )
+    @PostMapping("/login/google")
+    public String loginWithGoogle(
+            @Parameter(description = "The Google-issued id_token, posted by the Nuxt callback page")
+            @RequestParam(required = false) String idToken,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        if (idToken == null || idToken.isBlank()) {
+            return "redirect:/login?e=" + ErrorCode.SOCIAL_LOGIN_FAILED;
+        }
+
+        String email;
+        try {
+            email = socialLoginService.loginWithGoogle(idToken);
+        } catch (SocialLoginException e) {
+            // One generic code for every failure mode; the specific reason is log-only.
+            log.warn("Google login rejected: {}", e.getMessage());
+            return "redirect:/login?e=" + ErrorCode.SOCIAL_LOGIN_FAILED;
+        }
+
+        UserDetails user = userDetailsService.loadUserByUsername(email);
+        SocialLoginAuthenticationToken full = new SocialLoginAuthenticationToken(user, user.getAuthorities());
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(full);
+        SecurityContextHolder.setContext(securityContext);
+        securityContextRepository.saveContext(securityContext, request, response);
+
+        SavedRequest savedRequest = new HttpSessionRequestCache().getRequest(request, response);
+        if (savedRequest != null) {
+            return "redirect:" + savedRequest.getRedirectUrl();
+        } else {
+            // No in-progress OAuth2 flow (direct /login visit). Hand off to web-client,
+            // which initiates /oauth2/authorize with its own state.
             return "redirect:" + webClientLocation;
         }
     }
