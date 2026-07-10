@@ -15,6 +15,45 @@ A fullstack Spring Boot + Nuxt/Vue application that handles authentication for t
 | `WEB_CLIENT_LOCATION`               | No | `http://localhost:3000` | Base URL of web-client; used to hand off the OAuth2 flow after magic-link email verification when no saved request exists |
 | `SPRING_MAIL_USERNAME`              | Yes (every profile) | — (no default) | Gmail address; the `JavaMailSender` is built in every profile and the Actuator mail health indicator connects to SMTP, so this is required at startup everywhere |
 | `SPRING_MAIL_PASSWORD`              | Yes (every profile) | — (no default) | Gmail App Password for the above account (not the account password; requires 2FA + App Password in Google Account settings) |
+| `GOOGLE_CLIENT_ID`                  | No | the dev Google OAuth client id | **Server runtime** (normal env/JVM var). Expected `aud` of incoming Google id_tokens (`GoogleIdTokenVerifier` in `GoogleAuthConfig`); property `google.client-id`. The client id is public information, so a checked-in default is safe |
+| `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET`  | Yes, for Google login to work | — (empty) | **Frontend build time — see [Google Sign-In configuration](#google-sign-in-configuration-build-time-vs-runtime) below.** Consumed by `nuxt generate`, not by the JVM: it must be in the environment of the *build* (or in `frontend/.env`), and setting it on the running JAR does nothing |
+
+### Google Sign-In configuration (build time vs runtime)
+
+The two Google variables are consumed at **different moments**, and mixing them up is the most common misconfiguration:
+
+- **`GOOGLE_CLIENT_ID` is a normal server runtime variable.** The backend reads it when Spring starts (property `google.client-id`) to verify the audience of id_tokens posted to `POST /login/google`. Pass it like any other env/JVM var; changing it only needs a restart.
+- **`NUXT_PUBLIC_GOOGLE_CLIENT_SECRET` is a frontend *build-time* variable — do not set it as a JVM variable.** The frontend is statically generated (`ssr: false` + `nuxt generate`), so `runtimeConfig.public.*` values — including `NUXT_PUBLIC_*` env overrides — are **baked into the JS bundle** at the moment `npm run generate` runs; there is no Nitro server at runtime to inject them later. The secret is used by the `/callback` page for the browser-side code-for-token exchange with Google.
+
+Consequences:
+
+1. The variable must be present in the environment of whatever runs the **build** (`frontend-maven-plugin` spawns npm as a child of the Maven process, which inherits the shell's environment). A `-D` flag would set a Java *system property*, which the npm child process never sees.
+2. **Changing the secret requires a rebuild.** A JAR built without it will fail Google login at the token exchange until rebuilt; restarting with new env vars cannot fix it.
+3. **The secret ships in the served JS bundle** (readable by anyone). This is a known, accepted tradeoff of the current browser-side code exchange; it goes away when the exchange moves server-side, at which point the secret becomes a normal server env var like `SPRING_MAIL_PASSWORD`.
+4. CI/CD images bake it too: for Google login to work in an image built by `auth-server-cd.yml`, the workflow's build step would need `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET` exported from a GitHub secret. (CI integration tests don't exercise Google login, so CI passes without it.)
+
+Two ways to set it:
+
+```bash
+# Option 1 (recommended for local dev): auth-server/frontend/.env — gitignored (**/.env),
+# loaded automatically by the Nuxt CLI for both `npm run dev` and `npm run generate`
+# (including when Maven runs generate):
+NUXT_PUBLIC_GOOGLE_CLIENT_SECRET=GOCSPX-your-secret-here
+```
+
+```powershell
+# Option 2: shell env var before the build (PowerShell)
+$env:NUXT_PUBLIC_GOOGLE_CLIENT_SECRET = "GOCSPX-your-secret-here"
+mvn spring-boot:run     # or: mvn package
+```
+
+```bash
+# Option 2: shell env var before the build (bash)
+export NUXT_PUBLIC_GOOGLE_CLIENT_SECRET=GOCSPX-your-secret-here
+mvn spring-boot:run
+```
+
+The name mapping is Nuxt convention: `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET` → `runtimeConfig.public.googleClientSecret` (`NUXT_PUBLIC_` prefix + SCREAMING_SNAKE of the camelCase key).
 
 ## Spring Profiles
 
