@@ -10,6 +10,7 @@ import com.roots.authserver.component.MfaAwareDaoAuthenticationProvider;
 import com.roots.authserver.component.MfaAwareRememberMeAuthenticationProvider;
 import com.roots.authserver.component.MfaRedirectAuthenticationSuccessHandler;
 import com.roots.authserver.component.RememberMeOidcLogoutAuthenticationSuccessHandler;
+import com.roots.authserver.component.SpaLoginEntryPoint;
 import com.roots.authserver.enums.ErrorCode;
 import com.roots.authserver.service.UserCredentialService;
 
@@ -93,7 +94,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests((authorize) -> authorize.anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions
                         .defaultAuthenticationEntryPointFor(
-                                new LoginUrlAuthenticationEntryPoint("/login"),
+                                new SpaLoginEntryPoint(),
                                 new MediaTypeRequestMatcher(MediaType.TEXT_HTML)
                         )
                 );
