@@ -10,5 +10,6 @@ export const errorMessages: Record<string, string> = {
   oauth_redirect_failed: 'Something went wrong resuming your sign-in. Please start over.',
   no_mfa_pending: 'Your login session has expired. Please log in again.',
   email_taken: 'The email you provided already exists on another account. Please log in',
-  invalid_request: 'The signup information provided is invalid. Please try again.'
+  invalid_request: 'The signup information provided is invalid. Please try again.',
+  social_login_failed: 'Google sign-in failed. Please try again or sign in with your password.'
 }
