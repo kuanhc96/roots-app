@@ -81,7 +81,6 @@ Implements `AuthenticationSuccessHandler`. Clears the `remember-me` cookie (sett
 | Endpoint | Handler | Purpose |
 |---|---|---|
 | `GET /ott/login` | `AuthFlowController.forwardSpaShell` | Forwards to the SPA shell; the client router renders the OTT login page. Explicit because the path also has a `@PostMapping`: a URL that matches a mapping's path but not its method gets a 405 from Spring MVC instead of falling through to the static fallback (same for `/magic-link/login`, `/reset-password`, and `/signup`) |
-| `POST /ott/generate` | `MfaController` | Generates a one-time token for the pending user and hands it to `EmailService`, which emails it (qa/prod) or logs the value at INFO (dev) / skips it (test) |
 | `POST /ott/login` | `AuthFlowController` | Verifies the submitted OTT; if `rememberBrowser=true` is posted, disables MFA for the user; upgrades the session to `MfaAuthenticationToken` and redirects to the original OAuth2 request |
 
 **Guest login endpoint:**
@@ -99,13 +98,13 @@ Implements `AuthenticationSuccessHandler`. Clears the `remember-me` cookie (sett
 | `UserCredential` | Record mapping a `user_credential` row |
 | `UserCredentialRepository` | JdbcTemplate-based repo; `findByEmail` and `setMfaEnabled` |
 | `UserCredentialService` | `isMfaEnabled(email)` and `disableMfa(email)`; injected into both auth providers and `AuthFlowController` |
-| `EmailService` | `sendOTTEmail(to, ott)` — sends the OTT to the user's email via Gmail SMTP using a required `MailSender` (auto-configured `JavaMailSenderImpl`, built in every profile); injected into `MfaController` |
+| `EmailService` | `sendOTTEmail(to, ott)` — sends the OTT to the user's email via Gmail SMTP using a required `MailSender` (auto-configured `JavaMailSenderImpl`, built in every profile); injected into `MfaRedirectAuthenticationSuccessHandler` |
 
 **Full MFA flow (MFA enabled):**
 1. User submits credentials or browser sends remember-me cookie.
 2. The appropriate MFA-aware provider validates the first factor, checks `is_mfa_enabled = true`, and stores a `MfaPendingAuthenticationToken` in the session.
-3. `MfaRedirectAuthenticationSuccessHandler` detects the pending token and redirects to `/ott/login`.
-4. The Nuxt `/ott/login` page mounts and immediately calls `POST /ott/generate`, which generates the OTT and passes it to `EmailService` — emailed to the user (qa/prod), logged at INFO to the server console (dev), or skipped (test).
+3. `MfaRedirectAuthenticationSuccessHandler` detects the pending token, generates the OTT via `InMemoryOneTimePinService`, and hands it to `EmailService` — emailed to the user (qa/prod), logged at INFO to the server console (dev), or skipped (test) — then redirects to `/ott/login`. (There is no public `/ott/generate` endpoint; generation is entirely server-side within the login request.)
+4. The Nuxt `/ott/login` page mounts the OTT form — purely presentational, no API call.
 5. User enters the OTT and optionally checks "Remember this browser?", then submits `POST /ott/login`.
 6. `AuthFlowController.verifyOtt()` consumes the token. If `rememberBrowser=true`, it calls `UserCredentialService.disableMfa()` to set `is_mfa_enabled = false`. The session is upgraded to `MfaAuthenticationToken` and redirected to the saved OAuth2 authorization request.
 
@@ -223,7 +222,7 @@ How it is wired in `config/SecurityConfig.java`:
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /ott/generate/test?email=<email>` | Like `/ott/generate` but mints the MFA OTT for the given `email` and returns the value in the response body. Stateless like the magic-link variant — the pending user **cannot** be read from the session here, because the bearer-authenticated caller's JWT context replaces the session context for the request. Verification stays session-bound: `POST /ott/login` checks the consumed token's username against the session's pending user |
+| `POST /ott/generate/test?email=<email>` | Mints the MFA OTT for the given `email` and returns the value in the response body (in the real flow the OTT is generated server-side by `MfaRedirectAuthenticationSuccessHandler` during login — there is no public generate endpoint). Stateless like the magic-link variant — the pending user **cannot** be read from the session here, because the bearer-authenticated caller's JWT context replaces the session context for the request. Verification stays session-bound: `POST /ott/login` checks the consumed token's username against the session's pending user |
 | `POST /magic-link/generate/test?email=<email>` | Mints an account-creation magic-link token via `JdbcOneTimeTokenService` for the given `email` and returns the token value; stateless — the email is passed explicitly rather than read from the session, since a client_credentials caller has no browser session |
 | `POST /api/temp-password/test` (body `{"email": …}`) | Like `POST /api/temp-password` but returns the plaintext temp password in the response body instead of emailing it. Same `UserCredentialService.requestTempPassword` underneath, so it has the same side effects: the stored password is overwritten with the temp password's hash and `is_password_change_required` is set to `true` |
 
@@ -287,7 +286,14 @@ auth-server/frontend/
 │   ├── magic-link/
 │   │   └── login.vue                # /magic-link/login — mounts MagicLinkLoginForm centered on page
 │   └── ott/
-│       └── login.vue                # /ott/login — on mount calls POST /ott/generate to trigger OTT delivery; mounts OttLoginForm centered on page
+│       └── login.vue                # /ott/login — mounts OttLoginForm centered on page (no API call: the OTT was already generated and emailed/logged server-side by MfaRedirectAuthenticationSuccessHandler before the redirect here)
+├── tests/                           # Vitest unit tests — no backend needed (see "Frontend unit tests" under Commands)
+│   ├── setup.ts                     # visualViewport shim (Vuetify overlays need it under happy-dom)
+│   ├── testUtils.ts                 # flushAsync — drains vee-validate + vue-router async work a plain flushPromises misses
+│   ├── components/                  # one spec per component: form contract (action/method/field names/hidden fields) + server-redirect rendering (?e=…, prefill, notice) + client-side validation gating (invalid input blocks the native submit/fetch, valid input resumes it — HTMLFormElement.prototype.submit is spied)
+│   ├── composables/                 # useServerErrorMessage: code→message mapping + URL scrub (flash) semantics
+│   └── pages/                       # callback (every Google-exchange branch, fetch mocked) and index (redirect)
+├── vitest.config.ts                 # defineVitestConfig — environment: 'nuxt' (auto-imports/Vuetify work in tests), happy-dom
 ├── nuxt.config.ts                   # ssr: false — pure SPA; one shell, no hydration, query params readable everywhere
 └── package.json
 ```
@@ -417,7 +423,11 @@ cd frontend
 npm install
 npm run dev                # Nuxt dev server on :3000
 npm run generate           # static export consumed by Maven
+npm run test               # frontend unit tests (Vitest + @nuxt/test-utils; no backend needed)
+npm run test:watch         # watch mode
 ```
+
+**Frontend unit tests** live in `frontend/tests/` and run entirely without a backend: native-form components are asserted against their outgoing form contract and against the query params the server 302s back with (`?e=…`, prefill, `notice=…`); `fetch`-based flows (forgot-password, the Google `/callback` code exchange) run against mocked `fetch`; `navigateTo` is mocked via `mockNuxtImport`. They are the first (fail-fast) step of `auth-server-ci.yml`. They are **not** part of the Maven build — run them via npm.
 
 #### Integration tests (require live auth-server)
 
@@ -464,10 +474,11 @@ Workflows live in `.github/workflows/`. CI workflows run on `pull_request` event
 
 ### auth-server-ci.yml — `paths: auth-server/**`
 
-1. Builds with `mvn package -DskipTests` — builds the JAR, test classes, and the embedded Nuxt frontend once.
-2. Builds the auth-server image locally with `mvn jib:dockerBuild -Djib.to.image=$DOCKERHUB_USERNAME/auth-server:ci` (loaded into the runner's Docker daemon — no registry push).
-3. `docker compose up -d --wait auth-server` brings up `auth-server-db` (via `depends_on`) and `auth-server`, with `AUTH_SERVER_TAG=ci` and `SPRING_PROFILES_ACTIVE=test` (so `emailSender.enabled=false` — no real emails). The DB self-seeds; `--wait` blocks until both are healthy. No `docker login` is needed — only the public `mysql:8` image is pulled.
-4. Runs integration tests with `mvn surefire:test`.
+1. Runs the frontend unit tests (`actions/setup-node` + `npm install` + `npm run test` in `auth-server/frontend`) as a fail-fast gate before any Maven build. `npm install`, not `npm ci`, because the lockfile is gitignored.
+2. Builds with `mvn package -DskipTests` — builds the JAR, test classes, and the embedded Nuxt frontend once.
+3. Builds the auth-server image locally with `mvn jib:dockerBuild -Djib.to.image=$DOCKERHUB_USERNAME/auth-server:ci` (loaded into the runner's Docker daemon — no registry push).
+4. `docker compose up -d --wait auth-server` brings up `auth-server-db` (via `depends_on`) and `auth-server`, with `AUTH_SERVER_TAG=ci` and `SPRING_PROFILES_ACTIVE=test` (so `emailSender.enabled=false` — no real emails). The DB self-seeds; `--wait` blocks until both are healthy. No `docker login` is needed — only the public `mysql:8` image is pulled.
+5. Runs integration tests with `mvn surefire:test`.
 
 **Required GitHub secrets:** `DOCKERHUB_USERNAME` (names the local `:ci` image — no push happens here), `MYSQL_AUTH_SERVER_ROOT_USERNAME` (set to `root`), `MYSQL_AUTH_SERVER_ROOT_PASSWORD`, real `SPRING_MAIL_USERNAME`/`SPRING_MAIL_PASSWORD` (Gmail address + App Password), and `GOOGLE_CLIENT_SECRET` — exported as `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET` on the `mvn package` step (frontend **build-time** var: `nuxt generate` bakes it into the bundle; no test exercises Google login, but CI proves the project builds with the secret wired in). The mail secrets are required even though the `test` profile sends no email: the `JavaMailSender` is built in every profile and the Actuator mail health indicator opens an SMTP connection on each `/actuator/health` poll, so invalid creds would fail the `--wait` healthcheck. Inside the network, compose sets `MYSQL_AUTH_SERVER_DB_URL=jdbc:mysql://auth-server-db:3307/auth-server-db` (no longer overridden by the workflow).
 
