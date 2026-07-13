@@ -15,6 +15,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Fast fail gate: the frontend vitest suite runs before anything is built.
+      # npm install (not npm ci) because frontend/package-lock.json is gitignored —
+      # it is regenerated per platform (see CLAUDE.md).
+      - name: Run frontend unit tests
+        working-directory: auth-server/frontend
+        run: |
+          npm install
+          npm run test
+
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
