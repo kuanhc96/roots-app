@@ -31,6 +31,12 @@ jobs:
         env:
           MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
           MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
+          # Frontend BUILD-TIME variable, not a server runtime var: nuxt generate bakes
+          # runtimeConfig.public.googleClientSecret into the JS bundle during this mvn
+          # package (frontend-maven-plugin -> npm run generate inherits this env). No
+          # integration test exercises Google login; this proves the project builds with
+          # the secret wired in, matching how a real image must be built.
+          NUXT_PUBLIC_GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
 
       - name: Build auth-server image
         working-directory: auth-server

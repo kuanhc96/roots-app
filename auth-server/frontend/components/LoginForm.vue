@@ -21,6 +21,8 @@
       </v-card-actions>
       <v-card-actions>
         <NuxtLink to="/signup">Create an account</NuxtLink>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="authorizeWithGoogle()">Sign in with Google</v-btn>
       </v-card-actions>
     </v-card>
 
@@ -44,4 +46,26 @@ const showNotice = ref(route.query.notice === 'tempPasswordSent')
 // A failed login 302s here with ?e=<code> (e.g. invalid_login); the composable
 // maps it to display text and scrubs the code from the URL after mount.
 const loginErrorMessage = useServerErrorMessage()
+
+// Starts Google's authorization-code flow (GIS code client, redirect mode). The state
+// is checked by the /callback page against sessionStorage on the way back. openid+email
+// are required for an id_token carrying the email claim; profile supplies the name used
+// when an account is auto-created.
+const config = useRuntimeConfig()
+
+function authorizeWithGoogle() {
+  const google = (window as any).google
+  if (!google?.accounts?.oauth2) return // GIS script not loaded yet
+
+  const state = crypto.randomUUID()
+  sessionStorage.setItem('google_oauth_state', state)
+  const client = google.accounts.oauth2.initCodeClient({
+    client_id: config.public.googleClientId,
+    scope: 'openid email profile',
+    ux_mode: 'redirect',
+    redirect_uri: `${window.location.origin}/callback`,
+    state: state
+  })
+  client.requestCode();
+}
 </script>

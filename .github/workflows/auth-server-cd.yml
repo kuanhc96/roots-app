@@ -56,6 +56,11 @@ jobs:
           mvn clean compile jib:build -DskipTests \
             -Djib.to.image=${{ secrets.DOCKERHUB_USERNAME }}/auth-server:${{ steps.version.outputs.release }} \
             -Djib.to.tags=latest
+        env:
+          # Frontend BUILD-TIME variable: the compile phase runs `nuxt generate`, which
+          # bakes the secret into the shipped JS bundle — without it, Google login is
+          # broken in the pushed image and cannot be fixed by runtime env vars.
+          NUXT_PUBLIC_GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
 
       - name: Set pom.xml to next snapshot version
         working-directory: auth-server

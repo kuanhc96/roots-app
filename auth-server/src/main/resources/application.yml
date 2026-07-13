@@ -55,6 +55,12 @@ remember-me:
 web-client:
   location: ${WEB_CLIENT_LOCATION:http://localhost:3000}
 
+# Google Sign-In: the OAuth client id is the expected `aud` of incoming Google
+# id_tokens (GoogleIdTokenVerifier). It is public information (it also ships in
+# the frontend bundle), so a dev default is safe; override with GOOGLE_CLIENT_ID.
+google:
+  client-id: ${GOOGLE_CLIENT_ID:444329721662-9ftcduffg48hg91douoq4tnaok5h266r.apps.googleusercontent.com}
+
 # Swagger/OpenAPI docs are dev-only: disabled here so every profile fails closed,
 # re-enabled solely in the dev document below. Both flags are needed — api-docs
 # covers /v3/api-docs, swagger-ui covers /swagger-ui/**.

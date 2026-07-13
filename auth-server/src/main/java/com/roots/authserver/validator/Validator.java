@@ -2,6 +2,7 @@ package com.roots.authserver.validator;
 
 import java.util.regex.Pattern;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import com.roots.authserver.dto.request.CreateAccountRequest;
@@ -28,7 +29,7 @@ public class Validator {
     }
 
     public void validatePassword(String password) {
-        if (password == null || password.isBlank()) {
+        if (StringUtils.isBlank(password)) {
             throw new InvalidRequestException("Password is required");
         }
         if (password.length() < MIN_PASSWORD_LENGTH) {
@@ -46,7 +47,7 @@ public class Validator {
     }
 
     private void validateName(String name) {
-        if (name == null || name.isBlank()) {
+        if (StringUtils.isBlank(name)) {
             throw new InvalidRequestException("Name is required");
         }
         if (name.length() > MAX_NAME_LENGTH) {
@@ -55,7 +56,7 @@ public class Validator {
     }
 
     private void validateEmail(String email) {
-        if (email == null || email.isBlank()) {
+        if (StringUtils.isBlank(email)) {
             throw new InvalidRequestException("Email is required");
         }
         if (!email.contains("@")) {

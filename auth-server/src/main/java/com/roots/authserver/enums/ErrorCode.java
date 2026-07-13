@@ -19,7 +19,13 @@ public enum ErrorCode {
     /** Reserved: mapped in errorMessages.ts but not currently emitted by the server. */
     NO_MFA_PENDING("no_mfa_pending"),
     EMAIL_TAKEN("email_taken"),
-    INVALID_REQUEST("invalid_request");
+    INVALID_REQUEST("invalid_request"),
+    /**
+     * One generic code for every Google-login failure (denied consent, exchange failure,
+     * state mismatch, invalid id_token, unverified email) — details go to the server log,
+     * never to the user.
+     */
+    SOCIAL_LOGIN_FAILED("social_login_failed");
 
     private final String value;
 
