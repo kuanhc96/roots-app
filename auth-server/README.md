@@ -30,7 +30,7 @@ Consequences:
 1. The variable must be present in the environment of whatever runs the **build** (`frontend-maven-plugin` spawns npm as a child of the Maven process, which inherits the shell's environment). A `-D` flag would set a Java *system property*, which the npm child process never sees.
 2. **Changing the secret requires a rebuild.** A JAR built without it will fail Google login at the token exchange until rebuilt; restarting with new env vars cannot fix it.
 3. **The secret ships in the served JS bundle** (readable by anyone). This is a known, accepted tradeoff of the current browser-side code exchange; it goes away when the exchange moves server-side, at which point the secret becomes a normal server env var like `SPRING_MAIL_PASSWORD`.
-4. CI/CD images bake it too: for Google login to work in an image built by `auth-server-cd.yml`, the workflow's build step would need `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET` exported from a GitHub secret. (CI integration tests don't exercise Google login, so CI passes without it.)
+4. CI/CD images bake it too: both workflows export `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET` from the `GOOGLE_CLIENT_SECRET` GitHub secret on their build steps — `auth-server-ci.yml` on `mvn package` (no integration test exercises Google login; this proves the project builds with the secret wired in) and `auth-server-cd.yml` on `mvn clean compile jib:build` (the pushed image's bundle must carry it, or Google login is broken in that image with no runtime fix).
 
 Two ways to set it:
 
@@ -211,6 +211,7 @@ No `docker login` step is needed in this workflow — only the public `mysql:8` 
 | `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | any password |
 | `SPRING_MAIL_USERNAME` | a real Gmail address |
 | `SPRING_MAIL_PASSWORD` | a Gmail App Password for that address |
+| `GOOGLE_CLIENT_SECRET` | the Google OAuth client secret — exported as `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET` on the `mvn package` step so `nuxt generate` bakes it into the frontend bundle (build-time; see [Google Sign-In configuration](#google-sign-in-configuration-build-time-vs-runtime)) |
 
 `SPRING_MAIL_USERNAME`/`SPRING_MAIL_PASSWORD` **are** required in CI: although the `test` profile disables outbound email, the `JavaMailSender` is built in every profile and the Actuator mail health indicator opens an SMTP connection on each `/actuator/health` poll, so the `--wait` step needs valid Gmail credentials. They are supplied as GitHub secrets.
 
@@ -239,6 +240,7 @@ The workflow at `.github/workflows/auth-server-cd.yml` triggers on every push to
 |---|---|
 | `DOCKERHUB_USERNAME` | Your Docker Hub username |
 | `DOCKERHUB_TOKEN` | Docker Hub access token (Account Settings → Security → Access Tokens) |
+| `GOOGLE_CLIENT_SECRET` | the Google OAuth client secret — exported as `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET` on the image-build step; the `compile` phase runs `nuxt generate`, so the secret is baked into the pushed image's frontend bundle (without it, Google login is broken in that image and no runtime env var can fix it) |
 
 ### Required one-time repo setup
 
