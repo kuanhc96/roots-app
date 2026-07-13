@@ -65,7 +65,7 @@ public class SocialLoginService {
             throw new SocialLoginException("Google reports the email as unverified: " + email);
         }
 
-        var binding = socialBindingRepository.findByProviderAndSocialUserId(SocialProvider.GOOGLE, sub);
+        var binding = socialBindingRepository.findBySocialUserId(sub);
         if (binding.isPresent()) {
             UserCredential bound = userCredentialRepository.findById(binding.get().userId())
                     .orElseThrow(() -> new SocialLoginException(
@@ -123,7 +123,7 @@ public class SocialLoginService {
         } catch (Exception e) {
             throw new SocialLoginException("Google id_token verification errored", e);
         }
-        if (StringUtils.isBlank(idTokenString)) {
+        if (idToken == null) {
             throw new SocialLoginException("Google id_token failed verification");
         }
         return idToken.getPayload();

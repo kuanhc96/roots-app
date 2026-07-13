@@ -23,11 +23,14 @@ public class SocialBindingRepository {
             rs.getString("social_user_id")
     );
 
-    public Optional<SocialBinding> findByProviderAndSocialUserId(SocialProvider socialProvider, String socialUserId) {
+    // Keyed on social_user_id alone (no provider filter): provider id schemes are
+    // effectively globally unique (Google's sub is a 21-digit numeric string), and the
+    // column carries a UNIQUE constraint to match.
+    public Optional<SocialBinding> findBySocialUserId(String socialUserId) {
         var results = jdbcTemplate.query(
-                "SELECT id, user_id, social_provider, social_user_id FROM social_binding WHERE social_provider = ? AND social_user_id = ?",
+                "SELECT id, user_id, social_provider, social_user_id FROM social_binding WHERE social_user_id = ?",
                 ROW_MAPPER,
-                socialProvider.getValue(), socialUserId
+                socialUserId
         );
         return results.stream().findFirst();
     }

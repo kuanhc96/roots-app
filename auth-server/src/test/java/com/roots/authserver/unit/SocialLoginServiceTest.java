@@ -73,7 +73,7 @@ class SocialLoginServiceTest {
     @Test
     void existingBinding_logsInBoundUser_withoutWriting() throws Exception {
         stubVerifiedToken(SUB, EMAIL, true);
-        when(socialBindingRepository.findByProviderAndSocialUserId(SocialProvider.GOOGLE, SUB))
+        when(socialBindingRepository.findBySocialUserId(SUB))
                 .thenReturn(Optional.of(new SocialBinding(7L, 42L, SocialProvider.GOOGLE, SUB)));
         when(userCredentialRepository.findById(42L)).thenReturn(Optional.of(credential(42L, EMAIL)));
 
@@ -89,7 +89,7 @@ class SocialLoginServiceTest {
     void existingBinding_subWinsOverChangedGoogleEmail() throws Exception {
         // The Google-side email changed since binding; the bound local account still wins.
         stubVerifiedToken(SUB, "renamed@example.com", true);
-        when(socialBindingRepository.findByProviderAndSocialUserId(SocialProvider.GOOGLE, SUB))
+        when(socialBindingRepository.findBySocialUserId(SUB))
                 .thenReturn(Optional.of(new SocialBinding(7L, 42L, SocialProvider.GOOGLE, SUB)));
         when(userCredentialRepository.findById(42L)).thenReturn(Optional.of(credential(42L, EMAIL)));
 
@@ -103,7 +103,7 @@ class SocialLoginServiceTest {
     @Test
     void noBinding_existingEmail_linksSubToExistingAccount() throws Exception {
         stubVerifiedToken(SUB, EMAIL, true);
-        when(socialBindingRepository.findByProviderAndSocialUserId(SocialProvider.GOOGLE, SUB))
+        when(socialBindingRepository.findBySocialUserId(SUB))
                 .thenReturn(Optional.empty());
         when(userCredentialRepository.findByEmail(EMAIL)).thenReturn(Optional.of(credential(42L, EMAIL)));
 
@@ -118,7 +118,7 @@ class SocialLoginServiceTest {
     @Test
     void noBinding_unknownEmail_createsAccountRoleAndBinding() throws Exception {
         stubVerifiedToken(SUB, EMAIL, true);
-        when(socialBindingRepository.findByProviderAndSocialUserId(SocialProvider.GOOGLE, SUB))
+        when(socialBindingRepository.findBySocialUserId(SUB))
                 .thenReturn(Optional.empty());
         when(userCredentialRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
         when(passwordEncoder.encode(anyString())).thenReturn("{bcrypt}unusable");
@@ -147,7 +147,7 @@ class SocialLoginServiceTest {
     void noBinding_unknownEmail_missingNameFallsBackToEmail() throws Exception {
         GoogleIdToken.Payload payload = stubVerifiedToken(SUB, EMAIL, true);
         payload.remove("name");
-        when(socialBindingRepository.findByProviderAndSocialUserId(SocialProvider.GOOGLE, SUB))
+        when(socialBindingRepository.findBySocialUserId(SUB))
                 .thenReturn(Optional.empty());
         when(userCredentialRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
         when(passwordEncoder.encode(anyString())).thenReturn("{bcrypt}unusable");
@@ -168,7 +168,7 @@ class SocialLoginServiceTest {
                 .isInstanceOf(SocialLoginException.class)
                 .hasMessageContaining("unverified");
 
-        verify(socialBindingRepository, never()).findByProviderAndSocialUserId(any(), anyString());
+        verify(socialBindingRepository, never()).findBySocialUserId(anyString());
         verify(userCredentialRepository, never()).insert(any());
         verify(socialBindingRepository, never()).insert(anyLong(), any(), anyString());
     }
