@@ -58,7 +58,6 @@ function authorizeWithGoogle() {
   if (!google?.accounts?.oauth2) return // GIS script not loaded yet
 
   const state = crypto.randomUUID()
-  console.log(state)
   sessionStorage.setItem('google_oauth_state', state)
   const client = google.accounts.oauth2.initCodeClient({
     client_id: config.public.googleClientId,

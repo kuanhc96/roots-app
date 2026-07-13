@@ -18,7 +18,6 @@ onMounted(async () => {
   const params = new URLSearchParams(window.location.search)
   const code = params.get('code')
   const returnedState = params.get('state')
-  console.log("returned state " + returnedState)
   const errorParam = params.get('error')
 
   const expectedState = sessionStorage.getItem('google_oauth_state')
