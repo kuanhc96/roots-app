@@ -2,6 +2,7 @@ package com.roots.authserver.controller;
 
 import java.nio.charset.StandardCharsets;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ott.JdbcOneTimeTokenService;
@@ -137,8 +138,8 @@ public class AuthFlowController {
         // Strict percent-encoding (space -> %20, + -> %2B) so the values survive both
         // the Location header and Vue Router's query parsing on the signup page.
         return "redirect:/signup?e=" + code
-                + "&name=" + UriUtils.encode(name == null ? "" : name, StandardCharsets.UTF_8)
-                + "&email=" + UriUtils.encode(email == null ? "" : email, StandardCharsets.UTF_8);
+                + "&name=" + UriUtils.encode(StringUtils.isBlank(name) ? "" : name, StandardCharsets.UTF_8)
+                + "&email=" + UriUtils.encode(StringUtils.isBlank(name) ? "" : email, StandardCharsets.UTF_8);
     }
 
     @Operation(
@@ -219,7 +220,7 @@ public class AuthFlowController {
             return "redirect:/login";
         }
 
-        if (magicLinkToken == null || magicLinkToken.isBlank()) {
+        if (StringUtils.isBlank(magicLinkToken)) {
             return "redirect:/magic-link/login?e=" + ErrorCode.INVALID_TOKEN;
         }
 
@@ -315,7 +316,7 @@ public class AuthFlowController {
             @RequestParam(required = false) String idToken,
             HttpServletRequest request,
             HttpServletResponse response) {
-        if (idToken == null || idToken.isBlank()) {
+        if (StringUtils.isBlank(idToken)) {
             return "redirect:/login?e=" + ErrorCode.SOCIAL_LOGIN_FAILED;
         }
 

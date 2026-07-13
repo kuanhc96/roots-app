@@ -6,6 +6,7 @@ import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.UUID;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,7 +55,7 @@ public class SocialLoginService {
 
         String sub = payload.getSubject();
         String email = payload.getEmail();
-        if (sub == null || sub.isBlank() || email == null || email.isBlank()) {
+        if (StringUtils.isAnyBlank(sub, email)) {
             throw new SocialLoginException("Google id_token is missing the sub or email claim");
         }
         // Only a Google-verified email may create or link a local account: an attacker
@@ -122,7 +123,7 @@ public class SocialLoginService {
         } catch (Exception e) {
             throw new SocialLoginException("Google id_token verification errored", e);
         }
-        if (idToken == null) {
+        if (StringUtils.isBlank(idTokenString)) {
             throw new SocialLoginException("Google id_token failed verification");
         }
         return idToken.getPayload();
