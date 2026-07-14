@@ -95,8 +95,10 @@
                 <version>1.15.0</version>
                 <configuration>
                     <workingDirectory>frontend</workingDirectory>
-                    <nodeVersion>v20.12.0</nodeVersion>
-                    <npmVersion>10.5.0</npmVersion>
+                    <!-- nuxt 3.21+ requires node ^20.19.0 || >=22.12.0 (ESM require support);
+                         keep in step with the node version used in auth-server-ci.yml -->
+                    <nodeVersion>v22.18.0</nodeVersion>
+                    <npmVersion>10.9.2</npmVersion>
                     <installDirectory>target</installDirectory>
                 </configuration>
                 <executions>

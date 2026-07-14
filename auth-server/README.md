@@ -89,6 +89,19 @@ mvn spring-boot:run
 mvn test
 ```
 
+### Frontend unit tests (Vitest)
+
+The Nuxt frontend has its own unit test suite under `frontend/tests/` (Vitest + `@nuxt/test-utils`, `environment: nuxt`, happy-dom). It runs without any backend: native-form components are tested against their form contract (action/method/field names) and against the query params the server redirects back with (`?e=…`, prefill, notices); `fetch`-based flows (forgot-password, the Google `/callback` exchange) run against mocked responses.
+
+```bash
+cd frontend
+npm install
+npm run test          # single run (what CI does)
+npm run test:watch    # watch mode for iteration
+```
+
+Layout: `tests/components/` (one spec per component), `tests/pages/` (`callback`, `index`), `tests/composables/` (`useServerErrorMessage`), `tests/setup.ts` (a `visualViewport` shim Vuetify overlays need under happy-dom), `tests/testUtils.ts` (`flushAsync` for vee-validate/vue-router async work).
+
 ## Integration Tests
 
 Integration tests in `src/test/java/com/roots/authserver/integration/` hit a **live running** auth-server rather than spinning up a Spring context. They require MySQL and auth-server to already be up before the test is executed.
@@ -194,11 +207,12 @@ The workflow at `.github/workflows/auth-server-ci.yml` runs on pull requests tha
 
 ### What it does
 
-1. Builds the JAR with `mvn package -DskipTests` (includes the Nuxt frontend build — done once).
-2. Builds a local Docker image for auth-server via Jib: `mvn jib:dockerBuild -Djib.to.image=${DOCKERHUB_USERNAME}/auth-server:ci`. The image is loaded straight into the local Docker daemon — no registry push.
-3. Brings up the DB + auth-server on the shared `roots_backend` docker network with `docker compose up -d --wait auth-server` (env: `AUTH_SERVER_TAG=ci`, `SPRING_PROFILES_ACTIVE=test`, `MYSQL_AUTH_SERVER_ROOT_USERNAME`/`MYSQL_AUTH_SERVER_ROOT_PASSWORD`, `SPRING_MAIL_USERNAME`/`SPRING_MAIL_PASSWORD`). The DB self-seeds from `src/main/resources/initialize_db/` (mounted into `/docker-entrypoint-initdb.d` by `docker-compose.yml`); MySQL runs every `.sql` there in alphabetical order, which already matches the dependency order (`create_authentication_tables` → `create_client_table` → `create_one_time_tokens_table` → `initialize_test_users`). `--wait` blocks until both services report healthy, so no curl wait-loop is needed.
-4. Runs integration tests on the host (which hit `localhost:9000` against the running container) with `mvn surefire:test`.
-5. On failure, dumps all container logs (`docker compose logs --no-color`).
+1. Runs the frontend Vitest suite (`npm install` + `npm run test` in `auth-server/frontend`) as a fail-fast gate before anything is built. `npm install`, not `npm ci` — the lockfile is gitignored.
+2. Builds the JAR with `mvn package -DskipTests` (includes the Nuxt frontend build — done once).
+3. Builds a local Docker image for auth-server via Jib: `mvn jib:dockerBuild -Djib.to.image=${DOCKERHUB_USERNAME}/auth-server:ci`. The image is loaded straight into the local Docker daemon — no registry push.
+4. Brings up the DB + auth-server on the shared `roots_backend` docker network with `docker compose up -d --wait auth-server` (env: `AUTH_SERVER_TAG=ci`, `SPRING_PROFILES_ACTIVE=test`, `MYSQL_AUTH_SERVER_ROOT_USERNAME`/`MYSQL_AUTH_SERVER_ROOT_PASSWORD`, `SPRING_MAIL_USERNAME`/`SPRING_MAIL_PASSWORD`). The DB self-seeds from `src/main/resources/initialize_db/` (mounted into `/docker-entrypoint-initdb.d` by `docker-compose.yml`); MySQL runs every `.sql` there in alphabetical order, which already matches the dependency order (`create_authentication_tables` → `create_client_table` → `create_one_time_tokens_table` → `initialize_test_users`). `--wait` blocks until both services report healthy, so no curl wait-loop is needed.
+5. Runs integration tests on the host (which hit `localhost:9000` against the running container) with `mvn surefire:test`.
+6. On failure, dumps all container logs (`docker compose logs --no-color`).
 
 No `docker login` step is needed in this workflow — only the public `mysql:8` base image is pulled (auth-server uses the locally-built `:ci` image).
 
@@ -356,8 +370,8 @@ MFA is **optional per user**, controlled by the `is_mfa_enabled` column in `user
 
 1. User submits credentials on `/login` (or browser sends a remember-me cookie automatically).
 2. Spring Security validates the first factor. Because `is_mfa_enabled = true`, the session holds a `MfaPendingAuthenticationToken` — the user is **not yet authenticated** and has no granted authorities.
-3. The `MfaRedirectAuthenticationSuccessHandler` detects the pending token and redirects to `/ott/login`.
-4. The `/ott/login` Nuxt page loads and immediately calls `POST /ott/generate`. This generates a one-time token and hands it to `EmailService`, which **emails it** via Gmail SMTP (qa/prod), **logs the value at INFO** to the server console (dev — copy it from there, no inbox needed), or skips it (test).
+3. The `MfaRedirectAuthenticationSuccessHandler` detects the pending token, generates the one-time token via `InMemoryOneTimePinService`, and hands it to `EmailService`, which **emails it** via Gmail SMTP (qa/prod), **logs the value at INFO** to the server console (dev — copy it from there, no inbox needed), or skips it (test). It then redirects to `/ott/login`.
+4. The `/ott/login` Nuxt page mounts the OTT form — purely presentational, no API call (there is no public `/ott/generate` endpoint; generation happened server-side in step 3).
 5. The user copies the token from the console, enters it in the OTT form, and submits `POST /ott/login`. The form also includes a "Remember this browser?" checkbox.
 6. `AuthFlowController` verifies the token. If "Remember this browser?" was checked, it sets `is_mfa_enabled = false` for the user in the database. The session is upgraded to a fully authenticated `MfaAuthenticationToken` and the user is redirected back to the original OAuth2 authorization request.
 
@@ -376,7 +390,7 @@ MFA is **optional per user**, controlled by the `is_mfa_enabled` column in `user
 | `MfaAwareDaoAuthenticationProvider` | `component/` | Validates password; checks `is_mfa_enabled` and returns either `MfaPendingAuthenticationToken` or `MfaAuthenticationToken` |
 | `MfaAwareRememberMeAuthenticationProvider` | `component/` | Validates remember-me cookie; same conditional MFA logic |
 | `MfaRedirectAuthenticationSuccessHandler` | `component/` | Redirects to `/ott/login` when the result is a pending token; falls through to saved-request redirect otherwise |
-| `MfaController` | `controller/` | `POST /ott/generate` — generates the OTT and calls `EmailService.sendOTTEmail` (which emails it, logs it at INFO in dev, or skips it in test) |
+| `MfaController` | `controller/` | `POST /ott/generate/test` — integration-test-only OTT minting (bearer-guarded); the real flow's OTT is generated by `MfaRedirectAuthenticationSuccessHandler` during login |
 | `AuthFlowController` | `controller/` | `POST /ott/login` — verify OTT, optionally disable MFA, and upgrade session; `GET /ott/login` forwards to the SPA shell via `forwardSpaShell` (paths with a `@PostMapping` 405 on GET instead of reaching the static fallback) |
 | `UserCredential` | `model/` | Record representing a row from `user_credential` |
 | `UserCredentialRepository` | `repository/` | JdbcTemplate-based repo; `findByEmail` and `setMfaEnabled` |
