@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
-import { flushPromises } from '@vue/test-utils'
 import Callback from '~/pages/callback.vue'
+import { flushAsync } from '../testUtils'
 
 const { navigateToMock } = vi.hoisted(() => ({ navigateToMock: vi.fn() }))
 mockNuxtImport('navigateTo', () => navigateToMock)
@@ -34,8 +34,7 @@ async function mountCallback(search: string) {
   window.history.replaceState({}, '', `/callback${search}`)
   const wrapper = await mountSuspended(Callback, { route: '/callback' })
   // drain the async onMounted chain (fetch → json → nextTick → submit)
-  await flushPromises()
-  await flushPromises()
+  await flushAsync()
   return wrapper
 }
 
