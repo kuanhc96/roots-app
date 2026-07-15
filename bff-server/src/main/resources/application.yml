@@ -1,3 +1,14 @@
 spring:
   application:
     name: bff-server
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+server:
+  port: ${SERVER_PORT:8083}
+
+web:
+  client:
+    origin: ${WEB_CLIENT_ORIGIN:http://localhost:3000}
