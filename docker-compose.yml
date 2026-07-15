@@ -77,6 +77,44 @@ services:
       retries: 10
       start_period: 60s
 
+  bff-server-redis:
+    image: redis:8
+    container_name: bff-server-redis
+    ports:
+      # Published so a locally-run bff-server (mvn spring-boot:run) reaches it at
+      # localhost:6379 — same pattern as MySQL on 3307. No AUTH (dev/CI-grade, like the DB).
+      - "6379:6379"
+    networks:
+      - roots_backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  bff-server:
+    image: ${DOCKERHUB_USERNAME}/bff-server:${BFF_SERVER_TAG:-latest}
+    container_name: bff-server
+    ports:
+      - "8083:8083"
+    networks:
+      - roots_backend
+    depends_on:
+      bff-server-redis:
+        condition: service_healthy
+      auth-server:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      REDIS_HOST: bff-server-redis
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent localhost:8083/actuator/health | grep UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
 networks:
   roots_backend:
     driver: bridge
