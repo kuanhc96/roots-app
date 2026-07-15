@@ -1,14 +1,17 @@
 # bff-server
 
 The **backend-for-frontend** for the roots-app platform. Its end goal is to manage OAuth2 tokens on behalf of `web-client`, so tokens no longer need to be stored in the browser (today web-client keeps them in `sessionStorage`). The browser holds only a `SESSION` cookie; the tokens live server-side in **Redis, keyed by the session id**.
+The **backend-for-frontend** for the roots-app platform. Its end goal is to manage OAuth2 tokens on behalf of `web-client`, so tokens no longer need to be stored in the browser (today web-client keeps them in `sessionStorage`). The browser will hold only a `SESSION` cookie; the tokens themselves will live server-side as attributes of a **Redis-backed HTTP session**.
 
 > **Current state.** The login-status endpoint (`GET /api/auth/status`, below) is implemented and fully tested, but the authorization-code callback that writes the *initial* tokens to Redis still lives in web-client — so in real traffic the endpoint answers `isLoggedIn=false` until that move lands. Everything else remains foundation: the security posture, Redis-backed sessions, the docker-compose topology, and the CI/CD pipelines.
+> **Current state: scaffolding only.** There are no controllers, no token-relay endpoints, and no OAuth2 client wiring toward auth-server yet. What exists is the foundation those features will be built on: the security posture, Redis-backed sessions, the docker-compose topology, a smoke integration test, and the CI/CD pipelines.
 
 ## Environment Variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `SERVER_PORT` | No | `8083` | HTTP port the server listens on |
+| `REDIS_HOST` | No | `localhost` | Redis host backing Spring Session (docker-compose sets `bff-server-redis`) |
 | `REDIS_HOST` | No | `localhost` | Redis host backing Spring Session + the token store (docker-compose sets `bff-server-redis`) |
 | `REDIS_PORT` | No | `6379` | Redis port |
 | `WEB_CLIENT_ORIGIN` | No | `http://localhost:3000` | The **only** origin allowed by CORS (property `web.client.origin`) |
@@ -68,6 +71,8 @@ docker compose up -d bff-server-redis
 
 # 2. Run the service (from bff-server/); the secret must match auth-server's WEB_CLIENT seed
 WEB_CLIENT_SECRET=secret mvn spring-boot:run
+# 2. Run the service (from bff-server/)
+mvn spring-boot:run
 ```
 
 For the refresh-exchange path (and the integration tests), auth-server and its DB must also be running — see `auth-server/README.md`.
@@ -88,6 +93,7 @@ Integration tests in `src/test/java/com/roots/bff_server/integration/` hit a **l
 ### Prerequisites
 
 Start Redis and bff-server as shown under [Running](#running). `AuthStatusIntegrationTest` additionally needs a live **auth-server** (with its DB) at `localhost:9000` — it performs a real guest login there to mint tokens.
+Start Redis and bff-server as shown under [Running](#running).
 
 ### Test properties
 
@@ -110,6 +116,7 @@ mvn surefire:test '-Dtest=%regex[.*integration.*]'
 ### SessionSmokeIntegrationTest
 
 Exercises the session foundation:
+Exercises exactly what this scaffolding stage sets up:
 
 1. `GET /actuator/health` → asserts 200 and `UP` (which transitively proves the Redis connection, via the health indicator).
 2. Asserts a `SESSION` cookie is issued on that first response — proof of `SessionCreationPolicy.ALWAYS` **and** that Spring Session (not the container) owns the session.
@@ -137,6 +144,8 @@ The workflow at `.github/workflows/bff-server-ci.yml` runs on pull requests that
 1. `docker login` — auth-server is an **unchanged dependency** here (the paths filter means the PR only touched bff-server), so its image is pulled as `:latest` rather than rebuilt.
 2. Builds the JAR + test classes with `mvn package -DskipTests`.
 3. Builds a local image via Jib: `mvn jib:dockerBuild -Djib.to.image=${DOCKERHUB_USERNAME}/bff-server:ci` (no registry push).
+4. `docker compose up -d --wait bff-server` with `BFF_SERVER_TAG=ci` and `SPRING_PROFILES_ACTIVE=test` — `depends_on` chains in `bff-server-redis` and `auth-server` (which chains in the self-seeding DB). `--wait` blocks until everything is healthy; bff-server's healthcheck polls `/actuator/health`, whose Redis indicator proves the session store is reachable.
+5. Runs the integration tests on the host against `localhost:8083`: `mvn surefire:test '-Dtest=%regex[.*integration.*]'`.
 4. `docker compose up -d --wait bff-server` with `BFF_SERVER_TAG=ci`, `SPRING_PROFILES_ACTIVE=test`, and `WEB_CLIENT_SECRET=secret` — the secret is hardcoded in the workflow (not a GitHub secret) because it matches the `{noop}secret` WEB_CLIENT seed already public in the checked-in SQL. `depends_on` chains in `bff-server-redis` and `auth-server` (which chains in the self-seeding DB). `--wait` blocks until everything is healthy; bff-server's healthcheck polls `/actuator/health`, whose Redis indicator proves the session store is reachable.
 5. Runs the integration tests on the host against `localhost:8083`: `mvn surefire:test '-Dtest=%regex[.*integration.*]'` — the session smoke test plus the four `/api/auth/status` paths (which drive a real guest login against the auth-server container).
 6. On failure, dumps all container logs (`docker compose logs --no-color`).
