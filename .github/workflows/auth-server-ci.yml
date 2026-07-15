@@ -55,12 +55,16 @@ jobs:
         working-directory: auth-server
         run: mvn jib:dockerBuild -Djib.to.image=${{ secrets.DOCKERHUB_USERNAME }}/auth-server:ci
 
-      # Bring up the DB + auth-server on the shared docker network. The DB self-seeds from
-      # initialize_db/ (mounted into /docker-entrypoint-initdb.d). --wait blocks until both
-      # report healthy, so no curl wait-loop is needed. Only the public mysql:8 base image
-      # is pulled here (auth-server uses the local :ci image), so no docker login is needed.
+      # Bring up the DB + auth-server + account-management on the shared docker network
+      # (the auth-server integration suite creates its account fixtures through
+      # account-management, pulled :latest). Naming account-management scopes the up to
+      # exactly those three services — a bare `up -d` would also boot every other compose
+      # service (e.g. bff-server), pulling images this suite doesn't need. The DB self-seeds
+      # from initialize_db/ (mounted into /docker-entrypoint-initdb.d). --wait blocks until
+      # all report healthy, so no curl wait-loop is needed. auth-server itself uses the
+      # local :ci image.
       - name: Start services
-        run: docker compose up -d
+        run: docker compose up -d --wait account-management
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           AUTH_SERVER_TAG: ci
