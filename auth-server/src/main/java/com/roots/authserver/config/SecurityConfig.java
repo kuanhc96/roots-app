@@ -12,6 +12,7 @@ import com.roots.authserver.component.MfaRedirectAuthenticationSuccessHandler;
 import com.roots.authserver.component.RememberMeOidcLogoutAuthenticationSuccessHandler;
 import com.roots.authserver.component.SpaLoginEntryPoint;
 import com.roots.authserver.enums.ErrorCode;
+import com.roots.authserver.repository.UserCredentialRepository;
 import com.roots.authserver.service.UserCredentialService;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -42,6 +43,7 @@ import org.springframework.security.web.authentication.rememberme.TokenBasedReme
 import org.springframework.security.web.authentication.rememberme.TokenBasedRememberMeServices.RememberMeTokenAlgorithm;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.core.oidc.endpoint.OidcParameterNames;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationProvider;
@@ -241,15 +243,25 @@ public class SecurityConfig {
     }
 
     @Bean
-    public OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer() {
+    public OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer(UserCredentialRepository userCredentialRepository) {
         return context -> {
+            Authentication principal = context.getPrincipal();
+            Set<String> roles = principal.getAuthorities().stream()
+                    .map(GrantedAuthority::getAuthority)
+                    .map(String::toUpperCase)
+                    .collect(Collectors.toSet());
+
             if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
-                Authentication principal = context.getPrincipal();
-                Set<String> roles = principal.getAuthorities().stream()
-                        .map(GrantedAuthority::getAuthority)
-                        .map(String::toUpperCase)
-                        .collect(Collectors.toSet());
                 context.getClaims().claim("roles", roles);
+            } else if (OidcParameterNames.ID_TOKEN.equals(context.getTokenType().getValue())) {
+                // The id_token is bff-server's login marker: /api/auth/status answers from
+                // these claims. A guest principal has no user_credential row, so its
+                // id_token simply carries no userGUID claim.
+                String email = principal.getName();
+                context.getClaims().claim("email", email);
+                context.getClaims().claim("roles", roles);
+                userCredentialRepository.findByEmail(email)
+                        .ifPresent(credential -> context.getClaims().claim("userGUID", credential.userGuid()));
             }
         };
     }
