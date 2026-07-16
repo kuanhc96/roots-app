@@ -18,7 +18,8 @@ The **backend-for-frontend** for the roots-app platform. Its end goal is to mana
 | `REDIS_HOST` | No | `localhost` | Redis host backing Spring Session + the token store (docker-compose sets `bff-server-redis`) |
 | `REDIS_PORT` | No | `6379` | Redis port |
 | `WEB_CLIENT_ORIGIN` | No | `http://localhost:3000` | The **only** origin allowed by CORS (property `web.client.origin`) |
-| `AUTH_SERVER_LOCATION` | No | `http://localhost:9000` | Base URL of auth-server for the refresh-token exchange (property `auth-server.location`; docker-compose sets `http://auth-server:9000`) |
+| `AUTH_SERVER_INTERNAL_LOCATION` | No | `http://localhost:9000` | Auth-server base URL reachable from **inside** the deployment network; used by the server-to-server RestClient (refresh-token exchange). Property `auth-server.internal-location`; docker-compose sets `http://auth-server:9000` |
+| `AUTH_SERVER_EXTERNAL_LOCATION` | No | `http://localhost:9000` | Auth-server base URL reachable from **outside** — i.e. by the user's browser; used in redirects the browser follows (the authorize kick-off). Property `auth-server.external-location`. Separate from the internal one because in docker `auth-server:9000` doesn't resolve outside the compose network — compose leaves this at the default |
 | `WEB_CLIENT_ID` | No | `WEB_CLIENT` | OAuth2 client id the bff authenticates as (property `web.client.id`) |
 | `WEB_CLIENT_SECRET` | **Yes** | — (no default) | Client secret for the above — must match the `WEB_CLIENT` `client_secret` seeded in auth-server's `oauth2_registered_client` table (`{noop}secret` in dev). Startup fails fast without it |
 | `REFRESH_TOKEN_TTL_SECONDS` | No | `3600` | Redis TTL applied to stored refresh tokens (property `token-store.refresh-token-ttl-seconds`); mirrors auth-server's `refresh-token-time-to-live` |
@@ -40,11 +41,30 @@ The endpoint web-client calls to ask "does this browser have a valid login?". Se
 **Flow** (`AuthController` → `AuthStatusService`):
 
 1. `<sessionId>:id_token` present → logged in. Its payload is decoded (no signature verification — the bff itself stored it, and it originally came from auth-server over a server-to-server call) and returned as `{"isLoggedIn": true, "email": …, "userGUID": …, "roles": […]}`. A guest login has no `user_credential` row, so its response carries no `userGUID` field.
-2. No id_token, but `<sessionId>:refresh_token` present → `AuthServerTokenClient` performs the `refresh_token` grant against `POST {auth-server.location}/oauth2/token`, authenticating as **WEB_CLIENT** (refresh tokens are bound to the client they were issued to, so the bff must use the same registered client web-client's authorization codes are issued for). On success all three fresh tokens are stored and the id_token claims returned. auth-server seeds WEB_CLIENT with `reuse-refresh-tokens=false`, so every exchange **rotates** the refresh token — the stored one is always new.
+2. No id_token, but `<sessionId>:refresh_token` present → `AuthServerTokenClient` performs the `refresh_token` grant against `POST {auth-server.internal-location}/oauth2/token`, authenticating as **WEB_CLIENT** (refresh tokens are bound to the client they were issued to, so the bff must use the same registered client web-client's authorization codes are issued for). On success all three fresh tokens are stored and the id_token claims returned. auth-server seeds WEB_CLIENT with `reuse-refresh-tokens=false`, so every exchange **rotates** the refresh token — the stored one is always new.
 3. The exchange fails (expired, revoked, already-rotated, or garbage token → 400) → the stored refresh token is deleted (rotation means it can never succeed later) and the answer is `{"isLoggedIn": false}`.
 4. Neither key → `{"isLoggedIn": false}` (claim fields omitted entirely — `NON_NULL` serialization).
 
 The claims come from the **id_token**, which auth-server's `jwtTokenCustomizer` enriches with `email`, `userGUID`, and `roles` specifically for this endpoint.
+
+## Authorize kick-off — `GET /api/auth/authorize`
+
+Starts the OAuth2 authorization-code flow on behalf of web-client: an unconditional **302 browser redirect** to auth-server's `/oauth2/authorize` with every parameter filled in.
+
+```
+HTTP/1.1 302
+Location: {auth-server.external-location}/oauth2/authorize
+  ?response_type=code
+  &client_id={web.client.id}
+  &redirect_uri={web.client.origin}/callback
+  &scope=openid%20WEB_CLIENT_READ
+  &state=<uuid>
+```
+
+- **state** is minted by the bff and stored at `<sessionId>:oauth_state` (TTL 5 minutes) — the bff, not the browser, owns CSRF validation when the flow returns. The future bff callback endpoint validates against this key; when web-client is repointed at this endpoint (a later step) its own sessionStorage state logic goes away. Until that repoint, nothing calls this endpoint in production.
+- **redirect_uri** stays web-client's `/callback` for now (the only URI registered for WEB_CLIENT in the DB seed); moving the code exchange behind a bff callback is a later step.
+- **No logged-in short-circuit**: if the auth-server session is already authenticated the flow completes silently without a login form; web-client should consult `/api/auth/status` first anyway.
+- The Location uses `auth-server.external-location`, not `auth-server.internal-location` — the browser follows this redirect from outside the docker network, where the internal hostname doesn't resolve.
 
 ## Security Configuration
 
@@ -102,6 +122,7 @@ Integration tests in `src/test/java/com/roots/bff_server/integration/` hit a **l
 Start Redis and bff-server as shown under [Running](#running). `AuthStatusIntegrationTest` additionally needs a live **auth-server** (with its DB) at `localhost:9000` — it performs a real guest login there to mint tokens.
 Start Redis and bff-server as shown under [Running](#running).
 Start Redis and bff-server as shown under [Running](#running). `AuthStatusIntegrationTest` additionally needs a live **auth-server** (with its DB) at `localhost:9000` — it performs a real guest login there to mint tokens.
+Start Redis and bff-server as shown under [Running](#running), plus a live **auth-server** (with its DB) at `localhost:9000` — the tests perform real guest logins there.
 
 ### Test properties
 
@@ -132,10 +153,11 @@ Exercises exactly what this scaffolding stage sets up:
 3. Replays the cookie on a second request and asserts **no new** `SESSION` cookie is set — the first session was found again, i.e. it round-tripped through the Redis store.
 
 The test builds a fresh cookie-less `java.net.http.HttpClient` per test and closes it afterwards (the per-test lifecycle convention from auth-server's integration suite); cookies are asserted and replayed explicitly. `TestConfig` is an empty `@Configuration` that only anchors the test context so `@TestPropertySource`/`@Value` resolve.
+`TestConfig` is an empty `@Configuration` that only anchors the test context so `@TestPropertySource`/`@Value` resolve. (The original `SessionSmokeIntegrationTest` was removed once the endpoint tests subsumed it: they exercise session issuance, the cookie→Redis round trip, and Redis connectivity on every run, and the compose healthcheck covers `/actuator/health`.)
 
 ### AuthStatusIntegrationTest
 
-Covers all four `/api/auth/status` paths with **genuine tokens**. All HTTP contact goes through per-server client classes in the test `client/` package (mirroring auth-server's test layout; each owns and configures its own `HttpClient`s, is `AutoCloseable`, and is built fresh per test): `BffClient.getLoginStatus(sessionCookie)` calls the status endpoint, and `AuthServerClient.fetchGuestTokens()` (a slimmed port of auth-server's integration-test client) drives a real guest login — authorize → `POST /login/guest` → redirect chain → code exchange — because guest needs no account fixture yet yields all three tokens. The test derives its own session id by base64-decoding its `SESSION` cookie, then seeds token keys straight into Redis via the published port (a host-side `LettuceConnectionFactory`):
+Covers all four `/api/auth/status` paths with **genuine tokens**. All HTTP contact goes through per-server client classes in the test `client/` package (mirroring auth-server's test layout; each owns and configures its own `HttpClient`s, is `AutoCloseable`, and is built fresh per test): `BffClient.getLoginStatus(sessionCookie)` calls the status endpoint, and `AuthServerClient.fetchGuestTokens()` (a slimmed port of auth-server's integration-test client) drives a real guest login — authorize → `POST /login/guest` → redirect chain → code exchange — because guest needs no account fixture yet yields all three tokens. The test derives its own session id by base64-decoding its `SESSION` cookie, then seeds and asserts token keys through the autowired `TestTokenStoreService` — a test-side counterpart of the main store (same `<sessionId>:<tokenName>` keys, connected via the published Redis port, extended with TTL reads and bulk teardown), defined as a bean in `TestConfig` so the cached test context shares one Lettuce connection across the whole suite:
 
 | Seeded | Expectation |
 |---|---|
@@ -145,6 +167,13 @@ Covers all four `/api/auth/status` paths with **genuine tokens**. All HTTP conta
 | a garbage refresh token | `{"isLoggedIn": false}` and the refresh-token key is deleted |
 
 Member-account id_token claims (a non-null `userGUID`) are asserted in **auth-server's** own integration suite (`LoginIntegrationTest`), where the account fixtures already live — the bff suite stays account-management-free.
+
+### AuthorizeIntegrationTest
+
+Covers `GET /api/auth/authorize` at two depths:
+
+1. **Contract** — asserts the raw 302: every query parameter of the authorize URL (`response_type`, `client_id`, `redirect_uri`, `scope`, `state`), and that the minted `state` sits in Redis at `<sessionId>:oauth_state` with a positive TTL (the session id comes from the response's own `SESSION` cookie).
+2. **Acceptance** — plays the browser: follows the emitted Location through a real guest login (`AuthServerClient.completeGuestLogin`) and asserts the web-client callback receives a non-blank `code` plus **exactly the bff-held state** — proof that auth-server accepts the bff-built URL end-to-end.
 
 ## CI
 
