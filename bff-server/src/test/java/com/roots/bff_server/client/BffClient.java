@@ -46,8 +46,22 @@ public class BffClient implements AutoCloseable {
         return get("/api/auth/authorize", sessionCookie);
     }
 
+    /**
+     * Delivers an auth-server callback to {@code GET /api/auth/callback} on the given
+     * session, exactly as the browser would: {@code callbackUrl} is the full URL
+     * (query included) auth-server redirected to, and the SESSION cookie binds the
+     * flow to the session that minted the state. Returns the raw 302 to web-client.
+     */
+    public HttpResponse<String> getCallback(String callbackUrl, String sessionCookie) throws Exception {
+        return getUrl(callbackUrl, sessionCookie);
+    }
+
     private HttpResponse<String> get(String path, String sessionCookie) throws Exception {
-        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path)).GET();
+        return getUrl(baseUrl + path, sessionCookie);
+    }
+
+    private HttpResponse<String> getUrl(String url, String sessionCookie) throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url)).GET();
         if (sessionCookie != null) {
             request.header("Cookie", sessionCookie);
         }
