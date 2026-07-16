@@ -50,6 +50,24 @@ public class AuthServerTokenClient {
         form.add("grant_type", "refresh_token");
         form.add("refresh_token", refreshToken);
 
+        return exchange(form, "Refresh token");
+    }
+
+    /**
+     * Performs the authorization_code grant. {@code redirectUri} must byte-for-byte
+     * match the one sent on the authorize request (and a registered redirect_uri).
+     * Empty on any failure (a bogus, expired, or already-used code answers 400).
+     */
+    public Optional<TokenResponse> exchangeAuthorizationCode(String code, String redirectUri) {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("grant_type", "authorization_code");
+        form.add("code", code);
+        form.add("redirect_uri", redirectUri);
+
+        return exchange(form, "Authorization code");
+    }
+
+    private Optional<TokenResponse> exchange(MultiValueMap<String, String> form, String grantLabel) {
         try {
             return Optional.ofNullable(restClient.post()
                     .uri("/oauth2/token")
@@ -59,7 +77,7 @@ public class AuthServerTokenClient {
                     .retrieve()
                     .body(TokenResponse.class));
         } catch (RestClientException e) {
-            log.warn("Refresh token exchange failed: {}", e.getMessage());
+            log.warn("{} exchange failed: {}", grantLabel, e.getMessage());
             return Optional.empty();
         }
     }
