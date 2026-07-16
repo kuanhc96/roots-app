@@ -41,7 +41,10 @@ INSERT INTO oauth2_registered_client (
     'WEB_CLIENT',
     'client_secret_basic',
     'refresh_token,authorization_code',
-    'http://localhost:3000/callback',
+    -- Two registered callbacks during the bff migration: web-client's own (legacy
+    -- browser-side exchange, removed once web-client is repointed) and bff-server's
+    -- (the server-side exchange at GET /api/auth/callback).
+    'http://localhost:3000/callback,http://localhost:8083/api/auth/callback',
     'http://localhost:3000/logout',
     'openid,WEB_CLIENT_READ',
     '{"@class":"java.util.Collections$UnmodifiableMap","settings.client.require-proof-key":false,"settings.client.require-authorization-consent":false}',
