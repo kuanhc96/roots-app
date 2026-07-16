@@ -35,8 +35,8 @@ public class AuthorizeService {
     private String authServerExternalLocation;
     @Value("${web.client.id}")
     private String clientId;
-    @Value("${web.client.origin}")
-    private String webClientOrigin;
+    @Value("${bff-server.external-location}")
+    private String bffServerExternalLocation;
 
     public URI buildAuthorizeRedirect(String sessionId) {
         String state = UUID.randomUUID().toString();
@@ -46,7 +46,9 @@ public class AuthorizeService {
                 .path("/oauth2/authorize")
                 .queryParam("response_type", "code")
                 .queryParam("client_id", clientId)
-                .queryParam("redirect_uri", webClientOrigin + "/callback")
+                // The code comes back to the bff's own callback (a registered
+                // redirect_uri), where the server-side exchange happens.
+                .queryParam("redirect_uri", bffServerExternalLocation + AuthCallbackService.CALLBACK_PATH)
                 .queryParam("scope", "openid WEB_CLIENT_READ")
                 .queryParam("state", state)
                 .encode()

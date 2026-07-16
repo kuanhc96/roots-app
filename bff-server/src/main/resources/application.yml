@@ -9,6 +9,13 @@ spring:
 server:
   port: ${SERVER_PORT:8083}
 
+bff-server:
+  # This server's own externally reachable base URL — what the browser can hit. Used
+  # to build the OAuth2 redirect_uri ({external-location}/api/auth/callback), which
+  # must byte-for-byte match a registered redirect_uri in auth-server's
+  # oauth2_registered_client table.
+  external-location: ${BFF_SERVER_EXTERNAL_LOCATION:http://localhost:8083}
+
 auth-server:
   # Reachable from inside the deployment network; used by the server-to-server
   # RestClient. In docker this is http://auth-server:9000.
