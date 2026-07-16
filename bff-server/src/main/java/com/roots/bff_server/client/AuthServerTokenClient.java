@@ -31,14 +31,14 @@ public class AuthServerTokenClient {
     private String clientId;
     @Value("${web.client.secret}")
     private String clientSecret;
-    @Value("${auth-server.location}")
-    private String authServerLocation;
+    @Value("${auth-server.internal-location}")
+    private String authServerInternalLocation;
 
     private RestClient restClient;
 
     @PostConstruct
     public void setup() {
-        restClient = restClientBuilder.baseUrl(authServerLocation).build();
+        restClient = restClientBuilder.baseUrl(authServerInternalLocation).build();
     }
 
     /**

@@ -10,7 +10,13 @@ server:
   port: ${SERVER_PORT:8083}
 
 auth-server:
-  location: ${AUTH_SERVER_LOCATION:http://localhost:9000}
+  # Reachable from inside the deployment network; used by the server-to-server
+  # RestClient. In docker this is http://auth-server:9000.
+  internal-location: ${AUTH_SERVER_INTERNAL_LOCATION:http://localhost:9000}
+  # Reachable from outside (i.e. by the user's browser); used in redirects the
+  # browser must follow, such as the authorize kick-off. In docker the internal
+  # hostname doesn't resolve for the browser, so this stays localhost:9000 there.
+  external-location: ${AUTH_SERVER_EXTERNAL_LOCATION:http://localhost:9000}
 
 web:
   client:
