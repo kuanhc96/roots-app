@@ -1,13 +1,13 @@
 import axios, { type AxiosInstance } from 'axios'
 
+// NOTE: calls are currently unauthenticated — the browser no longer holds an
+// access token (the bff-server keeps tokens server-side), so protected endpoints
+// answer 401 until resource calls move behind the bff in a later step.
 export class SimpleResourceClient {
   private readonly http: AxiosInstance
 
-  constructor(baseUrl: string, accessToken?: string) {
-    this.http = axios.create({
-      baseURL: baseUrl,
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-    })
+  constructor(baseUrl: string) {
+    this.http = axios.create({ baseURL: baseUrl })
   }
 
   getPastor() {
