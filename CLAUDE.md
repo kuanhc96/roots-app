@@ -12,7 +12,7 @@ This is a Spring Cloud microservices application called **roots-app**. The servi
 | `config-server` | Spring Cloud Config | — | Centralized configuration |
 | `gateway-server` | Spring Cloud Gateway (WebFlux) | — | API gateway / routing |
 | `auth-server` | Spring Boot (Maven) + Nuxt/Vue | 9000 | Authentication + embedded SSR frontend |
-| `bff-server` | Spring Boot (Maven) | — | Backend-for-frontend |
+| `bff-server` | Spring Boot (Maven) | 8083 | Backend-for-frontend; will manage web-client's tokens server-side in Redis-backed sessions (currently scaffolding only) |
 | `simple-resource-server` | Spring Boot (Maven) | 8081 | Example protected resource with role endpoints |
 | `account-management` | Spring Boot (Maven) | 8082 | Account CRUD resource server (integration-test-only endpoints so far) |
 | `web-client` | Nuxt 4 / Vue 3 | 3000 | Standalone frontend |
@@ -395,6 +395,18 @@ Request/response and flow details:
 | `GET /api/account` | none (public) |
 | `DELETE /api/account/test` | `INTEGRATION_TEST_CLIENT_DELETE` scope |
 
+### bff-server
+
+The **backend-for-frontend** (port `8083`, override `SERVER_PORT`). End goal: manage OAuth2 tokens on behalf of web-client so tokens no longer live in the browser; the tokens will be held as attributes of a Redis-backed HTTP session. Current state is **scaffolding only** — no controllers, no token-relay endpoints, no OAuth2 client wiring toward auth-server yet:
+
+- **Spring Security** (`config/SecurityConfig.java`): `anyRequest().permitAll()`; CSRF disabled (project convention — revisit when state-changing BFF endpoints land, since the SESSION cookie will be the browser's only credential); `SessionCreationPolicy.ALWAYS` — every request eagerly gets a session, because the session is where tokens will be held.
+- **Spring Session Redis** (`spring-boot-starter-session-data-redis`): HTTP sessions live in Redis (`spring:session:sessions:*` keys); the servlet `JSESSIONID` is replaced by the `SESSION` cookie. **Boot 4 gotcha:** session auto-config ships in Boot's own `spring-boot-session-data-redis` module — depending on the plain `org.springframework.session:spring-session-data-redis` jar alone silently leaves the in-memory container session in place; use the starter.
+- **CORS**: only `web.client.origin` (default `http://localhost:3000`, override `WEB_CLIENT_ORIGIN`) is allowed, with `allowCredentials=true` so the browser can send the `SESSION` cookie cross-origin; a preflight from any other origin gets 403.
+- **Redis**: the `bff-server-redis` compose service (`redis:8`, no AUTH — dev/CI grade, like the DB), port `6379` published so a locally-run bff-server reaches it at `localhost:6379`. bff-server reads `${REDIS_HOST:localhost}`/`${REDIS_PORT:6379}`; compose sets `REDIS_HOST=bff-server-redis`. In compose, `bff-server` `depends_on` both `bff-server-redis` and `auth-server` (healthy).
+- **Integration test** (`integration/SessionSmokeIntegrationTest`; needs live bff-server + Redis): asserts `/actuator/health` is 200/UP, a `SESSION` cookie is issued on the first request (the ALWAYS policy), and replaying that cookie does not mint a new session (the round trip through the Redis store). `TestConfig` (empty `@Configuration`) anchors the context; `bff-server-location` (default `http://localhost:8083`) lives in `src/test/resources/application.yml`. There is deliberately no host-run `contextLoads` test (same reasoning as account-management: the healthy container is the context-load proof).
+
+See `bff-server/README.md` for run instructions and the full scaffolding rationale.
+
 ## Commands
 
 ### Spring Boot services (all use Maven)
@@ -455,6 +467,9 @@ npm run generate           # static export
 ```bash
 # Start the MySQL auth-server-db (requires MYSQL_AUTH_SERVER_ROOT_PASSWORD env var)
 docker compose up -d auth-server-db
+
+# Start the Redis instance backing bff-server's sessions (no env vars needed)
+docker compose up -d bff-server-redis
 ```
 
 ## Key Configuration
@@ -462,6 +477,7 @@ docker compose up -d auth-server-db
 - `auth-server/src/main/resources/application.yml` — server port defaults to `${SERVER_PORT:9000}`; `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` are required with no fallback; `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3307/auth-server-db`; Gmail SMTP is configured under `spring.mail` — `SPRING_MAIL_USERNAME` and `SPRING_MAIL_PASSWORD` have no defaults and are required in every profile (the `JavaMailSender` is auto-configured in all profiles, and the Actuator mail health indicator connects to SMTP on each health poll); uses `smtp.gmail.com:587` with STARTTLS; `web-client.location` defaults to `http://localhost:3000` (override: `WEB_CLIENT_LOCATION`) — web-client hand-off target after magic-link verification when no saved request exists; `google.client-id` (override: `GOOGLE_CLIENT_ID`, safe public default) — expected `aud` for Google id_token verification
 - `auth-server/frontend/nuxt.config.ts` — `runtimeConfig.public.googleClientId` defaults to the dev Google OAuth client id (override: `NUXT_PUBLIC_GOOGLE_CLIENT_ID`); `runtimeConfig.public.googleClientSecret` has no default and must be set via `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET` — **at frontend build time, not server runtime**: the SPA is statically generated, so the value is baked into the JS bundle by `npm run generate` (set it in the shell running the Maven build, or in the gitignored `auth-server/frontend/.env`); changing it requires a rebuild (see "Required env vars at startup" above)
 - `simple-resource-server/src/main/resources/application.yml` — port defaults to `8081` (override: `SERVER_PORT`); JWK URI defaults to `http://localhost:9000/oauth2/jwks` (override: `AUTH_SERVER_JWK_URI`); CORS origin defaults to `http://localhost:3000` (override: `WEB_CLIENT_ORIGIN` via `web.client.origin` property)
+- `bff-server/src/main/resources/application.yml` — port defaults to `8083` (override: `SERVER_PORT`); Redis at `${REDIS_HOST:localhost}:${REDIS_PORT:6379}` (Spring Session store); CORS origin defaults to `http://localhost:3000` (override: `WEB_CLIENT_ORIGIN` via `web.client.origin` property)
 - `web-client/nuxt.config.ts` — `runtimeConfig.public.simpleResourceServerUrl` defaults to `http://localhost:8081` (override: `NUXT_PUBLIC_SIMPLE_RESOURCE_SERVER_URL`); `runtimeConfig.public.authServerUrl` defaults to `http://localhost:9000` (override: `NUXT_PUBLIC_AUTH_SERVER_URL`); `runtimeConfig.public.webClientId` defaults to `WEB_CLIENT` (override: `NUXT_PUBLIC_WEB_CLIENT_ID`); `runtimeConfig.public.webClientSecret` has no default and **must** be set via `NUXT_PUBLIC_WEB_CLIENT_SECRET` (must match the `client_secret` stored in auth-server's `oauth2_registered_client` table)
 - All other services use `application.properties` with minimal config; most config is expected to come from `config-server`
 - All services target **Java 21** and use **Spring Boot 4.0.5** with **Spring Cloud 2025.1.1**
@@ -470,14 +486,14 @@ docker compose up -d auth-server-db
 
 Workflows live in `.github/workflows/`. CI workflows run on `pull_request` events `opened` and `synchronize`. CD workflows run on `push` to `main` (i.e. after a PR merges).
 
-**Both CI workflows use the root `docker-compose.yml`** to stand up services on the shared `roots_backend` network, then run the integration tests from the runner host (the test clients still hit `localhost:9000`/`localhost:8082`, so the test `application.yml` files are unchanged). The DB **self-seeds** from `auth-server/src/main/resources/initialize_db/`, mounted into the container's `/docker-entrypoint-initdb.d` (MySQL runs the scripts in filename order, which matches the dependency order). Compose references each app image as `${DOCKERHUB_USERNAME}/<service>:${<SERVICE>_TAG:-latest}` and reads `SPRING_PROFILES_ACTIVE` from the environment; each workflow builds its **subject** service into a local `:ci` image (`mvn jib:dockerBuild`) and overrides that tag, while leaving dependency services to pull `:latest`. `docker compose up -d --wait` blocks until all started containers report healthy (the curl wait-loops are gone). Each workflow ends with a `docker compose logs --no-color` step guarded by `if: failure()`.
+**The auth-server, account-management, and bff-server CI workflows all use the root `docker-compose.yml`** to stand up services on the shared `roots_backend` network, then run the integration tests from the runner host (the test clients still hit `localhost:9000`/`localhost:8082`/`localhost:8083`, so the test `application.yml` files are unchanged). Each workflow names its target service in `docker compose up -d --wait <service>` so `depends_on` chains in exactly what it needs — a bare `up -d` would boot **every** compose service and pull images the suite doesn't use. The DB **self-seeds** from `auth-server/src/main/resources/initialize_db/`, mounted into the container's `/docker-entrypoint-initdb.d` (MySQL runs the scripts in filename order, which matches the dependency order). Compose references each app image as `${DOCKERHUB_USERNAME}/<service>:${<SERVICE>_TAG:-latest}` and reads `SPRING_PROFILES_ACTIVE` from the environment; each workflow builds its **subject** service into a local `:ci` image (`mvn jib:dockerBuild`) and overrides that tag, while leaving dependency services to pull `:latest`. `docker compose up -d --wait` blocks until all started containers report healthy (the curl wait-loops are gone). Each workflow ends with a `docker compose logs --no-color` step guarded by `if: failure()`.
 
 ### auth-server-ci.yml — `paths: auth-server/**`
 
 1. Runs the frontend unit tests (`actions/setup-node` + `npm install` + `npm run test` in `auth-server/frontend`) as a fail-fast gate before any Maven build. `npm install`, not `npm ci`, because the lockfile is gitignored.
 2. Builds with `mvn package -DskipTests` — builds the JAR, test classes, and the embedded Nuxt frontend once.
 3. Builds the auth-server image locally with `mvn jib:dockerBuild -Djib.to.image=$DOCKERHUB_USERNAME/auth-server:ci` (loaded into the runner's Docker daemon — no registry push).
-4. `docker compose up -d --wait auth-server` brings up `auth-server-db` (via `depends_on`) and `auth-server`, with `AUTH_SERVER_TAG=ci` and `SPRING_PROFILES_ACTIVE=test` (so `emailSender.enabled=false` — no real emails). The DB self-seeds; `--wait` blocks until both are healthy. No `docker login` is needed — only the public `mysql:8` image is pulled.
+4. `docker compose up -d --wait account-management` brings up `auth-server-db`, `auth-server` (the local `:ci` image via `AUTH_SERVER_TAG=ci`), and `account-management` (pulled `:latest` — the integration suite creates its account fixtures through it), with `SPRING_PROFILES_ACTIVE=test` (so `emailSender.enabled=false` — no real emails). The DB self-seeds; `--wait` blocks until all three are healthy. Naming `account-management` scopes the up so other compose services (e.g. `bff-server`) are not booted.
 5. Runs integration tests with `mvn surefire:test`.
 
 **Required GitHub secrets:** `DOCKERHUB_USERNAME` (names the local `:ci` image — no push happens here), `MYSQL_AUTH_SERVER_ROOT_USERNAME` (set to `root`), `MYSQL_AUTH_SERVER_ROOT_PASSWORD`, real `SPRING_MAIL_USERNAME`/`SPRING_MAIL_PASSWORD` (Gmail address + App Password), and `GOOGLE_CLIENT_SECRET` — exported as `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET` on the `mvn package` step (frontend **build-time** var: `nuxt generate` bakes it into the bundle; no test exercises Google login, but CI proves the project builds with the secret wired in). The mail secrets are required even though the `test` profile sends no email: the `JavaMailSender` is built in every profile and the Actuator mail health indicator opens an SMTP connection on each `/actuator/health` poll, so invalid creds would fail the `--wait` healthcheck. Inside the network, compose sets `MYSQL_AUTH_SERVER_DB_URL=jdbc:mysql://auth-server-db:3307/auth-server-db` (no longer overridden by the workflow).
@@ -513,6 +529,14 @@ Runs the integration tests against **both** live services, all on the shared doc
 ### account-management-cd.yml — `paths: account-management/src/**`, `account-management/pom.xml`
 
 Triggers on push to `main`; skips its own version-bump commit via `[skip ci]`. Same pattern as auth-server-cd: read `<version>` from `pom.xml`, strip `-SNAPSHOT` and bump the patch to the release version, `mvn versions:set`, build and push the Docker image via `mvn jib:build -DskipTests` (base `eclipse-temurin:21-jre`; tags `<release-version>` and `latest`), then set the next `-SNAPSHOT` and commit it back to `main` as `github-actions[bot]`. Checkout/push use a `GH_PAT`. **Required secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `GH_PAT`.
+
+### bff-server-ci.yml — `paths: bff-server/src/**`, `bff-server/pom.xml`
+
+Same shape as account-management-ci, minus a unit-test gate (bff-server has no unit tests yet): (1) `docker login` — auth-server is an unchanged dependency here, pulled `:latest`; (2) `mvn package -DskipTests` to build the JAR + test classes; (3) `mvn jib:dockerBuild -Djib.to.image=$DOCKERHUB_USERNAME/bff-server:ci`; (4) `docker compose up -d --wait bff-server` with `BFF_SERVER_TAG=ci` and `SPRING_PROFILES_ACTIVE=test`, which `depends_on`-chains in `bff-server-redis` and `auth-server` (which chains the self-seeding DB) and blocks until all are healthy — the bff-server healthcheck polls `/actuator/health`, whose Redis health indicator proves the Spring Session store is reachable; (5) `mvn surefire:test '-Dtest=%regex[.*integration.*]'` against `localhost:8083` (the session smoke test); (6) `docker compose logs --no-color` on failure. `SPRING_MAIL_*` secrets are supplied for auth-server's mail bean + Actuator mail health check, as in the other workflows. **Required secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `MYSQL_AUTH_SERVER_ROOT_USERNAME` (= `root`), `MYSQL_AUTH_SERVER_ROOT_PASSWORD`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`.
+
+### bff-server-cd.yml — `paths: bff-server/src/**`, `bff-server/pom.xml`
+
+Identical pattern to account-management-cd: version bump, `mvn jib:build` pushing `<release-version>` + `latest` to `$DOCKERHUB_USERNAME/bff-server`, next-`-SNAPSHOT` commit with `[skip ci]` via `GH_PAT`. **Required secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `GH_PAT`. Note the first push auto-creates the `bff-server` Docker Hub repo with your account's default visibility — check it matches the other service repos.
 
 ## Database
 
