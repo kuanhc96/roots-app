@@ -1,6 +1,6 @@
 package com.roots.bff_server.client;
 
-import com.roots.bff_server.dto.TokenResponse;
+import com.roots.bff_server.dto.response.TokenResponse;
 
 import tools.jackson.databind.ObjectMapper;
 
