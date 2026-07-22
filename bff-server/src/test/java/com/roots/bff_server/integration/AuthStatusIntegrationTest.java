@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.roots.bff_server.client.AuthServerClient;
 import com.roots.bff_server.client.BffClient;
-import com.roots.bff_server.dto.TokenResponse;
+import com.roots.bff_server.dto.response.TokenResponse;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
