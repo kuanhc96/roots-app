@@ -57,5 +57,14 @@ class GuestLoginIntegrationTest extends IntegrationTestBase {
         assertThat(roles).contains("GUEST");
         assertThat(scopes).contains("openid");
         assertThat(scopes).contains("WEB_CLIENT_READ");
+
+        // The id_token carries the claims bff-server serves from /api/auth/status. The
+        // guest principal is synthetic (no user_credential row), so email is the literal
+        // "guest" and there is no userGUID claim at all.
+        byte[] idTokenPayload = Base64.getUrlDecoder().decode(tokens.idToken().split("\\.")[1]);
+        Map<String, Object> idTokenClaims = new ObjectMapper().readValue(idTokenPayload, new TypeReference<>() {});
+        assertThat(idTokenClaims.get("email")).isEqualTo("guest");
+        assertThat(idTokenClaims).doesNotContainKey("userGUID");
+        assertThat((List<String>) idTokenClaims.get("roles")).contains("GUEST");
     }
 }

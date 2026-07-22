@@ -111,6 +111,14 @@ class LoginIntegrationTest extends IntegrationTestBase {
             List<String> roles = (List<String>) claims.get("roles");
             assertThat(roles).contains("MEMBER");
 
+            // The id_token carries the claims bff-server serves from /api/auth/status:
+            // email, userGUID (from the user_credential row), and roles.
+            byte[] idTokenPayload = Base64.getUrlDecoder().decode(tokens.idToken().split("\\.")[1]);
+            Map<String, Object> idTokenClaims = new ObjectMapper().readValue(idTokenPayload, new TypeReference<>() {});
+            assertThat(idTokenClaims.get("email")).isEqualTo(email);
+            assertThat(idTokenClaims.get("userGUID")).isEqualTo(userGUID);
+            assertThat((List<String>) idTokenClaims.get("roles")).contains("MEMBER");
+
             // 6. "Restart the browser" and try again: remember-me was not checked, so the
             //    cookie jar is empty after dropping the session cookie. With no
             //    remember-me cookie there is no auto-login — the new authorize flow
