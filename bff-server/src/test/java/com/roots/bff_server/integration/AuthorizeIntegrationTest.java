@@ -82,8 +82,9 @@ class AuthorizeIntegrationTest {
         assertThat(location).startsWith(authServerLocation + "/oauth2/authorize?");
         assertThat(AuthServerClient.queryParam(location, "response_type")).isEqualTo("code");
         assertThat(AuthServerClient.queryParam(location, "client_id")).isEqualTo(webClientId);
+        // The code comes back to the bff's own callback for the server-side exchange.
         assertThat(AuthServerClient.queryParam(location, "redirect_uri"))
-                .isEqualTo(webClientLocation + "/callback");
+                .isEqualTo(bffServerLocation + "/api/auth/callback");
         assertThat(AuthServerClient.queryParam(location, "scope")).isEqualTo("openid WEB_CLIENT_READ");
 
         // The state in the URL is exactly the one held for this session, with a real
@@ -102,9 +103,10 @@ class AuthorizeIntegrationTest {
         String location = response.headers().firstValue("Location").orElseThrow();
 
         // Play the browser: follow the bff-built authorize URL through a guest login.
-        String callback = authServerClient.completeGuestLogin(location);
+        String callbackPrefix = bffServerLocation + "/api/auth/callback";
+        String callback = authServerClient.completeGuestLogin(location, callbackPrefix);
 
-        assertThat(callback).startsWith(webClientLocation + "/callback");
+        assertThat(callback).startsWith(callbackPrefix);
         assertThat(AuthServerClient.queryParam(callback, "code")).isNotBlank();
         assertThat(AuthServerClient.queryParam(callback, "state"))
                 .isEqualTo(tokenStore.find(sessionId, TokenType.OAUTH_STATE).orElseThrow());

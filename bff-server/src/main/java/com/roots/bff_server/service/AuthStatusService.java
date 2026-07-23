@@ -8,11 +8,8 @@ import com.roots.bff_server.util.JwtPayload;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
@@ -37,13 +34,6 @@ public class AuthStatusService {
     private final TokenStoreService tokenStore;
     private final AuthServerTokenClient authServerTokenClient;
 
-    // Field injection (not a constructor arg) so @RequiredArgsConstructor keeps wiring
-    // the final dependencies — a generated constructor would drop the @Value annotation
-    // and fail to bind (same pattern as auth-server's EmailService).
-    // TODO: get this value from the DB
-    @Value("${token-store.refresh-token-ttl-seconds}")
-    private long refreshTokenTtlSeconds;
-
     public LoginStatusResponse getLoginStatus(String sessionId) {
         Optional<String> idToken = tokenStore.find(sessionId, TokenType.ID_TOKEN);
         if (idToken.isPresent()) {
@@ -67,32 +57,8 @@ public class AuthStatusService {
             return LoginStatusResponse.notLoggedIn();
         }
 
-        storeTokens(sessionId, tokens.get());
+        tokenStore.storeTokenResponse(sessionId, tokens.get());
         return toLoggedInResponse(JwtPayload.parse(tokens.get().idToken()));
-    }
-
-    private void storeTokens(String sessionId, TokenResponse tokens) {
-        storeJwt(sessionId, TokenType.ACCESS_TOKEN, tokens.accessToken());
-        storeJwt(sessionId, TokenType.ID_TOKEN, tokens.idToken());
-
-        // Rotation (reuse-refresh-tokens=false) invalidated the refresh token that was
-        // just used, so the stored one is replaced by the new one — or dropped in the
-        // unexpected case the response carries none.
-        if (tokens.refreshToken() != null) {
-            tokenStore.store(sessionId, TokenType.REFRESH_TOKEN, tokens.refreshToken(),
-                    Duration.ofSeconds(refreshTokenTtlSeconds));
-        } else {
-            tokenStore.delete(sessionId, TokenType.REFRESH_TOKEN);
-        }
-    }
-
-    /** Stores a JWT with TTL = its own exp, so Redis drops it the moment it expires. */
-    private void storeJwt(String sessionId, TokenType type, String jwt) {
-        if (jwt == null) {
-            return;
-        }
-        Duration timeToLive = Duration.between(Instant.now(), JwtPayload.parse(jwt).expiresAt());
-        tokenStore.store(sessionId, type, jwt, timeToLive);
     }
 
     private static LoginStatusResponse toLoggedInResponse(JwtPayload idTokenPayload) {

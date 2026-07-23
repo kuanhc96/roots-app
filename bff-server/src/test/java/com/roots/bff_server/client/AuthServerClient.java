@@ -65,26 +65,27 @@ public class AuthServerClient implements AutoCloseable {
                 + "&redirect_uri=" + encode(redirectUri)
                 + "&scope=" + encode("openid WEB_CLIENT_READ")
                 + "&state=bff-guest-test";
-        String callback = completeGuestLogin(authorizeUrl);
+        String callback = completeGuestLogin(authorizeUrl, redirectUri);
         return exchangeCode(extractQueryParam(callback, "code"));
     }
 
     /**
      * Plays the browser through a guest login starting from an externally built
      * authorize URL (e.g. the Location of bff-server's /api/auth/authorize redirect):
-     * GET the authorize URL, {@code POST /login/guest}, follow the redirect chain,
-     * and return the final callback URL — whose query carries {@code code} and
-     * {@code state} exactly as auth-server issued them.
+     * GET the authorize URL, {@code POST /login/guest}, follow the redirect chain
+     * until the Location reaches {@code callbackPrefix} (the redirect_uri the
+     * authorize URL carries), and return that final callback URL — whose query
+     * carries {@code code} and {@code state} exactly as auth-server issued them.
      */
-    public String completeGuestLogin(String authorizeUrl) throws Exception {
-        followRedirects(get(authorizeUrl));
+    public String completeGuestLogin(String authorizeUrl, String callbackPrefix) throws Exception {
+        followRedirects(get(authorizeUrl), callbackPrefix);
 
         HttpRequest guestLogin = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/login/guest"))
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
         HttpResponse<String> response = followRedirects(
-                browser.send(guestLogin, HttpResponse.BodyHandlers.ofString()));
+                browser.send(guestLogin, HttpResponse.BodyHandlers.ofString()), callbackPrefix);
 
         if (response.statusCode() != 302) {
             throw new IllegalStateException("Guest login did not reach the callback; status "
@@ -127,11 +128,11 @@ public class AuthServerClient implements AutoCloseable {
     }
 
     /** Walks the 302 chain on the browser session until the Location reaches the callback. */
-    private HttpResponse<String> followRedirects(HttpResponse<String> response) throws Exception {
+    private HttpResponse<String> followRedirects(HttpResponse<String> response, String callbackPrefix) throws Exception {
         int hops = 0;
         while (response.statusCode() == 302) {
             String location = response.headers().firstValue("Location").orElseThrow();
-            if (location.startsWith(redirectUri)) {
+            if (location.startsWith(callbackPrefix)) {
                 break;
             }
             if (++hops > MAX_REDIRECT_HOPS) {
