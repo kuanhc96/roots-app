@@ -34,8 +34,20 @@ public class BffClient implements AutoCloseable {
      * establish a fresh session and return its cookie on the response.
      */
     public HttpResponse<String> getLoginStatus(String sessionCookie) throws Exception {
-        HttpRequest.Builder request = HttpRequest.newBuilder(
-                URI.create(baseUrl + "/api/auth/status")).GET();
+        return get("/api/auth/status", sessionCookie);
+    }
+
+    /**
+     * Calls {@code GET /api/auth/authorize} — the authorization-code kick-off. The
+     * response is the raw 302 (redirects are never followed), so callers can assert
+     * the Location and, with a {@code null} cookie, read the fresh SESSION cookie.
+     */
+    public HttpResponse<String> getAuthorize(String sessionCookie) throws Exception {
+        return get("/api/auth/authorize", sessionCookie);
+    }
+
+    private HttpResponse<String> get(String path, String sessionCookie) throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path)).GET();
         if (sessionCookie != null) {
             request.header("Cookie", sessionCookie);
         }

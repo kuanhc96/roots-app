@@ -108,7 +108,9 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
       REDIS_HOST: bff-server-redis
-      AUTH_SERVER_LOCATION: http://auth-server:9000
+      # Internal only: the browser-facing AUTH_SERVER_EXTERNAL_LOCATION keeps its
+      # localhost:9000 default — the internal hostname doesn't resolve for browsers.
+      AUTH_SERVER_INTERNAL_LOCATION: http://auth-server:9000
       # Must match the WEB_CLIENT client_secret seeded in auth-server's DB
       # ({noop}secret in the checked-in seed). Required — no default in the app.
       WEB_CLIENT_SECRET: ${WEB_CLIENT_SECRET}

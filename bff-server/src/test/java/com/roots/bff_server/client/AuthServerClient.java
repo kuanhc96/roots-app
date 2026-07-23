@@ -6,6 +6,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.net.CookieManager;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -64,23 +65,37 @@ public class AuthServerClient implements AutoCloseable {
                 + "&redirect_uri=" + encode(redirectUri)
                 + "&scope=" + encode("openid WEB_CLIENT_READ")
                 + "&state=bff-guest-test";
-        HttpResponse<String> response = get(authorizeUrl);
-        followRedirects(response);
+        String callback = completeGuestLogin(authorizeUrl);
+        return exchangeCode(extractQueryParam(callback, "code"));
+    }
+
+    /**
+     * Plays the browser through a guest login starting from an externally built
+     * authorize URL (e.g. the Location of bff-server's /api/auth/authorize redirect):
+     * GET the authorize URL, {@code POST /login/guest}, follow the redirect chain,
+     * and return the final callback URL — whose query carries {@code code} and
+     * {@code state} exactly as auth-server issued them.
+     */
+    public String completeGuestLogin(String authorizeUrl) throws Exception {
+        followRedirects(get(authorizeUrl));
 
         HttpRequest guestLogin = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/login/guest"))
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
-        response = followRedirects(browser.send(guestLogin, HttpResponse.BodyHandlers.ofString()));
+        HttpResponse<String> response = followRedirects(
+                browser.send(guestLogin, HttpResponse.BodyHandlers.ofString()));
 
         if (response.statusCode() != 302) {
             throw new IllegalStateException("Guest login did not reach the callback; status "
                     + response.statusCode());
         }
-        String callback = response.headers().firstValue("Location").orElseThrow();
-        String code = extractQueryParam(callback, "code");
+        return response.headers().firstValue("Location").orElseThrow();
+    }
 
-        return exchangeCode(code);
+    /** Extracts a query parameter from a callback URL (public for test assertions). */
+    public static String queryParam(String url, String name) {
+        return extractQueryParam(url, name);
     }
 
     @Override
@@ -134,10 +149,10 @@ public class AuthServerClient implements AutoCloseable {
     }
 
     private static String extractQueryParam(String url, String name) {
-        for (String param : URI.create(url).getQuery().split("&")) {
+        for (String param : URI.create(url).getRawQuery().split("&")) {
             String[] kv = param.split("=", 2);
             if (kv[0].equals(name) && kv.length == 2) {
-                return kv[1];
+                return URLDecoder.decode(kv[1], StandardCharsets.UTF_8);
             }
         }
         throw new IllegalArgumentException("Parameter '" + name + "' not found in: " + url);
