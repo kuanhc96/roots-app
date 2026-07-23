@@ -7,7 +7,6 @@
 **/node_modules/
 **/.env
 **/dist
-auth-server/frontend/package-lock.json
 # version stamp @nuxt/test-utils writes on first test run; regenerated on demand
 auth-server/frontend/.nuxtrc
 
