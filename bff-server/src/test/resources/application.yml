@@ -1,1 +1,7 @@
 bff-server-location: http://localhost:8083
+auth-server-location: http://localhost:9000
+web-client-location: http://localhost:3000
+web-client-id: WEB_CLIENT
+web-client-secret: secret
+redis-host: localhost
+redis-port: 6379

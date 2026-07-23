@@ -1,17 +1,44 @@
 # bff-server
 
-The **backend-for-frontend** for the roots-app platform. Its end goal is to manage OAuth2 tokens on behalf of `web-client`, so tokens no longer need to be stored in the browser (today web-client keeps them in `sessionStorage`). The browser will hold only a `SESSION` cookie; the tokens themselves will live server-side as attributes of a **Redis-backed HTTP session**.
+The **backend-for-frontend** for the roots-app platform. Its end goal is to manage OAuth2 tokens on behalf of `web-client`, so tokens no longer need to be stored in the browser (today web-client keeps them in `sessionStorage`). The browser holds only a `SESSION` cookie; the tokens live server-side in **Redis, keyed by the session id**.
 
-> **Current state: scaffolding only.** There are no controllers, no token-relay endpoints, and no OAuth2 client wiring toward auth-server yet. What exists is the foundation those features will be built on: the security posture, Redis-backed sessions, the docker-compose topology, a smoke integration test, and the CI/CD pipelines.
+> **Current state.** The login-status endpoint (`GET /api/auth/status`, below) is implemented and fully tested, but the authorization-code callback that writes the *initial* tokens to Redis still lives in web-client — so in real traffic the endpoint answers `isLoggedIn=false` until that move lands. Everything else remains foundation: the security posture, Redis-backed sessions, the docker-compose topology, and the CI/CD pipelines.
 
 ## Environment Variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `SERVER_PORT` | No | `8083` | HTTP port the server listens on |
-| `REDIS_HOST` | No | `localhost` | Redis host backing Spring Session (docker-compose sets `bff-server-redis`) |
+| `REDIS_HOST` | No | `localhost` | Redis host backing Spring Session + the token store (docker-compose sets `bff-server-redis`) |
 | `REDIS_PORT` | No | `6379` | Redis port |
 | `WEB_CLIENT_ORIGIN` | No | `http://localhost:3000` | The **only** origin allowed by CORS (property `web.client.origin`) |
+| `AUTH_SERVER_LOCATION` | No | `http://localhost:9000` | Base URL of auth-server for the refresh-token exchange (property `auth-server.location`; docker-compose sets `http://auth-server:9000`) |
+| `WEB_CLIENT_ID` | No | `WEB_CLIENT` | OAuth2 client id the bff authenticates as (property `web.client.id`) |
+| `WEB_CLIENT_SECRET` | **Yes** | — (no default) | Client secret for the above — must match the `WEB_CLIENT` `client_secret` seeded in auth-server's `oauth2_registered_client` table (`{noop}secret` in dev). Startup fails fast without it |
+| `REFRESH_TOKEN_TTL_SECONDS` | No | `3600` | Redis TTL applied to stored refresh tokens (property `token-store.refresh-token-ttl-seconds`); mirrors auth-server's `refresh-token-time-to-live` |
+
+## Login status — `GET /api/auth/status`
+
+The endpoint web-client calls to ask "does this browser have a valid login?". Session-cookie driven, `permitAll`, and **always 200** — "not logged in" is a normal answer, not an error.
+
+**Token store.** Each session's tokens live under three plain Redis string keys, each with its own TTL:
+
+```
+<sessionId>:access_token    TTL = the JWT's own exp
+<sessionId>:refresh_token   TTL = REFRESH_TOKEN_TTL_SECONDS (opaque token, no readable exp)
+<sessionId>:id_token        TTL = the JWT's own exp
+```
+
+`<sessionId>` is the Spring Session id — the base64-decoded value of the `SESSION` cookie. Because every key expires exactly when its token does, **an absent key is the expiry check**: reads never inspect `exp`.
+
+**Flow** (`AuthController` → `AuthStatusService`):
+
+1. `<sessionId>:id_token` present → logged in. Its payload is decoded (no signature verification — the bff itself stored it, and it originally came from auth-server over a server-to-server call) and returned as `{"isLoggedIn": true, "email": …, "userGUID": …, "roles": […]}`. A guest login has no `user_credential` row, so its response carries no `userGUID` field.
+2. No id_token, but `<sessionId>:refresh_token` present → `AuthServerTokenClient` performs the `refresh_token` grant against `POST {auth-server.location}/oauth2/token`, authenticating as **WEB_CLIENT** (refresh tokens are bound to the client they were issued to, so the bff must use the same registered client web-client's authorization codes are issued for). On success all three fresh tokens are stored and the id_token claims returned. auth-server seeds WEB_CLIENT with `reuse-refresh-tokens=false`, so every exchange **rotates** the refresh token — the stored one is always new.
+3. The exchange fails (expired, revoked, already-rotated, or garbage token → 400) → the stored refresh token is deleted (rotation means it can never succeed later) and the answer is `{"isLoggedIn": false}`.
+4. Neither key → `{"isLoggedIn": false}` (claim fields omitted entirely — `NON_NULL` serialization).
+
+The claims come from the **id_token**, which auth-server's `jwtTokenCustomizer` enriches with `email`, `userGUID`, and `roles` specifically for this endpoint.
 
 ## Security Configuration
 
@@ -39,9 +66,11 @@ HTTP sessions are stored in Redis via **Spring Session** (`spring-boot-starter-s
 # 1. Start the Redis instance (no env vars needed)
 docker compose up -d bff-server-redis
 
-# 2. Run the service (from bff-server/)
-mvn spring-boot:run
+# 2. Run the service (from bff-server/); the secret must match auth-server's WEB_CLIENT seed
+WEB_CLIENT_SECRET=secret mvn spring-boot:run
 ```
+
+For the refresh-exchange path (and the integration tests), auth-server and its DB must also be running — see `auth-server/README.md`.
 
 Sanity check — the first request gets a session, and it lands in Redis:
 
@@ -58,13 +87,17 @@ Integration tests in `src/test/java/com/roots/bff_server/integration/` hit a **l
 
 ### Prerequisites
 
-Start Redis and bff-server as shown under [Running](#running).
+Start Redis and bff-server as shown under [Running](#running). `AuthStatusIntegrationTest` additionally needs a live **auth-server** (with its DB) at `localhost:9000` — it performs a real guest login there to mint tokens.
 
 ### Test properties
 
 | Property | Default | Description |
 |---|---|---|
 | `bff-server-location` | `http://localhost:8083` | Base URL of the running bff-server |
+| `auth-server-location` | `http://localhost:9000` | Base URL of the running auth-server |
+| `web-client-location` | `http://localhost:3000` | OAuth2 redirect URI origin for the guest flow |
+| `web-client-id` / `web-client-secret` | `WEB_CLIENT` / `secret` | Client credentials for the guest code exchange (must match the DB seed) |
+| `redis-host` / `redis-port` | `localhost` / `6379` | Where the test seeds token keys directly |
 
 Declared in `src/test/resources/application.yml`; override with `-D<property>=<value>`.
 
@@ -76,13 +109,26 @@ mvn surefire:test '-Dtest=%regex[.*integration.*]'
 
 ### SessionSmokeIntegrationTest
 
-Exercises exactly what this scaffolding stage sets up:
+Exercises the session foundation:
 
 1. `GET /actuator/health` → asserts 200 and `UP` (which transitively proves the Redis connection, via the health indicator).
 2. Asserts a `SESSION` cookie is issued on that first response — proof of `SessionCreationPolicy.ALWAYS` **and** that Spring Session (not the container) owns the session.
 3. Replays the cookie on a second request and asserts **no new** `SESSION` cookie is set — the first session was found again, i.e. it round-tripped through the Redis store.
 
 The test builds a fresh cookie-less `java.net.http.HttpClient` per test and closes it afterwards (the per-test lifecycle convention from auth-server's integration suite); cookies are asserted and replayed explicitly. `TestConfig` is an empty `@Configuration` that only anchors the test context so `@TestPropertySource`/`@Value` resolve.
+
+### AuthStatusIntegrationTest
+
+Covers all four `/api/auth/status` paths with **genuine tokens**. All HTTP contact goes through per-server client classes in the test `client/` package (mirroring auth-server's test layout; each owns and configures its own `HttpClient`s, is `AutoCloseable`, and is built fresh per test): `BffClient.getLoginStatus(sessionCookie)` calls the status endpoint, and `AuthServerClient.fetchGuestTokens()` (a slimmed port of auth-server's integration-test client) drives a real guest login — authorize → `POST /login/guest` → redirect chain → code exchange — because guest needs no account fixture yet yields all three tokens. The test derives its own session id by base64-decoding its `SESSION` cookie, then seeds token keys straight into Redis via the published port (a host-side `LettuceConnectionFactory`):
+
+| Seeded | Expectation |
+|---|---|
+| nothing | `{"isLoggedIn": false}` with the claim fields absent |
+| `id_token` | logged in; `email` = `guest`, `roles` contains `GUEST`, no `userGUID` field |
+| `refresh_token` only | logged in via a live refresh exchange; fresh `id_token`/`access_token` keys appear with real TTLs; the stored refresh token is a **rotated** one (differs from the seeded value) |
+| a garbage refresh token | `{"isLoggedIn": false}` and the refresh-token key is deleted |
+
+Member-account id_token claims (a non-null `userGUID`) are asserted in **auth-server's** own integration suite (`LoginIntegrationTest`), where the account fixtures already live — the bff suite stays account-management-free.
 
 ## CI
 
@@ -91,9 +137,11 @@ The workflow at `.github/workflows/bff-server-ci.yml` runs on pull requests that
 1. `docker login` — auth-server is an **unchanged dependency** here (the paths filter means the PR only touched bff-server), so its image is pulled as `:latest` rather than rebuilt.
 2. Builds the JAR + test classes with `mvn package -DskipTests`.
 3. Builds a local image via Jib: `mvn jib:dockerBuild -Djib.to.image=${DOCKERHUB_USERNAME}/bff-server:ci` (no registry push).
-4. `docker compose up -d --wait bff-server` with `BFF_SERVER_TAG=ci` and `SPRING_PROFILES_ACTIVE=test` — `depends_on` chains in `bff-server-redis` and `auth-server` (which chains in the self-seeding DB). `--wait` blocks until everything is healthy; bff-server's healthcheck polls `/actuator/health`, whose Redis indicator proves the session store is reachable.
-5. Runs the integration tests on the host against `localhost:8083`: `mvn surefire:test '-Dtest=%regex[.*integration.*]'`.
+4. `docker compose up -d --wait bff-server` with `BFF_SERVER_TAG=ci`, `SPRING_PROFILES_ACTIVE=test`, and `WEB_CLIENT_SECRET=secret` — the secret is hardcoded in the workflow (not a GitHub secret) because it matches the `{noop}secret` WEB_CLIENT seed already public in the checked-in SQL. `depends_on` chains in `bff-server-redis` and `auth-server` (which chains in the self-seeding DB). `--wait` blocks until everything is healthy; bff-server's healthcheck polls `/actuator/health`, whose Redis indicator proves the session store is reachable.
+5. Runs the integration tests on the host against `localhost:8083`: `mvn surefire:test '-Dtest=%regex[.*integration.*]'` — the session smoke test plus the four `/api/auth/status` paths (which drive a real guest login against the auth-server container).
 6. On failure, dumps all container logs (`docker compose logs --no-color`).
+
+> **Ordering dependency:** the `/api/auth/status` tests assert id_token claims (`email`/`userGUID`/`roles`) that only exist once auth-server's id_token enrichment has merged and its CD has pushed a new `:latest` image. auth-server changes must land in their own PR **first**; a bff-server PR opened before that will fail CI against the stale image.
 
 ### Required GitHub secrets
 

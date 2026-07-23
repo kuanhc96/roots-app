@@ -53,6 +53,9 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           BFF_SERVER_TAG: ci
           SPRING_PROFILES_ACTIVE: test
+          # Matches the {noop}secret WEB_CLIENT seed in create_client_table.sql (already
+          # public in the checked-in SQL, so not a GitHub secret).
+          WEB_CLIENT_SECRET: secret
           MYSQL_AUTH_SERVER_ROOT_USERNAME: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_USERNAME }}
           MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
           SPRING_MAIL_USERNAME: ${{ secrets.SPRING_MAIL_USERNAME }}

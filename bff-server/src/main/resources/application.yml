@@ -9,6 +9,18 @@ spring:
 server:
   port: ${SERVER_PORT:8083}
 
+auth-server:
+  location: ${AUTH_SERVER_LOCATION:http://localhost:9000}
+
 web:
   client:
+    id: ${WEB_CLIENT_ID:WEB_CLIENT}
+    # Required, no default: must match the WEB_CLIENT client_secret seeded in
+    # auth-server's oauth2_registered_client table ({noop}secret in dev).
+    secret: ${WEB_CLIENT_SECRET}
     origin: ${WEB_CLIENT_ORIGIN:http://localhost:3000}
+
+token-store:
+  # TTL applied to stored refresh tokens. The refresh token is opaque (no readable
+  # exp), so this mirrors auth-server's settings.token.refresh-token-time-to-live.
+  refresh-token-ttl-seconds: ${REFRESH_TOKEN_TTL_SECONDS:3600}
