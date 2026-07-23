@@ -1,69 +1,133 @@
+/**
+ * Client for the bff-server's auth endpoints. The browser never sees tokens or the
+ * client secret anymore: the bff holds them in Redis keyed by the SESSION cookie,
+ * and this composable only ever handles the id_token *claims* the bff serves from
+ * /api/auth/status. The claims are deserialized from that JSON response and stored
+ * as three separate sessionStorage keys; `email`'s presence is what "logged in"
+ * means to the UI (it's the one claim every login has — guest included — unlike
+ * userGUID, which a guest login never carries).
+ */
+
+const EMAIL_STORAGE_KEY = 'id_token_email'
+const USER_GUID_STORAGE_KEY = 'id_token_user_guid'
+const ROLES_STORAGE_KEY = 'id_token_roles'
+
+export interface IdTokenClaims {
+  email?: string
+  userGUID?: string
+  roles?: string[]
+}
+
+export interface LoginStatus {
+  isLoggedIn: boolean
+  email?: string
+  userGUID?: string
+  roles?: string[]
+}
+
 export function useOAuth() {
   const config = useRuntimeConfig()
 
-  const existingToken = import.meta.client ? sessionStorage.getItem('access_token') : null
-  const isLoggedIn = ref(!!(existingToken?.trim() && !isTokenExpired(existingToken)))
+  const isLoggedIn = ref(import.meta.client ? !!sessionStorage.getItem(EMAIL_STORAGE_KEY) : false)
 
-  async function authorize() {
-    if (isLoggedIn.value) return
-
-    const refreshToken = sessionStorage.getItem('refresh_token')
-    if (refreshToken) {
-      const credentials = btoa(`${config.public.webClientId}:${config.public.webClientSecret}`)
-      const res = await fetch(`${config.public.authServerUrl}/oauth2/token`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${credentials}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        sessionStorage.setItem('access_token', data.access_token)
-        if (data.refresh_token) sessionStorage.setItem('refresh_token', data.refresh_token)
-        if (data.id_token) sessionStorage.setItem('id_token', data.id_token)
-        isLoggedIn.value = true
-        return
-      }
-      sessionStorage.removeItem('refresh_token')
+  /**
+   * Asks the bff whether this browser session has a valid login (the SESSION
+   * cookie rides along via credentials: 'include'). On "logged in" the id_token
+   * claims are deserialized out of the response and stored as three separate
+   * sessionStorage keys; on "not logged in" any stale claims are cleared. Returns
+   * the raw status response.
+   */
+  async function checkStatus(): Promise<LoginStatus> {
+    const response = await fetch(`${config.public.bffServerUrl}/api/auth/status`, {
+      credentials: 'include',
+    })
+    if (!response.ok) {
+      throw new Error(`Status check failed (${response.status})`)
     }
 
-    const state = crypto.randomUUID()
-    sessionStorage.setItem('oauth_state', state)
-    const params = new URLSearchParams({
-      response_type: 'code',
-      client_id: config.public.webClientId,
-      redirect_uri: `${window.location.origin}/callback`,
-      scope: 'openid WEB_CLIENT_READ',
-      state,
-    })
-    window.location.href = `${config.public.authServerUrl}/oauth2/authorize?${params.toString()}`
+    const status: LoginStatus = await response.json()
+    if (status.isLoggedIn) {
+      storeClaims({ email: status.email, userGUID: status.userGUID, roles: status.roles })
+    } else {
+      clearClaims()
+    }
+    isLoggedIn.value = status.isLoggedIn
+    return status
   }
 
+  /**
+   * Kicks off the authorization-code flow: a full browser navigation to the bff,
+   * which owns the state and every OAuth2 parameter and 302s on to auth-server.
+   */
+  function authorize() {
+    window.location.href = `${config.public.bffServerUrl}/api/auth/authorize`
+  }
+
+  /** The full login flow: already logged in? claims are stored and we're done — otherwise authorize. */
+  async function login() {
+    const status = await checkStatus()
+    if (!status.isLoggedIn) {
+      authorize()
+    }
+  }
+
+  /**
+   * Local-only logout: forgets the claims, flipping the UI to logged-out.
+   * TODO: implement server-side logout — a bff /api/auth/logout endpoint that
+   * deletes the session's Redis token keys and drives OIDC RP-initiated logout
+   * against auth-server with the id_token it holds (the browser no longer has the
+   * id_token, so it cannot send id_token_hint itself).
+   */
   function logout() {
-    const idToken = sessionStorage.getItem('id_token')
-    sessionStorage.removeItem('access_token')
-    sessionStorage.removeItem('id_token')
-    sessionStorage.removeItem('refresh_token')
-    sessionStorage.removeItem('oauth_state')
-
-    const params = new URLSearchParams({
-      post_logout_redirect_uri: `${window.location.origin}/logout`,
-    })
-    if (idToken) params.set('id_token_hint', idToken)
-
-    window.location.href = `${config.public.authServerUrl}/connect/logout?${params.toString()}`
+    clearClaims()
+    isLoggedIn.value = false
   }
 
-  return { authorize, logout, isLoggedIn }
-}
-
-function isTokenExpired(token: string): boolean {
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]))
-    return Date.now() / 1000 > payload.exp
-  } catch {
-    return true
+  /** The stored id_token claims, or null when logged out. */
+  function getClaims(): IdTokenClaims | null {
+    if (!import.meta.client) {
+      return null
+    }
+    const email = sessionStorage.getItem(EMAIL_STORAGE_KEY)
+    if (!email) {
+      return null
+    }
+    const userGUID = sessionStorage.getItem(USER_GUID_STORAGE_KEY)
+    const roles = sessionStorage.getItem(ROLES_STORAGE_KEY)
+    return {
+      email,
+      userGUID: userGUID ?? undefined,
+      roles: roles ? JSON.parse(roles) : undefined,
+    }
   }
+
+  function storeClaims(claims: IdTokenClaims) {
+    if (claims.email) {
+      sessionStorage.setItem(EMAIL_STORAGE_KEY, claims.email)
+    } else {
+      sessionStorage.removeItem(EMAIL_STORAGE_KEY)
+    }
+
+    // A guest login carries no userGUID claim — clear any stale value rather than
+    // storing one that doesn't belong to this login.
+    if (claims.userGUID) {
+      sessionStorage.setItem(USER_GUID_STORAGE_KEY, claims.userGUID)
+    } else {
+      sessionStorage.removeItem(USER_GUID_STORAGE_KEY)
+    }
+
+    if (claims.roles) {
+      sessionStorage.setItem(ROLES_STORAGE_KEY, JSON.stringify(claims.roles))
+    } else {
+      sessionStorage.removeItem(ROLES_STORAGE_KEY)
+    }
+  }
+
+  function clearClaims() {
+    sessionStorage.removeItem(EMAIL_STORAGE_KEY)
+    sessionStorage.removeItem(USER_GUID_STORAGE_KEY)
+    sessionStorage.removeItem(ROLES_STORAGE_KEY)
+  }
+
+  return { checkStatus, authorize, login, logout, getClaims, isLoggedIn }
 }

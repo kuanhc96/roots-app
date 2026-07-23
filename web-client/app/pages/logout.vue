@@ -3,19 +3,18 @@
     <v-card>
       <v-card-text>You have been logged out.</v-card-text>
       <v-card-actions>
-        <v-btn @click="authorize">authorize</v-btn>
+        <v-btn @click="login">login</v-btn>
       </v-card-actions>
     </v-card>
   </v-container>
 </template>
 
 <script setup lang="ts">
-const { authorize } = useOAuth()
+// Post-logout landing (the registered post_logout_redirect_uri): the future bff
+// server-side logout will send the browser here after OIDC logout completes.
+const { login, logout } = useOAuth()
 
 onMounted(() => {
-  sessionStorage.removeItem('access_token')
-  sessionStorage.removeItem('id_token')
-  sessionStorage.removeItem('refresh_token')
-  sessionStorage.removeItem('oauth_state')
+  logout()
 })
 </script>

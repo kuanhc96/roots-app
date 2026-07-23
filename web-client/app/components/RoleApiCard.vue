@@ -13,15 +13,19 @@
       <v-alert v-if="error" type="error" variant="tonal">{{ error }}</v-alert>
     </v-card-text>
     <v-card-actions>
-      <v-btn :disabled="isLoggedIn" @click="authorize">authorize</v-btn>
-      <v-btn :disabled="!isLoggedIn" @click="logout">logout</v-btn>
+      <!-- "check status" and "authorize" hit the bff endpoints directly (testing);
+           "login" runs the full flow: status check, then authorize if needed. -->
+      <v-btn @click="checkLoginStatus">check status</v-btn>
+      <v-btn @click="authorize">authorize</v-btn>
+      <v-btn @click="login">login</v-btn>
+      <v-btn v-if="isLoggedIn" @click="logout">logout</v-btn>
     </v-card-actions>
   </v-card>
 </template>
 
 <script setup lang="ts">
 const client = useSimpleResourceClient()
-const { authorize, logout, isLoggedIn } = useOAuth()
+const { checkStatus, authorize, login, logout, isLoggedIn } = useOAuth()
 
 const response = ref<string>('')
 const error = ref<string>('')
@@ -49,6 +53,16 @@ async function callRole(method: RoleMethod) {
     error.value = e instanceof Error ? e.message : 'Request failed'
   } finally {
     loading.value = false
+  }
+}
+
+async function checkLoginStatus() {
+  response.value = ''
+  error.value = ''
+  try {
+    response.value = JSON.stringify(await checkStatus())
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Status check failed'
   }
 }
 
