@@ -35,6 +35,14 @@ spring:
       resourceserver:
         jwt:
           jwk-set-uri: ${AUTH_SERVER_JWK_URI:http://localhost:9000/oauth2/jwks}
+  data:
+    redis:
+      # Backs only the Google Sign-In oauth_state store (GoogleAuthorizeService) — the
+      # HttpSession itself stays in-memory. auth-server-redis is a dedicated instance
+      # (docker-compose), listening on 6380 (not Redis's default 6379) to avoid a port
+      # clash with bff-server-redis when both run on the same docker network.
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
 
 server:
   port: ${SERVER_PORT:9000}
@@ -55,11 +63,22 @@ remember-me:
 web-client:
   location: ${WEB_CLIENT_LOCATION:http://localhost:3000}
 
-# Google Sign-In: the OAuth client id is the expected `aud` of incoming Google
-# id_tokens (GoogleIdTokenVerifier). It is public information (it also ships in
-# the frontend bundle), so a dev default is safe; override with GOOGLE_CLIENT_ID.
+# This server's own externally reachable base URL — what the browser can hit. Used to
+# build the Google redirect_uri (see AuthFlowController.GOOGLE_CALLBACK_PATH), which
+# must byte-for-byte match a redirect URI registered in Google Cloud Console.
+auth-server:
+  external-location: ${AUTH_SERVER_EXTERNAL_LOCATION:http://localhost:9000}
+
+# Google Sign-In. client-id is the expected `aud` of incoming Google id_tokens
+# (GoogleIdTokenVerifier) and is also sent when kicking off the authorize redirect —
+# public information, so a dev default is safe; override with GOOGLE_CLIENT_ID.
+# client-secret has no default (required in every profile, same fail-fast convention
+# as SPRING_MAIL_*): used server-side only, for the authorization-code token exchange
+# (SocialLoginService) — it never reaches the browser now that the exchange moved
+# out of the frontend bundle.
 google:
   client-id: ${GOOGLE_CLIENT_ID:444329721662-9ftcduffg48hg91douoq4tnaok5h266r.apps.googleusercontent.com}
+  client-secret: ${GOOGLE_CLIENT_SECRET}
 
 # Swagger/OpenAPI docs are dev-only: disabled here so every profile fails closed,
 # re-enabled solely in the dev document below. Both flags are needed — api-docs

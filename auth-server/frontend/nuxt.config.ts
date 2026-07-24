@@ -13,9 +13,6 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      script: [
-        {src: 'https://accounts.google.com/gsi/client', async: true, defer: true }
-      ],
       title: 'Auth Server',
       meta: [
         { charset: 'utf-8' },
@@ -25,16 +22,6 @@ export default defineNuxtConfig({
       link: [
         { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }
       ]
-    }
-  },
-  // Google Sign-In (client id is public; the secret has no default and must come from
-  // NUXT_PUBLIC_GOOGLE_CLIENT_SECRET — it ships in the JS bundle, an accepted tradeoff
-  // of the browser-side code exchange until the planned server-side exchange lands).
-  runtimeConfig: {
-    public: {
-      googleAuthServerUrl: 'https://oauth2.googleapis.com',
-      googleClientId: '444329721662-9ftcduffg48hg91douoq4tnaok5h266r.apps.googleusercontent.com',
-      googleClientSecret: ''
     }
   },
 

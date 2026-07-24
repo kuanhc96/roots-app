@@ -63,6 +63,9 @@ jobs:
       # from initialize_db/ (mounted into /docker-entrypoint-initdb.d). --wait blocks until
       # all report healthy, so no curl wait-loop is needed. auth-server itself uses the
       # local :ci image.
+      # Naming account-management still scopes the up to exactly what this suite needs —
+      # auth-server-redis is pulled in transitively via auth-server's depends_on, the
+      # same way auth-server-db already is.
       - name: Start services
         run: docker compose up -d --wait account-management
         env:
@@ -73,6 +76,9 @@ jobs:
           MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
           SPRING_MAIL_USERNAME: ${{ secrets.SPRING_MAIL_USERNAME }}
           SPRING_MAIL_PASSWORD: ${{ secrets.SPRING_MAIL_PASSWORD }}
+          # Runtime var now (not just the frontend build-time NUXT_PUBLIC_* one above) —
+          # required, no default, for the server-side Google token exchange.
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
 
       # The test client runs on the host and hits the published port (localhost:9000),
       # exactly as before — test application.yml is unchanged.

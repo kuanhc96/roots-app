@@ -1,14 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import LoginForm from '~/components/LoginForm.vue'
 import { errorMessages } from '~/utils/errorMessages'
 
 describe('LoginForm', () => {
-  beforeEach(() => {
-    sessionStorage.clear()
-    delete (window as any).google
-  })
-
   describe('form contract', () => {
     it('declares the credential form posting to /login and the guest form posting to /login/guest', async () => {
       const wrapper = await mountSuspended(LoginForm, { route: '/login' })
@@ -58,6 +53,13 @@ describe('LoginForm', () => {
       expect(hrefs).toContain('/forgot-password')
       expect(hrefs).toContain('/signup')
     })
+
+    it('the Google button navigates the browser to /login/google/authorize', async () => {
+      const wrapper = await mountSuspended(LoginForm, { route: '/login' })
+
+      const googleButton = wrapper.findAll('a').find(a => a.text().includes('Sign in with Google'))
+      expect(googleButton?.attributes('href')).toBe('/login/google/authorize')
+    })
   })
 
   describe('server redirect handling', () => {
@@ -90,41 +92,6 @@ describe('LoginForm', () => {
 
       const snackbar = wrapper.findComponent({ name: 'VSnackbar' })
       expect(snackbar.props('modelValue')).toBe(false)
-    })
-  })
-
-  describe('Sign in with Google', () => {
-    it('stores a state in sessionStorage and starts the GIS code flow', async () => {
-      const requestCode = vi.fn()
-      const initCodeClient = vi.fn().mockReturnValue({ requestCode })
-      ;(window as any).google = { accounts: { oauth2: { initCodeClient } } }
-
-      const wrapper = await mountSuspended(LoginForm, { route: '/login' })
-      const googleButton = wrapper.findAll('button').find(b => b.text().includes('Sign in with Google'))
-      await googleButton!.trigger('click')
-
-      const storedState = sessionStorage.getItem('google_oauth_state')
-      expect(storedState).toBeTruthy()
-
-      expect(initCodeClient).toHaveBeenCalledTimes(1)
-      const config = initCodeClient.mock.calls[0][0]
-      expect(config.client_id).toBeTruthy()
-      expect(config.scope).toBe('openid email profile')
-      expect(config.ux_mode).toBe('redirect')
-      expect(config.redirect_uri).toBe(`${window.location.origin}/callback`)
-      // The state sent to Google must be the one the /callback page will find in sessionStorage
-      expect(config.state).toBe(storedState)
-
-      expect(requestCode).toHaveBeenCalledTimes(1)
-    })
-
-    it('no-ops without throwing when the GIS script has not loaded', async () => {
-      const wrapper = await mountSuspended(LoginForm, { route: '/login' })
-      const googleButton = wrapper.findAll('button').find(b => b.text().includes('Sign in with Google'))
-
-      await googleButton!.trigger('click')
-
-      expect(sessionStorage.getItem('google_oauth_state')).toBeNull()
     })
   })
 })

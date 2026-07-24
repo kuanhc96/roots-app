@@ -7,12 +7,19 @@ import java.util.Base64;
 import java.util.UUID;
 
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.roots.authserver.dto.response.GoogleTokenResponse;
 import com.roots.authserver.enums.SocialProvider;
 import com.roots.authserver.exception.SocialLoginException;
 import com.roots.authserver.model.UserCredential;
@@ -28,12 +35,21 @@ import lombok.extern.slf4j.Slf4j;
 public class SocialLoginService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
+    private static final String GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 
     private final GoogleIdTokenVerifier googleIdTokenVerifier;
     private final UserCredentialRepository userCredentialRepository;
     private final RoleRepository roleRepository;
     private final SocialBindingRepository socialBindingRepository;
     private final PasswordEncoder passwordEncoder;
+    private final RestClient restClient;
+
+    // Field injection (not constructor args) so @RequiredArgsConstructor keeps wiring
+    // the final dependencies (same pattern as EmailService).
+    @Value("${google.client-id}")
+    private String googleClientId;
+    @Value("${google.client-secret}")
+    private String googleClientSecret;
 
     /**
      * Verifies a Google id_token and resolves it to a local account, creating the
@@ -49,6 +65,44 @@ public class SocialLoginService {
      * @throws SocialLoginException if the token fails verification, the Google email is
      *                              not verified, or required claims are missing
      */
+    /**
+     * Exchanges a Google authorization {@code code} for tokens (server-to-server, using
+     * the client secret — never exposed to the browser), then resolves the returned
+     * id_token to a local account exactly as {@link #loginWithGoogle(String)}.
+     *
+     * @param redirectUri must byte-for-byte match the one sent on the authorize request
+     *                    (and a URI registered in Google Cloud Console)
+     * @throws SocialLoginException if the exchange fails or returns no id_token, or if
+     *                              the resulting id_token itself fails verification
+     */
+    @Transactional
+    public String loginWithGoogleCode(String code, String redirectUri) {
+        GoogleTokenResponse tokens = exchangeCode(code, redirectUri);
+        if (tokens == null || StringUtils.isBlank(tokens.idToken())) {
+            throw new SocialLoginException("Google authorization-code exchange returned no id_token");
+        }
+        return loginWithGoogle(tokens.idToken());
+    }
+
+    private GoogleTokenResponse exchangeCode(String code, String redirectUri) {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("grant_type", "authorization_code");
+        form.add("code", code);
+        form.add("redirect_uri", redirectUri);
+
+        try {
+            return restClient.post()
+                    .uri(GOOGLE_TOKEN_ENDPOINT)
+                    .headers(headers -> headers.setBasicAuth(googleClientId, googleClientSecret))
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(form)
+                    .retrieve()
+                    .body(GoogleTokenResponse.class);
+        } catch (RestClientException e) {
+            throw new SocialLoginException("Google authorization-code exchange failed", e);
+        }
+    }
+
     @Transactional
     public String loginWithGoogle(String idTokenString) {
         GoogleIdToken.Payload payload = verify(idTokenString);
