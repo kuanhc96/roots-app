@@ -33,6 +33,7 @@ import com.roots.authserver.principal.MfaPendingAuthenticationToken;
 import com.roots.authserver.exception.SocialLoginException;
 import com.roots.authserver.principal.PasswordChangePendingAuthenticationToken;
 import com.roots.authserver.principal.SocialLoginAuthenticationToken;
+import com.roots.authserver.service.GoogleAuthorizeService;
 import com.roots.authserver.service.InMemoryOneTimePinService;
 import com.roots.authserver.service.MagicLinkService;
 import com.roots.authserver.service.SocialLoginService;
@@ -61,17 +62,27 @@ import lombok.extern.slf4j.Slf4j;
 @Controller
 @RequiredArgsConstructor
 public class AuthFlowController {
+    /** Must match the path of {@link #googleCallback}. */
+    private static final String GOOGLE_CALLBACK_PATH = "/login/google/callback";
+
     private final InMemoryOneTimePinService inMemoryOneTimePinService;
     private final JdbcOneTimeTokenService jdbcOneTimeTokenService;
     private final UserCredentialService userCredentialService;
     private final UserDetailsService userDetailsService;
     private final MagicLinkService magicLinkService;
     private final SocialLoginService socialLoginService;
+    private final GoogleAuthorizeService googleAuthorizeService;
     private final AuthenticationManager authenticationManager;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
     @Value("${web-client.location:http://localhost:3000}")
     private String webClientLocation;
+
+    // This server's own externally reachable base URL — what the browser can hit. Used
+    // to build the Google redirect_uri ({external-location}/login/google/callback),
+    // which must byte-for-byte match a redirect URI registered in Google Cloud Console.
+    @Value("${auth-server.external-location:http://localhost:9000}")
+    private String authServerExternalLocation;
 
     @Operation(
             summary = "Serve the SPA shell for page paths that also have a POST mapping",
@@ -295,34 +306,69 @@ public class AuthFlowController {
     }
 
     @Operation(
-            summary = "Log in with a Google id_token",
-            description = "Browser form post from the Nuxt /callback page, which exchanged the "
-                    + "Google authorization code for tokens and auto-submits the id_token here. "
-                    + "The token is verified server-side (signature, issuer, expiry, audience) and "
-                    + "resolved to a local account sub-first: an existing social binding wins; "
-                    + "otherwise a verified matching email is linked, or a new account is created "
-                    + "(member role, email verified, unusable random password). The session becomes "
-                    + "a fully authenticated SocialLoginAuthenticationToken — Google is trusted as "
-                    + "both factors, so no OTT step runs regardless of is_mfa_enabled — and the "
-                    + "browser is redirected to the saved OAuth2 authorization request.",
+            summary = "Kick off Google Sign-In",
+            description = "Browser navigation from the Login form's Google button (a plain link, "
+                    + "no JS SDK involved). Mints an oauth_state, stores it in Redis keyed by this "
+                    + "session's id (5 min TTL), and redirects the browser to Google's authorization "
+                    + "endpoint with client_id, scope, and redirect_uri=" + GOOGLE_CALLBACK_PATH
+                    + " filled in. Unconditional — an already-authenticated Google session on the "
+                    + "browser's side just completes the flow silently.",
+            responses = @ApiResponse(responseCode = "302",
+                    description = "Redirect to Google's authorization endpoint", content = @Content)
+    )
+    @GetMapping("/login/google/authorize")
+    public String authorizeWithGoogle(HttpServletRequest request) {
+        String sessionId = request.getSession(true).getId();
+        return "redirect:" + googleAuthorizeService.buildAuthorizeRedirect(
+                sessionId, authServerExternalLocation + GOOGLE_CALLBACK_PATH);
+    }
+
+    @Operation(
+            summary = "Complete Google Sign-In",
+            description = "Where Google sends the browser back with the authorization code (this "
+                    + "path is the registered redirect_uri — see authorizeWithGoogle). Validates the "
+                    + "returned state against the one minted for this session (single-use — consumed "
+                    + "whether it matches or not), exchanges the code for tokens server-side (the "
+                    + "client secret never reaches the browser), verifies the resulting id_token "
+                    + "(signature, issuer, expiry, audience), and resolves it to a local account "
+                    + "sub-first: an existing social binding wins; otherwise a verified matching "
+                    + "email is linked, or a new account is created (member role, email verified, "
+                    + "unusable random password). The session becomes a fully authenticated "
+                    + "SocialLoginAuthenticationToken — Google is trusted as both factors, so no OTT "
+                    + "step runs regardless of is_mfa_enabled — and the browser is redirected to the "
+                    + "saved OAuth2 authorization request. Any failure (Google's own error param, a "
+                    + "state mismatch, or a rejected exchange) redirects to /login with one generic "
+                    + "code; the specific reason is log-only.",
             responses = @ApiResponse(responseCode = "302",
                     description = "Redirect to the saved OAuth2 request (or the web-client base URL "
                             + "when none exists), or to /login with e=social_login_failed",
                     content = @Content)
     )
-    @PostMapping("/login/google")
-    public String loginWithGoogle(
-            @Parameter(description = "The Google-issued id_token, posted by the Nuxt callback page")
-            @RequestParam(required = false) String idToken,
+    @GetMapping(GOOGLE_CALLBACK_PATH)
+    public String googleCallback(
+            @Parameter(description = "The authorization code, present on success")
+            @RequestParam(required = false) String code,
+            @Parameter(description = "The state minted by authorizeWithGoogle, echoed back by Google")
+            @RequestParam(required = false) String state,
+            @Parameter(description = "Present when the user denied consent or Google rejected the request")
+            @RequestParam(required = false) String error,
             HttpServletRequest request,
             HttpServletResponse response) {
-        if (StringUtils.isBlank(idToken)) {
+        String sessionId = request.getSession(true).getId();
+        boolean stateValid = googleAuthorizeService.consumeAndValidateState(sessionId, state);
+
+        if (error != null) {
+            log.warn("Google authorization failed for session {}: {}", sessionId, error);
+            return "redirect:/login?e=" + ErrorCode.SOCIAL_LOGIN_FAILED;
+        }
+        if (StringUtils.isBlank(code) || !stateValid) {
+            log.warn("Google callback for session {} is missing code or failed state validation", sessionId);
             return "redirect:/login?e=" + ErrorCode.SOCIAL_LOGIN_FAILED;
         }
 
         String email;
         try {
-            email = socialLoginService.loginWithGoogle(idToken);
+            email = socialLoginService.loginWithGoogleCode(code, authServerExternalLocation + GOOGLE_CALLBACK_PATH);
         } catch (SocialLoginException e) {
             // One generic code for every failure mode; the specific reason is log-only.
             log.warn("Google login rejected: {}", e.getMessage());
