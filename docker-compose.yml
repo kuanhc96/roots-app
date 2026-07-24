@@ -27,6 +27,25 @@ services:
       retries: 10
       start_period: 30s
 
+  auth-server-redis:
+    image: redis:8
+    container_name: auth-server-redis
+    # Listens on 6380, not Redis's default 6379, so it can't collide with
+    # bff-server-redis's 6379:6379 when both run on the same docker network.
+    command: ["redis-server", "--port", "6380"]
+    ports:
+      # Published so a locally-run auth-server (mvn spring-boot:run) reaches it at
+      # localhost:6380 — same pattern as MySQL on 3307. No AUTH (dev/CI-grade, like the DB).
+      - "6380:6380"
+    networks:
+      - roots_backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6380", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   auth-server:
     image: ${DOCKERHUB_USERNAME}/auth-server:${AUTH_SERVER_TAG:-latest}
     container_name: auth-server
@@ -37,6 +56,8 @@ services:
     depends_on:
       auth-server-db:
         condition: service_healthy
+      auth-server-redis:
+        condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
       MYSQL_AUTH_SERVER_ROOT_USERNAME: ${MYSQL_AUTH_SERVER_ROOT_USERNAME}
@@ -45,6 +66,10 @@ services:
       SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME}
       SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD}
       REMEMBER_ME_KEY: ${REMEMBER_ME_KEY:-dev-remember-me-key-change-in-prod}
+      REDIS_HOST: auth-server-redis
+      # Required, no default in the app (same fail-fast convention as SPRING_MAIL_*) —
+      # used server-side only for the Google authorization-code token exchange.
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent localhost:9000/actuator/health | grep UP || exit 1"]
       interval: 15s
