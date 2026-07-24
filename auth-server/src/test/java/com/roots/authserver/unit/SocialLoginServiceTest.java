@@ -8,6 +8,11 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import java.security.GeneralSecurityException;
 import java.util.Optional;
@@ -18,7 +23,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
 
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
@@ -38,6 +50,9 @@ class SocialLoginServiceTest {
     private static final String SUB = "110169484474386276334";
     private static final String EMAIL = "socialuser@example.com";
     private static final String NAME = "Social User";
+    private static final String CODE = "auth-code";
+    private static final String REDIRECT_URI = "http://localhost:9000/login/google/callback";
+    private static final String GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 
     @Mock private GoogleIdTokenVerifier googleIdTokenVerifier;
     @Mock private UserCredentialRepository userCredentialRepository;
@@ -46,13 +61,19 @@ class SocialLoginServiceTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private GoogleIdToken googleIdToken;
 
+    private MockRestServiceServer mockGoogle;
     private SocialLoginService socialLoginService;
 
     @BeforeEach
     void setUp() {
+        RestClient.Builder restClientBuilder = RestClient.builder();
+        mockGoogle = MockRestServiceServer.bindTo(restClientBuilder).build();
+
         socialLoginService = new SocialLoginService(
                 googleIdTokenVerifier, userCredentialRepository, roleRepository,
-                socialBindingRepository, passwordEncoder);
+                socialBindingRepository, passwordEncoder, restClientBuilder.build());
+        ReflectionTestUtils.setField(socialLoginService, "googleClientId", "client-id");
+        ReflectionTestUtils.setField(socialLoginService, "googleClientSecret", "client-secret");
     }
 
     private GoogleIdToken.Payload stubVerifiedToken(String sub, String email, Boolean emailVerified) throws Exception {
@@ -198,5 +219,45 @@ class SocialLoginServiceTest {
         assertThatThrownBy(() -> socialLoginService.loginWithGoogle(ID_TOKEN))
                 .isInstanceOf(SocialLoginException.class)
                 .hasCauseInstanceOf(GeneralSecurityException.class);
+    }
+
+    @Test
+    void loginWithGoogleCode_exchangesCodeServerSide_thenDelegatesToIdTokenLogin() throws Exception {
+        mockGoogle.expect(requestTo(GOOGLE_TOKEN_ENDPOINT))
+                .andExpect(method(HttpMethod.POST))
+                // Basic auth of client-id:client-secret proves the secret never needs to
+                // reach the browser — it's attached here, server-side, on this request only.
+                .andExpect(header(HttpHeaders.AUTHORIZATION, "Basic " + java.util.Base64.getEncoder()
+                        .encodeToString("client-id:client-secret".getBytes())))
+                .andRespond(withSuccess("{\"id_token\":\"" + ID_TOKEN + "\"}", MediaType.APPLICATION_JSON));
+
+        stubVerifiedToken(SUB, EMAIL, true);
+        when(socialBindingRepository.findBySocialUserId(SUB)).thenReturn(Optional.empty());
+        when(userCredentialRepository.findByEmail(EMAIL)).thenReturn(Optional.of(credential(42L, EMAIL)));
+
+        String result = socialLoginService.loginWithGoogleCode(CODE, REDIRECT_URI);
+
+        assertThat(result).isEqualTo(EMAIL);
+        mockGoogle.verify();
+    }
+
+    @Test
+    void loginWithGoogleCode_responseWithNoIdToken_isRejected() {
+        mockGoogle.expect(requestTo(GOOGLE_TOKEN_ENDPOINT))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> socialLoginService.loginWithGoogleCode(CODE, REDIRECT_URI))
+                .isInstanceOf(SocialLoginException.class)
+                .hasMessageContaining("no id_token");
+    }
+
+    @Test
+    void loginWithGoogleCode_exchangeRejectedByGoogle_isWrapped() {
+        mockGoogle.expect(requestTo(GOOGLE_TOKEN_ENDPOINT))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST));
+
+        assertThatThrownBy(() -> socialLoginService.loginWithGoogleCode(CODE, REDIRECT_URI))
+                .isInstanceOf(SocialLoginException.class)
+                .hasMessageContaining("exchange failed");
     }
 }
