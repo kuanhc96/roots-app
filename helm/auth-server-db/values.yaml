@@ -1,0 +1,36 @@
+image:
+  repository: mysql
+  tag: "8"
+  pullPolicy: IfNotPresent
+
+mysql:
+  # Leave blank and pass with --set mysql.rootPassword=... or --set-file,
+  # or better: set existingSecret below to point at a Secret you manage externally.
+  rootPassword: ""
+  database: auth-server-db
+  tcpPort: 3307
+  # If set, the Secret template is skipped and this existing Secret/key is used instead.
+  existingSecret: ""
+  existingSecretPasswordKey: "mysql-root-password"
+
+resources:
+  limits:
+    memory: 500Mi
+  requests:
+    memory: 250Mi
+
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClassName: ""   # "" = use cluster default StorageClass
+
+service:
+  # ClusterIP = internal-only, same intent as compose's "expose" (no host port published)
+  type: LoadBalancer
+  port: 3307
+
+healthCheck:
+  initialDelaySeconds: 30   # mirrors start_period: 30s
+  periodSeconds: 10         # interval: 10s
+  timeoutSeconds: 5         # timeout: 5s
+  failureThreshold: 10      # retries: 10
