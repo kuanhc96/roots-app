@@ -94,6 +94,26 @@ public class AuthServerClient implements AutoCloseable {
         return response.headers().firstValue("Location").orElseThrow();
     }
 
+    /**
+     * Plays the browser through RP-Initiated Logout starting from an externally built
+     * {@code /connect/logout} URL (e.g. the Location of bff-server's /api/auth/logout
+     * redirect): GET it on the same cookie-bearing browser used for the login — so
+     * auth-server's own session cookie rides along — and follow the redirect chain
+     * until the Location reaches {@code postLogoutPrefix} (web-client's /logout).
+     * Returns that final post-logout URL. With a valid {@code id_token_hint} and an
+     * active session, Spring's OIDC logout skips its confirmation page and 302s
+     * straight through.
+     */
+    public String completeLogout(String logoutUrl, String postLogoutPrefix) throws Exception {
+        HttpResponse<String> response = followRedirects(get(logoutUrl), postLogoutPrefix);
+
+        if (response.statusCode() != 302) {
+            throw new IllegalStateException("Logout did not redirect to the post-logout URI; status "
+                    + response.statusCode());
+        }
+        return response.headers().firstValue("Location").orElseThrow();
+    }
+
     /** Extracts a query parameter from a callback URL (public for test assertions). */
     public static String queryParam(String url, String name) {
         return extractQueryParam(url, name);

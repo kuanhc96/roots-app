@@ -4,6 +4,7 @@ import com.roots.bff_server.dto.response.LoginStatusResponse;
 import com.roots.bff_server.service.AuthCallbackService;
 import com.roots.bff_server.service.AuthStatusService;
 import com.roots.bff_server.service.AuthorizeService;
+import com.roots.bff_server.service.LogoutService;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +18,8 @@ import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 
+import java.net.URI;
+
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -25,6 +28,7 @@ public class AuthController {
     private final AuthStatusService authStatusService;
     private final AuthorizeService authorizeService;
     private final AuthCallbackService authCallbackService;
+    private final LogoutService logoutService;
 
     @Operation(
             summary = "Get login status",
@@ -69,6 +73,25 @@ public class AuthController {
             @RequestParam(required = false) String error) {
         return ResponseEntity.status(HttpStatus.FOUND)
                 .location(authCallbackService.handleCallback(session.getId(), code, state, error))
+                .build();
+    }
+
+    @Operation(
+            summary = "Server-side logout",
+            description = "Clears the session's tokens from Redis and 302s the browser to auth-server's "
+                    + "/connect/logout for RP-Initiated Logout (with client_id + post_logout_redirect_uri, "
+                    + "plus id_token_hint when an id_token is held). Then invalidates the Spring Session so "
+                    + "the SESSION cookie and its Redis entry are dropped. auth-server ends its own session "
+                    + "and redirects the browser to web-client's /logout."
+    )
+    @GetMapping("/logout")
+    public ResponseEntity<Void> logout(HttpSession session) {
+        // Build the redirect (reads the id_token, clears the tokens) before invalidating
+        // the session — invalidate() drops the SESSION cookie and its Redis entry.
+        URI logoutRedirect = logoutService.buildLogoutRedirect(session.getId());
+        session.invalidate();
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .location(logoutRedirect)
                 .build();
     }
 }
