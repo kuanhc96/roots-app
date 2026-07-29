@@ -1,0 +1,88 @@
+# Kubernetes equivalent of the `auth-server-redis` docker-compose service.
+#
+# What this Redis actually holds: only the Google Sign-In `oauth_state` store
+# (GoogleAuthorizeService). auth-server's HttpSession stays in-memory. Every key
+# is a short-TTL state string, so the data is disposable — losing all of it costs
+# one failed Google login. That is why there is no PersistentVolumeClaim here,
+# unlike the auth-server-db chart.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: redis
+  tag: "8"
+  pullPolicy: IfNotPresent
+
+redis:
+  # 6380, not Redis's default 6379.
+  #
+  # The original reason was a docker-compose constraint that no longer applies in
+  # Kubernetes: compose publishes 6380:6380 and would have collided with
+  # bff-server-redis's 6379:6379 on the shared bridge network. In k8s each Service
+  # has its own DNS name and both could safely use 6379.
+  #
+  # It is kept because it is now the application's own default —
+  # `spring.data.redis.port: ${REDIS_PORT:6380}` in auth-server's application.yml.
+  # Keeping 6380 means the auth-server chart only ever needs to set REDIS_HOST.
+  port: 6380
+
+  # Appended verbatim to the `redis-server` args. Empty by default so this chart is
+  # byte-for-byte equivalent to the compose service.
+  #
+  # If you ever raise `resources.limits.memory`, pair it with a maxmemory setting.
+  # Redis does not know about cgroup limits: without --maxmemory it never evicts,
+  # grows past the limit, and gets OOMKilled by the kernel — surfacing as a bare
+  # "Exit 137" with nothing in the Redis log to explain it. Rule of thumb is ~75%
+  # of the limit. Every key here has a TTL, so volatile-ttl is the natural policy:
+  #
+  # extraArgs:
+  #   - "--maxmemory"
+  #   - "96mb"
+  #   - "--maxmemory-policy"
+  #   - "volatile-ttl"
+  extraArgs: []
+
+resources:
+  requests:
+    memory: 32Mi
+    cpu: 50m
+  limits:
+    # No CPU limit, on purpose. Redis executes commands on a single thread, so CFS
+    # throttling from a CPU limit stalls every client at once. The cpu request above
+    # still gives it a guaranteed share and scheduling weight; omitting the limit puts
+    # the pod in the Burstable QoS class, which is the right class for this workload.
+    #
+    # Compose sets no limits on auth-server-redis at all. Declaring requests here is a
+    # deliberate divergence: a pod with no requests is BestEffort QoS and is the first
+    # thing the kubelet evicts under node memory pressure.
+    memory: 128Mi
+
+service:
+  # LoadBalancer mirrors compose's published "6380:6380" — on Docker Desktop this
+  # binds to localhost:6380, so an auth-server run from the IDE (mvn spring-boot:run)
+  # reaches it with no extra configuration.
+  #
+  # NOTE for the cloud step: on a real cloud provider this provisions a public load
+  # balancer in front of a Redis with no `requirepass`. Set this to ClusterIP (or
+  # add AUTH — see the chart README) before deploying anywhere non-local.
+  type: LoadBalancer
+  port: 6380
+
+# Compose's healthcheck maps to the readinessProbe, not the livenessProbe: compose
+# never restarts an unhealthy container, it only gates `depends_on: service_healthy`.
+# The livenessProbe below is a deliberate Kubernetes addition.
+readinessProbe:
+  # Redis with no RDB to load accepts connections in well under a second, so there is
+  # no reason to inherit compose's 10s start_period here — it would just add dead time
+  # to every rollout.
+  initialDelaySeconds: 2
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+livenessProbe:
+  initialDelaySeconds: 10   # compose start_period: 10s
+  periodSeconds: 10         # compose interval: 10s
+  timeoutSeconds: 5         # compose timeout: 5s
+  failureThreshold: 10      # compose retries: 10 -> ~100s of unbroken failure before a restart

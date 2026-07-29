@@ -1,0 +1,19 @@
+# Copy this to values-local.yaml and adjust as needed. Nothing here is required —
+# the chart installs with no values at all — this file just documents the knobs you
+# are most likely to reach for locally.
+#
+# If you also run `docker compose up auth-server-redis`, both want host port 6380.
+# Either stop compose or switch the Service to ClusterIP and use port-forward:
+#
+#   kubectl port-forward -n roots svc/auth-server-redis 6380:6380
+#
+# service:
+#   type: ClusterIP
+
+# Uncomment to watch eviction behaviour under a deliberately tight memory ceiling.
+# redis:
+#   extraArgs:
+#     - "--maxmemory"
+#     - "8mb"
+#     - "--maxmemory-policy"
+#     - "volatile-ttl"
