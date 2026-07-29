@@ -12,6 +12,6 @@ spec:
   ports:
     - name: mysql
       port: {{ .Values.service.port }}
-      targetPort: {{ .Values.mysql.tcpPort }}
+      targetPort: mysql
   selector:
-    {{- include "auth-server-db.labels" . | nindent 4 }}
+    {{- include "auth-server-db.selectorLabels" . | nindent 4 }}

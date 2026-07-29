@@ -9,7 +9,7 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      {{- include "auth-server-db.labels" . | nindent 6 }}
+      {{- include "auth-server-db.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:

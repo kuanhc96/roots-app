@@ -1,3 +1,6 @@
+nameOverride: ""
+fullnameOverride: ""
+
 image:
   repository: mysql
   tag: "8"
@@ -25,7 +28,13 @@ persistence:
   storageClassName: ""   # "" = use cluster default StorageClass
 
 service:
-  # ClusterIP = internal-only, same intent as compose's "expose" (no host port published)
+  # LoadBalancer, which on Docker Desktop binds to localhost:3307 so a locally-run
+  # auth-server (mvn spring-boot:run) can reach the DB.
+  #
+  # Note this is deliberately MORE exposed than compose, where auth-server-db uses
+  # `expose` rather than `ports` and is therefore unreachable from the host.
+  # Set this to ClusterIP before deploying anywhere non-local — it would otherwise
+  # put a public load balancer in front of the database.
   type: LoadBalancer
   port: 3307
 

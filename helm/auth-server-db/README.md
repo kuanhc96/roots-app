@@ -5,7 +5,7 @@ Kubernetes equivalent of the `auth-server-db` docker-compose service.
 ## Layout
 
 ```
-auth-server-db-chart/
+auth-server-db/
 ├── Chart.yaml
 ├── values.yaml
 ├── values-local.yaml.example
@@ -13,10 +13,10 @@ auth-server-db-chart/
 │   └── initdb/            # put your .sql files here (create_*.sql, initialize_*.sql)
 └── templates/
     ├── _helpers.tpl
-    ├── secret.yaml         # holds MYSQL_ROOT_PASSWORD
-    ├── configmap-initdb.yaml  # built from files/initdb/*.sql
-    ├── statefulset.yaml    # the MySQL pod + PVC for data
-    └── service.yaml        # ClusterIP :3307
+    ├── secret.yaml        # holds MYSQL_ROOT_PASSWORD
+    ├── configmap.yaml     # built from files/initdb/*.sql
+    ├── statefulset.yaml   # the MySQL pod + PVC for data
+    └── service.yaml       # LoadBalancer :3307
 ```
 
 ## 1. Add your init scripts
@@ -25,7 +25,7 @@ Copy your existing files into the chart:
 
 ```bash
 cp auth-server/src/main/resources/initialize_db/*.sql \
-   auth-server-db-chart/files/initdb/
+   helm/auth-server-db/files/initdb/
 ```
 
 They get loaded into a ConfigMap and mounted at `/docker-entrypoint-initdb.d`,
@@ -35,7 +35,7 @@ in alphabetical order, so no changes needed there.
 ## 2. Install
 
 ```bash
-helm install auth-server-db ./auth-server-db-chart \
+helm install auth-server-db ./helm/auth-server-db \
   -n roots --create-namespace \
   --set mysql.rootPassword="$MYSQL_AUTH_SERVER_ROOT_PASSWORD"
 ```
@@ -44,8 +44,12 @@ Or with a values file:
 
 ```bash
 cp values-local.yaml.example values-local.yaml   # fill in a real password
-helm install auth-server-db ./auth-server-db-chart -n roots -f values-local.yaml
+helm install auth-server-db ./helm/auth-server-db -n roots -f values-local.yaml
 ```
+
+Because the release name contains the chart name, the fullname helper collapses it,
+so resources are named exactly `auth-server-db`. Install under a different release
+name and they become `<release>-auth-server-db`.
 
 For anything beyond local dev, don't pass the password as plain --set / values.yaml.
 Instead create the Secret yourself and point the chart at it:
@@ -53,7 +57,7 @@ Instead create the Secret yourself and point the chart at it:
 ```bash
 kubectl create secret generic auth-server-db-creds \
   --from-literal=mysql-root-password="$MYSQL_AUTH_SERVER_ROOT_PASSWORD" -n roots
-helm install auth-server-db ./auth-server-db-chart -n roots \
+helm install auth-server-db ./helm/auth-server-db -n roots \
   --set mysql.existingSecret=auth-server-db-creds
 ```
 
