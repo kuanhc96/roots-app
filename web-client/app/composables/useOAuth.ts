@@ -72,11 +72,21 @@ export function useOAuth() {
   }
 
   /**
-   * Local-only logout: forgets the claims, flipping the UI to logged-out.
-   * TODO: implement server-side logout — a bff /api/auth/logout endpoint that
-   * deletes the session's Redis token keys and drives OIDC RP-initiated logout
-   * against auth-server with the id_token it holds (the browser no longer has the
-   * id_token, so it cannot send id_token_hint itself).
+   * Starts server-side logout: a full browser navigation to the bff, which deletes
+   * the session's Redis token keys and drives OIDC RP-initiated logout against
+   * auth-server with the id_token it holds (the browser no longer has the id_token,
+   * so it cannot send id_token_hint itself). auth-server redirects the browser to
+   * web-client's /logout page, whose onMounted runs the local `logout()` below to
+   * clear the stored claims — kept separate so the post-logout landing can't loop.
+   */
+  function startLogout() {
+    window.location.href = `${config.public.bffServerUrl}/api/auth/logout`
+  }
+
+  /**
+   * Local-only logout: forgets the claims, flipping the UI to logged-out. Run from
+   * the /logout landing page after the server-side round-trip completes; never
+   * triggers the server flow itself (that's `startLogout()`).
    */
   function logout() {
     clearClaims()
@@ -129,5 +139,5 @@ export function useOAuth() {
     sessionStorage.removeItem(ROLES_STORAGE_KEY)
   }
 
-  return { checkStatus, authorize, login, logout, getClaims, isLoggedIn }
+  return { checkStatus, authorize, login, startLogout, logout, getClaims, isLoggedIn }
 }
