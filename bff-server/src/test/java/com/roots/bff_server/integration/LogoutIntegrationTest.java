@@ -1,6 +1,7 @@
 package com.roots.bff_server.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.roots.bff_server.client.AuthServerClient;
 import com.roots.bff_server.client.BffClient;
@@ -106,6 +107,10 @@ class LogoutIntegrationTest {
                 .isEqualTo(webClientLocation + "/logout");
         // The bff supplies the id_token_hint the browser can't — it never holds the id_token.
         assertThat(AuthServerClient.queryParam(location, "id_token_hint")).isEqualTo(tokens.idToken());
+        String postLogoutPrefix = webClientLocation + "/logout";
+        String finalLocation = authServerClient.completeLogout(location, postLogoutPrefix);
+
+        assertThat(finalLocation).startsWith(postLogoutPrefix);
 
         // All three token keys are cleared for the session.
         assertThat(tokenStore.find(sessionId, TokenType.ID_TOKEN)).isEmpty();
@@ -129,6 +134,8 @@ class LogoutIntegrationTest {
         assertThat(AuthServerClient.queryParam(location, "client_id")).isEqualTo(webClientId);
         assertThat(AuthServerClient.queryParam(location, "post_logout_redirect_uri"))
                 .isEqualTo(webClientLocation + "/logout");
+        assertThatThrownBy(() -> authServerClient.completeLogout(location, webClientLocation + "/logout"))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("400");
 
         assertThat(tokenStore.find(sessionId, TokenType.REFRESH_TOKEN)).isEmpty();
     }
