@@ -33,7 +33,7 @@ public class AuthController {
     @Operation(
             summary = "Get login status",
             description = "Always 200 — \"not logged in\" is a normal answer, not an error. The "
-                    + "session id is the Spring Session id (the SESSION cookie is its base64 form), "
+                    + "session id is the Spring Session id (the __Host-SESSION cookie is its base64 form), "
                     + "which keys the token entries in Redis."
     )
     @GetMapping("/status")
@@ -81,13 +81,13 @@ public class AuthController {
             description = "Clears the session's tokens from Redis and 302s the browser to auth-server's "
                     + "/connect/logout for RP-Initiated Logout (with client_id + post_logout_redirect_uri, "
                     + "plus id_token_hint when an id_token is held). Then invalidates the Spring Session so "
-                    + "the SESSION cookie and its Redis entry are dropped. auth-server ends its own session "
+                    + "the __Host-SESSION cookie and its Redis entry are dropped. auth-server ends its own session "
                     + "and redirects the browser to web-client's /logout."
     )
     @GetMapping("/logout")
     public ResponseEntity<Void> logout(HttpSession session) {
         // Build the redirect (reads the id_token, clears the tokens) before invalidating
-        // the session — invalidate() drops the SESSION cookie and its Redis entry.
+        // the session — invalidate() drops the __Host-SESSION cookie and its Redis entry.
         URI logoutRedirect = logoutService.buildLogoutRedirect(session.getId());
         session.invalidate();
         return ResponseEntity.status(HttpStatus.FOUND)

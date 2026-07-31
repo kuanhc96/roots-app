@@ -42,7 +42,7 @@ public class SecurityConfig {
         config.setAllowedOrigins(List.of(webClientOrigin));
         config.setAllowedMethods(List.of("*"));
         config.setAllowedHeaders(List.of("*"));
-        // The SESSION cookie is the browser's only credential, so cross-origin
+        // The __Host-SESSION cookie is the browser's only credential, so cross-origin
         // requests from web-client must be allowed to carry it.
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
