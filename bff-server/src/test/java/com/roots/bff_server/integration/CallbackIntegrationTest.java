@@ -160,12 +160,12 @@ class CallbackIntegrationTest {
         assertThat(response.statusCode()).isEqualTo(302);
 
         sessionCookie = response.headers().allValues("set-cookie").stream()
-                .filter(value -> value.startsWith("SESSION="))
+                .filter(value -> value.startsWith("__Host-SESSION="))
                 .map(value -> value.split(";", 2)[0])
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("No SESSION cookie on authorize response"));
+                .orElseThrow(() -> new IllegalStateException("No __Host-SESSION cookie on authorize response"));
         sessionId = new String(
-                Base64.getDecoder().decode(sessionCookie.substring("SESSION=".length())),
+                Base64.getDecoder().decode(sessionCookie.substring("__Host-SESSION=".length())),
                 StandardCharsets.UTF_8);
 
         return response.headers().firstValue("Location").orElseThrow();

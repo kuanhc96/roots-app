@@ -32,7 +32,7 @@ import java.util.Map;
  * auth-server. Genuine tokens come from a real guest login
  * ({@link AuthServerClient#fetchGuestTokens()}); they are seeded into Redis via the
  * autowired {@link TestTokenStoreService} under the test's own session id — the
- * SESSION cookie is just the base64 of the Spring Session id, so the test can derive
+ * __Host-SESSION cookie is just the base64 of the Spring Session id, so the test can derive
  * the key prefix from its own cookie. Covers all four paths: id_token hit,
  * refresh-token revival (with rotation), nothing stored, and a refresh token
  * auth-server rejects.
@@ -80,12 +80,12 @@ class AuthStatusIntegrationTest {
         // is the Redis key prefix the bff will look under for this browser.
         HttpResponse<String> response = bffClient.getLoginStatus(null);
         sessionCookie = response.headers().allValues("set-cookie").stream()
-                .filter(cookie -> cookie.startsWith("SESSION="))
+                .filter(cookie -> cookie.startsWith("__Host-SESSION="))
                 .map(cookie -> cookie.split(";", 2)[0])
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("No SESSION cookie on first response"));
+                .orElseThrow(() -> new IllegalStateException("No __Host-SESSION cookie on first response"));
         sessionId = new String(
-                Base64.getDecoder().decode(sessionCookie.substring("SESSION=".length())),
+                Base64.getDecoder().decode(sessionCookie.substring("__Host-SESSION=".length())),
                 StandardCharsets.UTF_8);
     }
 

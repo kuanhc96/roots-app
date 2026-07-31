@@ -26,7 +26,7 @@ import java.util.Base64;
  * Exercises GET /api/auth/logout against a live bff-server, its Redis, and a live
  * auth-server. Genuine tokens come from a real guest login
  * ({@link AuthServerClient#fetchGuestTokens()}) and are seeded into Redis via the
- * autowired {@link TestTokenStoreService} under the test's own session id (the SESSION
+ * autowired {@link TestTokenStoreService} under the test's own session id (the __Host-SESSION
  * cookie is base64 of the Spring Session id — the Redis key prefix).
  *
  * <p>The contract tests assert the raw 302: the auth-server {@code /connect/logout}
@@ -73,12 +73,12 @@ class LogoutIntegrationTest {
         // Redis key prefix the bff clears at logout.
         HttpResponse<String> response = bffClient.getLoginStatus(null);
         sessionCookie = response.headers().allValues("set-cookie").stream()
-                .filter(cookie -> cookie.startsWith("SESSION="))
+                .filter(cookie -> cookie.startsWith("__Host-SESSION="))
                 .map(cookie -> cookie.split(";", 2)[0])
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("No SESSION cookie on first response"));
+                .orElseThrow(() -> new IllegalStateException("No __Host-SESSION cookie on first response"));
         sessionId = new String(
-                Base64.getDecoder().decode(sessionCookie.substring("SESSION=".length())),
+                Base64.getDecoder().decode(sessionCookie.substring("__Host-SESSION=".length())),
                 StandardCharsets.UTF_8);
     }
 

@@ -8,7 +8,7 @@ import java.net.http.HttpResponse;
 /**
  * HTTP client for a live bff-server, used by the integration tests (mirrors the
  * per-server client convention of auth-server's test suite). Owns and configures the
- * underlying {@link HttpClient}: deliberately cookie-less — tests assert the SESSION
+ * underlying {@link HttpClient}: deliberately cookie-less — tests assert the __Host-SESSION
  * cookie on responses and replay it explicitly — and never follows redirects, so
  * every raw response stays observable. One method per bff endpoint; more will be
  * added as the bff grows.
@@ -30,7 +30,7 @@ public class BffClient implements AutoCloseable {
 
     /**
      * Calls {@code GET /api/auth/status}, presenting the given session cookie
-     * ({@code "SESSION=<value>"}) — or none when {@code null}, which makes the server
+     * ({@code "__Host-SESSION=<value>"}) — or none when {@code null}, which makes the server
      * establish a fresh session and return its cookie on the response.
      */
     public HttpResponse<String> getLoginStatus(String sessionCookie) throws Exception {
@@ -40,7 +40,7 @@ public class BffClient implements AutoCloseable {
     /**
      * Calls {@code GET /api/auth/authorize} — the authorization-code kick-off. The
      * response is the raw 302 (redirects are never followed), so callers can assert
-     * the Location and, with a {@code null} cookie, read the fresh SESSION cookie.
+     * the Location and, with a {@code null} cookie, read the fresh __Host-SESSION cookie.
      */
     public HttpResponse<String> getAuthorize(String sessionCookie) throws Exception {
         return get("/api/auth/authorize", sessionCookie);
@@ -58,7 +58,7 @@ public class BffClient implements AutoCloseable {
     /**
      * Delivers an auth-server callback to {@code GET /api/auth/callback} on the given
      * session, exactly as the browser would: {@code callbackUrl} is the full URL
-     * (query included) auth-server redirected to, and the SESSION cookie binds the
+     * (query included) auth-server redirected to, and the __Host-SESSION cookie binds the
      * flow to the session that minted the state. Returns the raw 302 to web-client.
      */
     public HttpResponse<String> getCallback(String callbackUrl, String sessionCookie) throws Exception {
