@@ -47,6 +47,15 @@ public class BffClient implements AutoCloseable {
     }
 
     /**
+     * Calls {@code GET /api/auth/logout} on the given session. The response is the raw
+     * 302 (redirects are never followed), so callers can assert the Location — the
+     * auth-server {@code /connect/logout} URL — and the cleared session state.
+     */
+    public HttpResponse<String> getLogout(String sessionCookie) throws Exception {
+        return get("/api/auth/logout", sessionCookie);
+    }
+
+    /**
      * Delivers an auth-server callback to {@code GET /api/auth/callback} on the given
      * session, exactly as the browser would: {@code callbackUrl} is the full URL
      * (query included) auth-server redirected to, and the SESSION cookie binds the

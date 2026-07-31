@@ -50,6 +50,19 @@ public class TokenStoreService {
     }
 
     /**
+     * Removes the session's three OAuth2 tokens — the counterpart to
+     * {@link #storeTokenResponse}. Used at logout: once these are gone the session is
+     * no longer a login (an absent id_token/refresh token is exactly what
+     * {@code AuthStatusService} treats as "not logged in"). The short-lived
+     * {@code oauth_state} is left alone — it only exists mid-authorize-flow.
+     */
+    public void clearTokens(String sessionId) {
+        delete(sessionId, TokenType.ACCESS_TOKEN);
+        delete(sessionId, TokenType.ID_TOKEN);
+        delete(sessionId, TokenType.REFRESH_TOKEN);
+    }
+
+    /**
      * Stores a full token-endpoint response for the session: JWTs (id/access) with
      * TTL = their own {@code exp}, and the rotated refresh token with the configured
      * TTL — or, in the unexpected case the response carries no refresh token, the

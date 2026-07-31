@@ -18,14 +18,14 @@
       <v-btn @click="checkLoginStatus">check status</v-btn>
       <v-btn @click="authorize">authorize</v-btn>
       <v-btn @click="login">login</v-btn>
-      <v-btn v-if="isLoggedIn" @click="logout">logout</v-btn>
+      <v-btn v-if="isLoggedIn" @click="startLogout">logout</v-btn>
     </v-card-actions>
   </v-card>
 </template>
 
 <script setup lang="ts">
 const client = useSimpleResourceClient()
-const { checkStatus, authorize, login, logout, isLoggedIn } = useOAuth()
+const { checkStatus, authorize, login, startLogout, isLoggedIn } = useOAuth()
 
 const response = ref<string>('')
 const error = ref<string>('')
