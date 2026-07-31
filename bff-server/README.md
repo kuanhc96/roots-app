@@ -1,6 +1,6 @@
 # bff-server
 
-The **backend-for-frontend** for the roots-app platform. Its end goal is to manage OAuth2 tokens on behalf of `web-client`, so tokens no longer need to be stored in the browser (today web-client keeps them in `sessionStorage`). The browser holds only a `SESSION` cookie; the tokens live server-side in **Redis, keyed by the session id**.
+The **backend-for-frontend** for the roots-app platform. Its end goal is to manage OAuth2 tokens on behalf of `web-client`, so tokens no longer need to be stored in the browser (today web-client keeps them in `sessionStorage`). The browser holds only a `__Host-SESSION` cookie; the tokens live server-side in **Redis, keyed by the session id**.
 
 > **Current state.** The login-status endpoint (`GET /api/auth/status`, below) is implemented and fully tested, but the authorization-code callback that writes the *initial* tokens to Redis still lives in web-client — so in real traffic the endpoint answers `isLoggedIn=false` until that move lands. Everything else remains foundation: the security posture, Redis-backed sessions, the docker-compose topology, and the CI/CD pipelines.
 
@@ -30,7 +30,7 @@ The endpoint web-client calls to ask "does this browser have a valid login?". Se
 <sessionId>:id_token        TTL = the JWT's own exp
 ```
 
-`<sessionId>` is the Spring Session id — the base64-decoded value of the `SESSION` cookie. Because every key expires exactly when its token does, **an absent key is the expiry check**: reads never inspect `exp`.
+`<sessionId>` is the Spring Session id — the base64-decoded value of the `__Host-SESSION` cookie. Because every key expires exactly when its token does, **an absent key is the expiry check**: reads never inspect `exp`.
 
 **Flow** (`AuthController` → `AuthStatusService`):
 
@@ -65,20 +65,21 @@ Location: {auth-server.external-location}/oauth2/authorize
 All security beans live in `config/SecurityConfig.java`:
 
 - **`anyRequest().permitAll()`** — no endpoint-level authorization yet; access control will be introduced with the token-relay endpoints.
-- **`SessionCreationPolicy.ALWAYS`** — every request eagerly gets an HTTP session, because the session is where tokens will be held on behalf of web-client. Even an anonymous `GET /actuator/health` receives a `SESSION` cookie.
-- **CSRF disabled** — matches the project convention (auth-server disables it too). This must be revisited when state-changing BFF endpoints land: in this architecture the `SESSION` cookie is the browser's only credential, which is exactly the setup CSRF protection exists for.
-- **CORS restricted to web-client** — only `web.client.origin` is an allowed origin, with `allowCredentials=true` so the browser may send the `SESSION` cookie on cross-origin requests. A preflight from any other origin is rejected with 403.
+- **`SessionCreationPolicy.ALWAYS`** — every request eagerly gets an HTTP session, because the session is where tokens will be held on behalf of web-client. Even an anonymous `GET /actuator/health` receives a `__Host-SESSION` cookie.
+- **CSRF disabled** — matches the project convention (auth-server disables it too). This must be revisited when state-changing BFF endpoints land: in this architecture the `__Host-SESSION` cookie is the browser's only credential, which is exactly the setup CSRF protection exists for.
+- **CORS restricted to web-client** — only `web.client.origin` is an allowed origin, with `allowCredentials=true` so the browser may send the `__Host-SESSION` cookie on cross-origin requests. A preflight from any other origin is rejected with 403.
+- **Session cookie hardening** — cookie name `__Host-SESSION`, `Secure=true`, `HttpOnly=true`, `Path=/`, no `Domain`, and `SameSite=Lax` (chosen to preserve OAuth callback navigation reliability).
 
 ## Sessions in Redis (Spring Session)
 
 HTTP sessions are stored in Redis via **Spring Session** (`spring-boot-starter-session-data-redis`), not in Tomcat memory:
 
-- The servlet `JSESSIONID` cookie is replaced by Spring Session's `SESSION` cookie.
+- The servlet `JSESSIONID` cookie is replaced by Spring Session's `__Host-SESSION` cookie.
 - Sessions appear in Redis as `spring:session:sessions:<id>` keys and survive an app restart.
 - Tokens stored as session attributes (the next step) inherit the session's lifecycle for free: TTL, logout cleanup, horizontal scaling.
 - The Actuator health endpoint includes a Redis health indicator, so `/actuator/health` is `UP` only when Redis is reachable — the docker-compose healthcheck relies on this.
 
-> **Spring Boot 4 gotcha.** Boot 4 ships session auto-configuration in its own module (`spring-boot-session-data-redis`), bundled by the starter. Depending on the plain `org.springframework.session:spring-session-data-redis` jar alone compiles and boots fine but **silently leaves the in-memory container session in place** (the tell: responses set `JSESSIONID` instead of `SESSION`). Use the starter.
+> **Spring Boot 4 gotcha.** Boot 4 ships session auto-configuration in its own module (`spring-boot-session-data-redis`), bundled by the starter. Depending on the plain `org.springframework.session:spring-session-data-redis` jar alone compiles and boots fine but **silently leaves the in-memory container session in place** (the tell: responses set `JSESSIONID` instead of `__Host-SESSION`). Use the starter.
 
 ## Running
 
@@ -95,7 +96,7 @@ For the refresh-exchange path (and the integration tests), auth-server and its D
 Sanity check — the first request gets a session, and it lands in Redis:
 
 ```bash
-curl -i http://localhost:8083/actuator/health     # expect 200, {"status":"UP"}, Set-Cookie: SESSION=...
+curl -i http://localhost:8083/actuator/health     # expect 200, {"status":"UP"}, Set-Cookie: __Host-SESSION=...
 docker exec bff-server-redis redis-cli --scan --pattern "spring:session:*"
 ```
 
@@ -129,7 +130,7 @@ mvn surefire:test '-Dtest=%regex[.*integration.*]'
 
 ### AuthStatusIntegrationTest
 
-Covers all four `/api/auth/status` paths with **genuine tokens**. All HTTP contact goes through per-server client classes in the test `client/` package (mirroring auth-server's test layout; each owns and configures its own `HttpClient`s, is `AutoCloseable`, and is built fresh per test): `BffClient.getLoginStatus(sessionCookie)` calls the status endpoint, and `AuthServerClient.fetchGuestTokens()` (a slimmed port of auth-server's integration-test client) drives a real guest login — authorize → `POST /login/guest` → redirect chain → code exchange — because guest needs no account fixture yet yields all three tokens. The test derives its own session id by base64-decoding its `SESSION` cookie, then seeds and asserts token keys through the autowired `TestTokenStoreService` — a test-side counterpart of the main store (same `<sessionId>:<tokenName>` keys, connected via the published Redis port, extended with TTL reads and bulk teardown), defined as a bean in `TestConfig` so the cached test context shares one Lettuce connection across the whole suite:
+Covers all four `/api/auth/status` paths with **genuine tokens**. All HTTP contact goes through per-server client classes in the test `client/` package (mirroring auth-server's test layout; each owns and configures its own `HttpClient`s, is `AutoCloseable`, and is built fresh per test): `BffClient.getLoginStatus(sessionCookie)` calls the status endpoint, and `AuthServerClient.fetchGuestTokens()` (a slimmed port of auth-server's integration-test client) drives a real guest login — authorize → `POST /login/guest` → redirect chain → code exchange — because guest needs no account fixture yet yields all three tokens. The test derives its own session id by base64-decoding its `__Host-SESSION` cookie, then seeds and asserts token keys through the autowired `TestTokenStoreService` — a test-side counterpart of the main store (same `<sessionId>:<tokenName>` keys, connected via the published Redis port, extended with TTL reads and bulk teardown), defined as a bean in `TestConfig` so the cached test context shares one Lettuce connection across the whole suite:
 
 | Seeded | Expectation |
 |---|---|
@@ -144,7 +145,7 @@ Member-account id_token claims (a non-null `userGUID`) are asserted in **auth-se
 
 Covers `GET /api/auth/authorize` at two depths:
 
-1. **Contract** — asserts the raw 302: every query parameter of the authorize URL (`response_type`, `client_id`, `redirect_uri`, `scope`, `state`), and that the minted `state` sits in Redis at `<sessionId>:oauth_state` with a positive TTL (the session id comes from the response's own `SESSION` cookie).
+1. **Contract** — asserts the raw 302: every query parameter of the authorize URL (`response_type`, `client_id`, `redirect_uri`, `scope`, `state`), and that the minted `state` sits in Redis at `<sessionId>:oauth_state` with a positive TTL (the session id comes from the response's own `__Host-SESSION` cookie).
 2. **Acceptance** — plays the browser: follows the emitted Location through a real guest login (`AuthServerClient.completeGuestLogin`) and asserts the web-client callback receives a non-blank `code` plus **exactly the bff-held state** — proof that auth-server accepts the bff-built URL end-to-end.
 
 ## CI
