@@ -19,7 +19,7 @@ A Spring Cloud microservices application providing authentication, authorization
 
 ## Docker Compose
 
-`docker-compose.yml` defines the integration-test stack on a shared `roots_backend` bridge network: `auth-server-db` (MySQL 8, internal port `3307`), `auth-server` (`9000`), and `account-management` (`8082`). It is the same compose file the CI workflows use to stand up services for integration testing.
+`docker-compose.yml` defines the integration-test stack on a shared `roots_backend` bridge network: `auth-server-db` (MySQL 8, internal port `3308`), `auth-server-redis` (Redis 8, internal port `6381`), `auth-server` (`9000`), and `account-management` (`8082`). It is the same compose file the CI workflows use to stand up services for integration testing.
 
 - **DB self-seeds.** `auth-server/src/main/resources/initialize_db/` is mounted into the DB container's `/docker-entrypoint-initdb.d`, so MySQL runs the schema + seed scripts automatically on first init (in dependency order, by filename) — no manual seed step.
 - **App images.** `auth-server` and `account-management` reference `${DOCKERHUB_USERNAME}/<service>:${<SERVICE>_TAG:-latest}`, so by default they pull the published `:latest`. CI overrides the relevant tag to a locally-built `:ci` image.

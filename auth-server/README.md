@@ -8,7 +8,9 @@ A fullstack Spring Boot + Nuxt/Vue application that handles authentication for t
 |-----------------------------------|---|---|---------------------------------|
 | `MYSQL_AUTH_SERVER_ROOT_USERNAME` | Yes | — | MySQL username                  |
 | `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | Yes | — | MySQL password                  |
-| `MYSQL_AUTH_SERVER_DB_URL`        | No | `jdbc:mysql://localhost:3307/auth-server-db` | JDBC connection URL             |
+| `MYSQL_AUTH_SERVER_DB_URL`        | No | `jdbc:mysql://localhost:3308/auth-server-db` | JDBC connection URL             |
+| `REDIS_HOST`                      | No | `localhost` | Redis host for Spring Session + Google `oauth_state` store |
+| `REDIS_PORT`                      | No | `6381` | Redis port for Spring Session + Google `oauth_state` store |
 | `SERVER_PORT`                     | No | `9000` | HTTP port the server listens on |
 | `REMEMBER_ME_KEY`                 | No | `dev-remember-me-key-change-in-prod` | Secret key used to sign remember-me cookies; change in production |
 | `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` | No | `1209600` (14 days) | Lifetime of the remember-me cookie in seconds |
@@ -108,9 +110,10 @@ Integration tests in `src/test/java/com/roots/authserver/integration/` hit a **l
 
 ### Prerequisites
 
-1. Start the database:
+1. Start the database and Redis:
    ```bash
    docker compose up -d auth-server-db
+   docker compose up -d auth-server-redis
    ```
 2. Start auth-server (from the project root or the `auth-server/` directory). The integration tests mint OTT/magic-link tokens via the `/…/test` endpoints rather than reading an inbox, so you can run under the `test` profile and skip the Gmail setup entirely:
    ```bash
@@ -229,7 +232,7 @@ No `docker login` step is needed in this workflow — only the public `mysql:8` 
 
 `SPRING_MAIL_USERNAME`/`SPRING_MAIL_PASSWORD` **are** required in CI: although the `test` profile disables outbound email, the `JavaMailSender` is built in every profile and the Actuator mail health indicator opens an SMTP connection on each `/actuator/health` poll, so the `--wait` step needs valid Gmail credentials. They are supplied as GitHub secrets.
 
-The DB is reached over the shared docker network at `auth-server-db:3307` — `MYSQL_AUTH_SERVER_DB_URL` is set inside `docker-compose.yml` and is no longer overridden by the workflow.
+The DB is reached over the shared docker network at `auth-server-db:3308` — `MYSQL_AUTH_SERVER_DB_URL` is set inside `docker-compose.yml` and is no longer overridden by the workflow.
 
 ### Notes
 
@@ -461,7 +464,7 @@ Spring Security 7's OIDC logout validation requires that authorities on the sess
 
 ## Database
 
-Connects to a MySQL 8 instance on port **3307** by default. The schema is defined in `src/main/resources/initialize_db/`. Hibernate is set to `validate` mode — it checks that the schema matches the JPA entities on startup but makes no changes to the database.
+Connects to a MySQL 8 instance on port **3308** by default. The schema is defined in `src/main/resources/initialize_db/`. Hibernate is set to `validate` mode — it checks that the schema matches the JPA entities on startup but makes no changes to the database.
 
 ### Tables
 
