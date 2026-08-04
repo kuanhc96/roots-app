@@ -3,7 +3,7 @@ services:
     image: mysql:8
     container_name: auth-server-db
     expose:
-      - "3307"
+      - "3308"
     deploy:
       resources:
         limits:
@@ -12,7 +12,7 @@ services:
       - roots_backend
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
-      MYSQL_TCP_PORT: 3307
+      MYSQL_TCP_PORT: 3308
       MYSQL_DATABASE: auth-server-db
     volumes:
       # Auto-seeds the schema + test data on first init. MySQL runs every .sql here in
@@ -21,7 +21,7 @@ services:
       # -> initialize_test_users.
       - ./auth-server/src/main/resources/initialize_db:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --port 3307 -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --port 3308 -uroot -p$$MYSQL_ROOT_PASSWORD"]
       interval: 10s
       timeout: 5s
       retries: 10
