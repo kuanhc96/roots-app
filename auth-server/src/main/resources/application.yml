@@ -42,7 +42,7 @@ spring:
       # (docker-compose), listening on 6380 (not Redis's default 6379) to avoid a port
       # clash with bff-server-redis when both run on the same docker network.
       host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6380}
+      port: ${REDIS_PORT:6381}
 
 server:
   port: ${SERVER_PORT:9000}
