@@ -3,22 +3,22 @@ package com.roots.authserver.client;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 
-import java.net.CookieManager;
-import java.net.CookieStore;
 import java.net.HttpCookie;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.StringJoiner;
 
 public class AuthServerClient implements AutoCloseable {
 
     private final String baseUrl;
-    private final CookieManager cookieManager;
     private final HttpClient httpClient;
     // Cookie-less client for machine-to-machine calls (client_credentials token
     // exchange and the bearer-authenticated test endpoints). Carries no session
@@ -27,12 +27,14 @@ public class AuthServerClient implements AutoCloseable {
     private final HttpClient machineClient;
     private final ObjectMapper objectMapper;
     private final String accessToken;
+    // Manual browser cookie jar. We intentionally replay cookies ourselves rather than
+    // using CookieManager so Secure session cookies (e.g. __Host-AUTH_SESSION) can be
+    // exercised by localhost HTTP integration tests.
+    private final Map<String, HttpCookie> browserCookies = new LinkedHashMap<>();
 
     public AuthServerClient(String baseUrl, String accessToken) {
         this.baseUrl = baseUrl;
-        this.cookieManager = new CookieManager();
         this.httpClient = HttpClient.newBuilder()
-                .cookieHandler(cookieManager)
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
         this.machineClient = HttpClient.newBuilder()
@@ -69,8 +71,7 @@ public class AuthServerClient implements AutoCloseable {
                 .uri(URI.create(baseUrl + "/login/guest"))
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        return sendOnSession(request);
     }
 
     /**
@@ -89,8 +90,7 @@ public class AuthServerClient implements AutoCloseable {
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(form))
                 .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        return sendOnSession(request);
     }
 
     /**
@@ -117,8 +117,7 @@ public class AuthServerClient implements AutoCloseable {
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        return sendOnSession(request);
     }
 
     /**
@@ -154,8 +153,7 @@ public class AuthServerClient implements AutoCloseable {
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        return sendOnSession(request);
     }
 
     /**
@@ -192,8 +190,7 @@ public class AuthServerClient implements AutoCloseable {
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        return sendOnSession(request);
     }
 
     /**
@@ -248,23 +245,22 @@ public class AuthServerClient implements AutoCloseable {
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString("magicLinkToken=" + encode(magicLinkToken)))
                 .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        return sendOnSession(request);
     }
 
     /**
      * Simulates closing and reopening the browser: drops all session cookies (those
-     * carrying no Max-Age, e.g. JSESSIONID) from the browser session's cookie jar
+     * carrying no Max-Age, e.g. __Host-AUTH_SESSION) from the browser session's cookie jar
      * while keeping persistent ones (the remember-me cookie carries a Max-Age). The
      * next request therefore arrives with no HTTP session but still presents the
      * remember-me cookie.
      */
     public void clearSessionCookies() {
-        CookieStore cookieStore = cookieManager.getCookieStore();
-        List<HttpCookie> sessionCookies = cookieStore.getCookies().stream()
+        List<String> sessionCookies = browserCookies.values().stream()
                 .filter(cookie -> cookie.getMaxAge() < 0)
+                .map(HttpCookie::getName)
                 .toList();
-        sessionCookies.forEach(cookie -> cookieStore.remove(null, cookie));
+        sessionCookies.forEach(browserCookies::remove);
     }
 
     /**
@@ -276,7 +272,46 @@ public class AuthServerClient implements AutoCloseable {
                 .uri(URI.create(url))
                 .GET()
                 .build();
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        return sendOnSession(request);
+    }
+
+    private HttpResponse<String> sendOnSession(HttpRequest request) throws Exception {
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                .uri(request.uri())
+                .method(request.method(), request.bodyPublisher().orElse(HttpRequest.BodyPublishers.noBody()));
+
+        request.headers().map().forEach((name, values) -> values.forEach(value -> requestBuilder.header(name, value)));
+
+        if (!browserCookies.isEmpty()) {
+            requestBuilder.header("Cookie", buildCookieHeader());
+        }
+
+        HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+        captureSetCookies(response.headers());
+        return response;
+    }
+
+    private String buildCookieHeader() {
+        StringJoiner joiner = new StringJoiner("; ");
+        for (HttpCookie cookie : browserCookies.values()) {
+            joiner.add(cookie.getName() + "=" + cookie.getValue());
+        }
+        return joiner.toString();
+    }
+
+    private void captureSetCookies(HttpHeaders headers) {
+        for (String setCookie : headers.allValues("set-cookie")) {
+            List<HttpCookie> parsed = HttpCookie.parse(setCookie);
+            if (parsed.isEmpty()) {
+                continue;
+            }
+            HttpCookie cookie = parsed.get(0);
+            if (cookie.getMaxAge() == 0) {
+                browserCookies.remove(cookie.getName());
+                continue;
+            }
+            browserCookies.put(cookie.getName(), cookie);
+        }
     }
 
     private static String encode(String value) {
