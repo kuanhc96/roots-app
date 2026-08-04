@@ -69,12 +69,13 @@ All security beans live in `config/SecurityConfig.java`:
 - **CSRF disabled** — matches the project convention (auth-server disables it too). This must be revisited when state-changing BFF endpoints land: in this architecture the `__Host-SESSION` cookie is the browser's only credential, which is exactly the setup CSRF protection exists for.
 - **CORS restricted to web-client** — only `web.client.origin` is an allowed origin, with `allowCredentials=true` so the browser may send the `__Host-SESSION` cookie on cross-origin requests. A preflight from any other origin is rejected with 403.
 - **Session cookie hardening** — cookie name `__Host-SESSION`, `Secure=true`, `HttpOnly=true`, `Path=/`, no `Domain`, and `SameSite=Lax` (chosen to preserve OAuth callback navigation reliability).
+- **Container tracking disabled** — `ServletContainerSessionConfig` turns off servlet-container session tracking modes, so Tomcat does not issue `JSESSIONID`; only Spring Session's `__Host-SESSION` is used.
 
 ## Sessions in Redis (Spring Session)
 
 HTTP sessions are stored in Redis via **Spring Session** (`spring-boot-starter-session-data-redis`), not in Tomcat memory:
 
-- The servlet `JSESSIONID` cookie is replaced by Spring Session's `__Host-SESSION` cookie.
+- The servlet container's `JSESSIONID` tracking is disabled; the only session cookie is Spring Session's `__Host-SESSION`.
 - Sessions appear in Redis as `spring:session:sessions:<id>` keys and survive an app restart.
 - Tokens stored as session attributes (the next step) inherit the session's lifecycle for free: TTL, logout cleanup, horizontal scaling.
 - The Actuator health endpoint includes a Redis health indicator, so `/actuator/health` is `UP` only when Redis is reachable — the docker-compose healthcheck relies on this.
