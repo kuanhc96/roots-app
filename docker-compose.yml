@@ -30,17 +30,17 @@ services:
   auth-server-redis:
     image: redis:8
     container_name: auth-server-redis
-    # Listens on 6380, not Redis's default 6379, so it can't collide with
+    # Listens on 6381, not Redis's default 6379, so it can't collide with
     # bff-server-redis's 6379:6379 when both run on the same docker network.
-    command: ["redis-server", "--port", "6380"]
+    command: ["redis-server", "--port", "6381"]
     ports:
       # Published so a locally-run auth-server (mvn spring-boot:run) reaches it at
-      # localhost:6380 — same pattern as MySQL on 3307. No AUTH (dev/CI-grade, like the DB).
-      - "6380:6380"
+      # localhost:6381 — same pattern as MySQL on 3307. No AUTH (dev/CI-grade, like the DB).
+      - "6381:6381"
     networks:
       - roots_backend
     healthcheck:
-      test: ["CMD", "redis-cli", "-p", "6380", "ping"]
+      test: ["CMD", "redis-cli", "-p", "6381", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -62,7 +62,7 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
       MYSQL_AUTH_SERVER_ROOT_USERNAME: ${MYSQL_AUTH_SERVER_ROOT_USERNAME}
       MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
-      MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://auth-server-db:3307/auth-server-db
+      MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://auth-server-db:3308/auth-server-db
       SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME}
       SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD}
       REMEMBER_ME_KEY: ${REMEMBER_ME_KEY:-dev-remember-me-key-change-in-prod}
@@ -93,7 +93,7 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
       MYSQL_AUTH_SERVER_ROOT_USERNAME: ${MYSQL_AUTH_SERVER_ROOT_USERNAME}
       MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
-      MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://auth-server-db:3307/auth-server-db
+      MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://auth-server-db:3308/auth-server-db
       AUTH_SERVER_JWK_URI: http://auth-server:9000/oauth2/jwks
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent localhost:8082/actuator/health | grep UP || exit 1"]
@@ -107,7 +107,7 @@ services:
     container_name: bff-server-redis
     ports:
       # Published so a locally-run bff-server (mvn spring-boot:run) reaches it at
-      # localhost:6379 — same pattern as MySQL on 3307. No AUTH (dev/CI-grade, like the DB).
+      # localhost:6379 — same pattern as MySQL on 3308. No AUTH (dev/CI-grade, like the DB).
       - "6379:6379"
     networks:
       - roots_backend
