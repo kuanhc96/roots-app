@@ -7,7 +7,7 @@ spring:
   application:
     name: auth-server
   datasource:
-    url: ${MYSQL_AUTH_SERVER_DB_URL:jdbc:mysql://localhost:3307/auth-server-db}
+    url: ${MYSQL_AUTH_SERVER_DB_URL:jdbc:mysql://localhost:3308/auth-server-db}
     username: ${MYSQL_AUTH_SERVER_ROOT_USERNAME}
     password: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
   jpa:
@@ -39,7 +39,7 @@ spring:
     redis:
       # Backs only the Google Sign-In oauth_state store (GoogleAuthorizeService) — the
       # HttpSession and Google Sign-In oauth_state store. auth-server-redis is a dedicated instance
-      # (docker-compose), listening on 6380 (not Redis's default 6379) to avoid a port
+      # (docker-compose), listening on 6381 (not Redis's default 6379) to avoid a port
       # clash with bff-server-redis when both run on the same docker network.
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6381}

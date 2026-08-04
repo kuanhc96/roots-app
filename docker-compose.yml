@@ -67,6 +67,7 @@ services:
       SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD}
       REMEMBER_ME_KEY: ${REMEMBER_ME_KEY:-dev-remember-me-key-change-in-prod}
       REDIS_HOST: auth-server-redis
+      REDIS_PORT: 6381
       # Required, no default in the app (same fail-fast convention as SPRING_MAIL_*) —
       # used server-side only for the Google authorization-code token exchange.
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
