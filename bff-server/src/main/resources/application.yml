@@ -8,6 +8,14 @@ spring:
 
 server:
   port: ${SERVER_PORT:8083}
+  servlet:
+    session:
+      cookie:
+        name: __Host-SESSION
+        secure: true
+        http-only: true
+        same-site: Lax
+        path: /
 
 bff-server:
   # This server's own externally reachable base URL — what the browser can hit. Used

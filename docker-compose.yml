@@ -3,7 +3,7 @@ services:
     image: mysql:8
     container_name: auth-server-db
     expose:
-      - "3307"
+      - "3308"
     deploy:
       resources:
         limits:
@@ -12,7 +12,7 @@ services:
       - roots_backend
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
-      MYSQL_TCP_PORT: 3307
+      MYSQL_TCP_PORT: 3308
       MYSQL_DATABASE: auth-server-db
     volumes:
       # Auto-seeds the schema + test data on first init. MySQL runs every .sql here in
@@ -21,7 +21,7 @@ services:
       # -> initialize_test_users.
       - ./auth-server/src/main/resources/initialize_db:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --port 3307 -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --port 3308 -uroot -p$$MYSQL_ROOT_PASSWORD"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -30,17 +30,17 @@ services:
   auth-server-redis:
     image: redis:8
     container_name: auth-server-redis
-    # Listens on 6380, not Redis's default 6379, so it can't collide with
+    # Listens on 6381, not Redis's default 6379, so it can't collide with
     # bff-server-redis's 6379:6379 when both run on the same docker network.
-    command: ["redis-server", "--port", "6380"]
+    command: ["redis-server", "--port", "6381"]
     ports:
       # Published so a locally-run auth-server (mvn spring-boot:run) reaches it at
-      # localhost:6380 — same pattern as MySQL on 3307. No AUTH (dev/CI-grade, like the DB).
-      - "6380:6380"
+      # localhost:6381 — same pattern as MySQL on 3307. No AUTH (dev/CI-grade, like the DB).
+      - "6381:6381"
     networks:
       - roots_backend
     healthcheck:
-      test: ["CMD", "redis-cli", "-p", "6380", "ping"]
+      test: ["CMD", "redis-cli", "-p", "6381", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -62,11 +62,12 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
       MYSQL_AUTH_SERVER_ROOT_USERNAME: ${MYSQL_AUTH_SERVER_ROOT_USERNAME}
       MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
-      MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://auth-server-db:3307/auth-server-db
+      MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://auth-server-db:3308/auth-server-db
       SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME}
       SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD}
       REMEMBER_ME_KEY: ${REMEMBER_ME_KEY:-dev-remember-me-key-change-in-prod}
       REDIS_HOST: auth-server-redis
+      REDIS_PORT: 6381
       # Required, no default in the app (same fail-fast convention as SPRING_MAIL_*) —
       # used server-side only for the Google authorization-code token exchange.
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
@@ -93,7 +94,7 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
       MYSQL_AUTH_SERVER_ROOT_USERNAME: ${MYSQL_AUTH_SERVER_ROOT_USERNAME}
       MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
-      MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://auth-server-db:3307/auth-server-db
+      MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://auth-server-db:3308/auth-server-db
       AUTH_SERVER_JWK_URI: http://auth-server:9000/oauth2/jwks
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent localhost:8082/actuator/health | grep UP || exit 1"]
@@ -107,7 +108,7 @@ services:
     container_name: bff-server-redis
     ports:
       # Published so a locally-run bff-server (mvn spring-boot:run) reaches it at
-      # localhost:6379 — same pattern as MySQL on 3307. No AUTH (dev/CI-grade, like the DB).
+      # localhost:6379 — same pattern as MySQL on 3308. No AUTH (dev/CI-grade, like the DB).
       - "6379:6379"
     networks:
       - roots_backend

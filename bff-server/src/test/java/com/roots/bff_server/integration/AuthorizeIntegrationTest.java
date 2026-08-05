@@ -112,15 +112,20 @@ class AuthorizeIntegrationTest {
                 .isEqualTo(tokenStore.find(sessionId, TokenType.OAUTH_STATE).orElseThrow());
     }
 
-    /** The SESSION cookie on the response is base64(sessionId) — the Redis key prefix. */
+    /** The __Host-SESSION cookie on the response is base64(sessionId) — the Redis key prefix. */
     private void rememberSessionId(HttpResponse<String> response) {
-        String cookie = response.headers().allValues("set-cookie").stream()
-                .filter(value -> value.startsWith("SESSION="))
-                .map(value -> value.split(";", 2)[0])
+        String setCookie = response.headers().allValues("set-cookie").stream()
+                .filter(value -> value.startsWith("__Host-SESSION="))
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("No SESSION cookie on authorize response"));
+                .orElseThrow(() -> new IllegalStateException("No __Host-SESSION cookie on authorize response"));
+        assertThat(setCookie).contains("Secure");
+        assertThat(setCookie).contains("HttpOnly");
+        assertThat(setCookie).contains("Path=/");
+        assertThat(setCookie).contains("SameSite=Lax");
+        assertThat(setCookie).doesNotContain("Domain=");
+        String cookie = setCookie.split(";", 2)[0];
         sessionId = new String(
-                Base64.getDecoder().decode(cookie.substring("SESSION=".length())),
+                Base64.getDecoder().decode(cookie.substring("__Host-SESSION=".length())),
                 StandardCharsets.UTF_8);
     }
 }

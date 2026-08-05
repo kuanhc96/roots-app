@@ -8,7 +8,9 @@ A fullstack Spring Boot + Nuxt/Vue application that handles authentication for t
 |-----------------------------------|---|---|---------------------------------|
 | `MYSQL_AUTH_SERVER_ROOT_USERNAME` | Yes | — | MySQL username                  |
 | `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | Yes | — | MySQL password                  |
-| `MYSQL_AUTH_SERVER_DB_URL`        | No | `jdbc:mysql://localhost:3307/auth-server-db` | JDBC connection URL             |
+| `MYSQL_AUTH_SERVER_DB_URL`        | No | `jdbc:mysql://localhost:3308/auth-server-db` | JDBC connection URL             |
+| `REDIS_HOST`                      | No | `localhost` | Redis host for Spring Session + Google `oauth_state` store |
+| `REDIS_PORT`                      | No | `6381` | Redis port for Spring Session + Google `oauth_state` store |
 | `SERVER_PORT`                     | No | `9000` | HTTP port the server listens on |
 | `REMEMBER_ME_KEY`                 | No | `dev-remember-me-key-change-in-prod` | Secret key used to sign remember-me cookies; change in production |
 | `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` | No | `1209600` (14 days) | Lifetime of the remember-me cookie in seconds |
@@ -108,9 +110,10 @@ Integration tests in `src/test/java/com/roots/authserver/integration/` hit a **l
 
 ### Prerequisites
 
-1. Start the database:
+1. Start the database and Redis:
    ```bash
    docker compose up -d auth-server-db
+   docker compose up -d auth-server-redis
    ```
 2. Start auth-server (from the project root or the `auth-server/` directory). The integration tests mint OTT/magic-link tokens via the `/…/test` endpoints rather than reading an inbox, so you can run under the `test` profile and skip the Gmail setup entirely:
    ```bash
@@ -189,7 +192,7 @@ Each test builds its own `AuthServerClient`/`OAuth2Client` and closes them after
 
 **Before.** `AuthServerClient` and `OAuth2Client` were shared singleton `@Bean`s in `TestConfig`, `@Autowired` into each test class. Spring caches and reuses a single test `ApplicationContext` across all integration test classes, so every test shared one JDK `HttpClient` — and therefore one **connection pool** (the set of kept-open, reused TCP keep-alive connections). On a long run (the full suite, or CI), a pooled connection could sit idle longer than the live auth-server's Tomcat `keepAliveTimeout` (20 s). Tomcat closes its end, but the client still believes the connection is good (its own keep-alive default is 1200 s) and reuses the now-dead connection on the next request → `ClosedChannelException`, surfaced as `ConnectException`. The symptoms were distinctive: the **second** integration class to run failed (whichever one it was), each class **passed in isolation** (requests are back-to-back, so no idle gap opens), and it reproduced **locally only when the whole suite ran at once**.
 
-**After.** The clients are no longer beans. `IntegrationTestBase` builds a fresh `AuthServerClient` + `OAuth2Client` in `@BeforeEach` and `close()`s them in `@AfterEach` (both are now `AutoCloseable`). Each test gets its own short-lived connection pool, so no connection is ever idle long enough to be reaped by the server, and nothing is shared between tests. As a bonus, every test starts with a clean cookie jar / session (the shared client had been leaking `JSESSIONID` across tests). When extending `IntegrationTestBase`, use the inherited `authServerClient` / `oAuth2Client` fields — do **not** reintroduce a shared client bean.
+**After.** The clients are no longer beans. `IntegrationTestBase` builds a fresh `AuthServerClient` + `OAuth2Client` in `@BeforeEach` and `close()`s them in `@AfterEach` (both are now `AutoCloseable`). Each test gets its own short-lived connection pool, so no connection is ever idle long enough to be reaped by the server, and nothing is shared between tests. As a bonus, every test starts with a clean cookie jar / session (the shared client had been leaking session cookies across tests). When extending `IntegrationTestBase`, use the inherited `authServerClient` / `oAuth2Client` fields — do **not** reintroduce a shared client bean.
 
 ### CreateAccountIntegrationTest
 
@@ -229,7 +232,7 @@ No `docker login` step is needed in this workflow — only the public `mysql:8` 
 
 `SPRING_MAIL_USERNAME`/`SPRING_MAIL_PASSWORD` **are** required in CI: although the `test` profile disables outbound email, the `JavaMailSender` is built in every profile and the Actuator mail health indicator opens an SMTP connection on each `/actuator/health` poll, so the `--wait` step needs valid Gmail credentials. They are supplied as GitHub secrets.
 
-The DB is reached over the shared docker network at `auth-server-db:3307` — `MYSQL_AUTH_SERVER_DB_URL` is set inside `docker-compose.yml` and is no longer overridden by the workflow.
+The DB is reached over the shared docker network at `auth-server-db:3308` — `MYSQL_AUTH_SERVER_DB_URL` is set inside `docker-compose.yml` and is no longer overridden by the workflow.
 
 ### Notes
 
@@ -461,7 +464,7 @@ Spring Security 7's OIDC logout validation requires that authorities on the sess
 
 ## Database
 
-Connects to a MySQL 8 instance on port **3307** by default. The schema is defined in `src/main/resources/initialize_db/`. Hibernate is set to `validate` mode — it checks that the schema matches the JPA entities on startup but makes no changes to the database.
+Connects to a MySQL 8 instance on port **3308** by default. The schema is defined in `src/main/resources/initialize_db/`. Hibernate is set to `validate` mode — it checks that the schema matches the JPA entities on startup but makes no changes to the database.
 
 ### Tables
 

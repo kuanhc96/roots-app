@@ -27,7 +27,7 @@ All variables have defaults suitable for local development; override them per en
 |---|---|---|---|
 | `SERVER_PORT` | `server.port` | `8082` | HTTP port the service listens on. |
 | `AUTH_SERVER_JWK_URI` | `spring.security.oauth2.resourceserver.jwt.jwk-set-uri` | `http://localhost:9000/oauth2/jwks` | JWK Set endpoint on `auth-server` used to fetch the public keys for validating incoming JWTs. The key set is fetched lazily on the first authenticated request, so `auth-server` does not need to be running at startup. |
-| `MYSQL_AUTH_SERVER_DB_URL` | `spring.datasource.url` | `jdbc:mysql://localhost:3307/auth-server-db` | JDBC URL of the shared **auth-server** MySQL database (port `3307`). Points at the same DB `auth-server` uses. |
+| `MYSQL_AUTH_SERVER_DB_URL` | `spring.datasource.url` | `jdbc:mysql://localhost:3308/auth-server-db` | JDBC URL of the shared **auth-server** MySQL database (port `3308`). Points at the same DB `auth-server` uses. |
 | `MYSQL_AUTH_SERVER_ROOT_USERNAME` | `spring.datasource.username` | _(required, no default)_ | Username for the shared auth-server database. |
 | `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | `spring.datasource.password` | _(required, no default)_ | Password for the shared auth-server database. |
 
@@ -78,7 +78,7 @@ CI runs the [integration tests](#integration-tests) and fails the job if any of 
 | `SPRING_MAIL_USERNAME` | Gmail username — required because auth-server is started in this job and the Actuator mail health indicator opens an SMTP connection on every `/actuator/health` poll |
 | `SPRING_MAIL_PASSWORD` | Gmail App Password for the above account |
 
-The DB is reached over the shared docker network at `auth-server-db:3307`; `MYSQL_AUTH_SERVER_DB_URL` and `AUTH_SERVER_JWK_URI` are set inside `docker-compose.yml` (`http://auth-server:9000/oauth2/jwks` between containers) and are no longer overridden by the workflow.
+The DB is reached over the shared docker network at `auth-server-db:3308`; `MYSQL_AUTH_SERVER_DB_URL` and `AUTH_SERVER_JWK_URI` are set inside `docker-compose.yml` (`http://auth-server:9000/oauth2/jwks` between containers) and are no longer overridden by the workflow.
 
 ## CD
 
