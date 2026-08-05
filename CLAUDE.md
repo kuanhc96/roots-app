@@ -10,14 +10,14 @@ This is a Spring Cloud microservices application called **roots-app**. The servi
 |---|---|---|---|
 | `eureka-server` | Spring Cloud Netflix Eureka | — | Service discovery registry |
 | `config-server` | Spring Cloud Config | — | Centralized configuration |
-| `gateway-server` | Spring Cloud Gateway (WebFlux) | — | API gateway / routing |
-| `auth-server` | Spring Boot (Maven) + Nuxt/Vue | 9000 | Authentication + embedded SPA frontend |
-| `bff-server` | Spring Boot (Maven) | 8083 | Backend-for-frontend; will manage web-client's tokens server-side in Redis-backed sessions (currently scaffolding only) |
+| `gateway-server` | Spring Cloud Gateway (WebFlux) | 8080 | API gateway; single entry point routing all traffic + attaching OAuth2 tokens from Redis |
+| `auth-server` | Spring Boot (Maven) + Nuxt/Vue | 9000 | Authentication + embedded SPA frontend; OAuth2 Authorization Server |
+| `bff-server` | Spring Boot (Maven) | 8083 | Backend-for-frontend; manages web-client's tokens server-side in Redis-backed sessions |
 | `simple-resource-server` | Spring Boot (Maven) | 8081 | Example protected resource with role endpoints |
-| `account-management` | Spring Boot (Maven) | 8082 | Account CRUD resource server (integration-test-only endpoints so far) |
+| `account-management` | Spring Boot (Maven) | 8082 | Account CRUD resource server (integration-test-only endpoints) |
 | `web-client` | Nuxt 4 / Vue 3 | 3000 | Standalone frontend |
 
-**Startup order:** config-server → eureka-server → gateway-server → auth-server → bff-server → simple-resource-server → account-management → web-client.
+**Startup order:** eureka-server → config-server → auth-server-db → auth-server → bff-server-redis → bff-server → gateway-server; separately: simple-resource-server, account-management, web-client.
 
 ### auth-server is special
 
@@ -398,7 +398,41 @@ Request/response and flow details:
 | `GET /api/account` | none (public) |
 | `DELETE /api/account/test` | `INTEGRATION_TEST_CLIENT_DELETE` scope |
 
-### bff-server
+### gateway-server is special
+
+The **gateway-server** (port `8080`) is the single entry point for all traffic. Every request—including OAuth2 redirects, login forms, and API calls—flows through the gateway before reaching downstream services.
+
+**Token enrichment flow:**
+1. Browser sends `__Host-SESSION` cookie (bff-server's Spring Session cookie)
+2. Gateway decodes the session ID from the cookie: `base64_decode(__Host-SESSION)`
+3. Gateway looks up `<sessionId>:access_token` in **shared bff-server Redis** (port 6379, not auth-server's 6381)
+4. If found, gateway attaches the token as a bearer `Authorization` header on upstream requests
+5. Downstream services validate the JWT (fetching JWKs from auth-server) without needing Redis access
+
+**Gateway is stateless:** it does not refresh tokens, store sessions, or manage authentication state. If a token is missing or expired, the upstream request fails (bff-server owns refreshes). This is a pure read-through enrichment.
+
+**Routing targets** (internal network names in compose):
+- `http://auth-server:9000` — OAuth2 flows, SPA shell, login forms
+- `http://bff-server:8083` — token management, session lifecycle
+- `http://simple-resource-server:8081` — role-based API endpoints
+- `http://account-management:8082` — account CRUD (test endpoints)
+
+**Downstream service ports remain published** (9000, 8083, 8081, 8082) for dev convenience — developers can still `curl localhost:9000` directly if needed. The gateway is the *production* entry point; direct-to-service calls are dev-only.
+
+**Configuration** (`application.yml`):
+```yaml
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}        # Shared bff-server Redis (compose: bff-server-redis)
+      port: ${REDIS_PORT:6379}             # Default 6379 (shared with bff-server)
+server:
+  port: ${SERVER_PORT:8080}                # Gateway listen port
+```
+
+See `gateway-server/README.md` for full details and CI/CD setup.
+
+### bff-server is special
 
 The **backend-for-frontend** (port `8083`, override `SERVER_PORT`). End goal: manage OAuth2 tokens on behalf of web-client so tokens no longer live in the browser. The browser holds only the `__Host-SESSION` cookie; tokens live in Redis keyed by the session id. First real endpoint is in place (`GET /api/auth/status`, below); the authorization-code callback that writes the *initial* tokens to Redis is still in web-client, so in real traffic the endpoint currently answers `isLoggedIn=false` until that move lands.
 
@@ -559,6 +593,25 @@ Same shape as account-management-ci, minus a unit-test gate (bff-server has no u
 ### bff-server-cd.yml — `paths: bff-server/src/**`, `bff-server/pom.xml`
 
 Identical pattern to account-management-cd: version bump, `mvn jib:build` pushing `<release-version>` + `latest` to `$DOCKERHUB_USERNAME/bff-server`, next-`-SNAPSHOT` commit with `[skip ci]` via `GH_PAT`. **Required secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `GH_PAT`. Note the first push auto-creates the `bff-server` Docker Hub repo with your account's default visibility — check it matches the other service repos.
+
+### gateway-server-ci.yml — `paths: gateway-server/src/**`, `gateway-server/pom.xml`
+
+Triggers on `pull_request` `opened`/`synchronize`. Steps:
+1. Checkout and setup JDK 21 + Maven cache
+2. `docker login` — bff-server and auth-server are unchanged dependencies (pulled `:latest`; these are private repos, so authenticate)
+3. Build gateway-server jar: `mvn package -DskipTests`
+4. Build gateway-server image: `mvn jib:dockerBuild -Djib.to.image=$DOCKERHUB_USERNAME/gateway-server:ci`
+5. `docker compose up -d --wait gateway-server` with `GATEWAY_SERVER_TAG=ci`, `SPRING_PROFILES_ACTIVE=test`, which `depends_on`-chains in `bff-server-redis`, `bff-server`, and (transitively) `auth-server` + `auth-server-db`; blocks until all are healthy
+6. Verify gateway health: `curl --fail --silent http://localhost:8080/actuator/health | grep -q UP`
+7. Dump logs on failure
+
+**No integration tests yet** — the CI gate is healthcheck only (gateway can start and is responsive). See `gateway-server/README.md`.
+
+**Required secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `MYSQL_AUTH_SERVER_ROOT_USERNAME` (= `root`), `MYSQL_AUTH_SERVER_ROOT_PASSWORD`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`.
+
+### gateway-server-cd.yml — `paths: gateway-server/src/**`, `gateway-server/pom.xml`
+
+Triggers on `push` to `main`. Identical pattern to bff-server-cd: version bump, `mvn jib:build` pushing `<release-version>` + `latest` to `$DOCKERHUB_USERNAME/gateway-server`, next-`-SNAPSHOT` commit with `[skip ci]` via `GH_PAT`. **Required secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `GH_PAT`.
 
 ## Database
 
