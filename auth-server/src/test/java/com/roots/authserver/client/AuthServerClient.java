@@ -67,11 +67,10 @@ public class AuthServerClient implements AutoCloseable {
      * and asserts on the status / Location.
      */
     public HttpResponse<String> loginAsGuest() throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/login/guest"))
-                .POST(HttpRequest.BodyPublishers.noBody())
-                .build();
-        return sendOnSession(request);
+                .POST(HttpRequest.BodyPublishers.noBody());
+        return sendWithCookies(requestBuilder);
     }
 
     /**
@@ -85,12 +84,11 @@ public class AuthServerClient implements AutoCloseable {
                 + "&email=" + encode(email)
                 + "&password=" + encode(password);
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/signup"))
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.ofString(form))
-                .build();
-        return sendOnSession(request);
+                .POST(HttpRequest.BodyPublishers.ofString(form));
+        return sendWithCookies(requestBuilder);
     }
 
     /**
@@ -112,12 +110,11 @@ public class AuthServerClient implements AutoCloseable {
         String body = "email=" + encode(email) + "&password=" + encode(password)
                 + (rememberMe ? "&remember-me=true" : "");
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/login"))
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        return sendOnSession(request);
+                .POST(HttpRequest.BodyPublishers.ofString(body));
+        return sendWithCookies(requestBuilder);
     }
 
     /**
@@ -148,12 +145,11 @@ public class AuthServerClient implements AutoCloseable {
     public HttpResponse<String> resetPassword(String newPassword) throws Exception {
         String body = "newPassword=" + encode(newPassword);
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/reset-password"))
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        return sendOnSession(request);
+                .POST(HttpRequest.BodyPublishers.ofString(body));
+        return sendWithCookies(requestBuilder);
     }
 
     /**
@@ -185,12 +181,11 @@ public class AuthServerClient implements AutoCloseable {
         String body = "ott=" + encode(ott)
                 + (rememberBrowser ? "&rememberBrowser=true" : "");
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/ott/login"))
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        return sendOnSession(request);
+                .POST(HttpRequest.BodyPublishers.ofString(body));
+        return sendWithCookies(requestBuilder);
     }
 
     /**
@@ -240,12 +235,15 @@ public class AuthServerClient implements AutoCloseable {
      * asserts on the status / Location.
      */
     public HttpResponse<String> verifyMagicLink(String magicLinkToken) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/magic-link/login"))
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.ofString("magicLinkToken=" + encode(magicLinkToken)))
-                .build();
-        return sendOnSession(request);
+                .POST(HttpRequest.BodyPublishers.ofString("magicLinkToken=" + encode(magicLinkToken)));
+        buildCookieHeader(requestBuilder);
+        HttpRequest request = requestBuilder.build();
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        captureSetCookies(response.headers());
+        return response;
     }
 
     /**
@@ -268,35 +266,29 @@ public class AuthServerClient implements AutoCloseable {
      * can follow the redirect chain produced by the login / magic-link flows.
      */
     public HttpResponse<String> getOnSession(String url) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .GET()
-                .build();
-        return sendOnSession(request);
+                .GET();
+        return sendWithCookies(requestBuilder);
     }
 
-    private HttpResponse<String> sendOnSession(HttpRequest request) throws Exception {
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                .uri(request.uri())
-                .method(request.method(), request.bodyPublisher().orElse(HttpRequest.BodyPublishers.noBody()));
-
-        request.headers().map().forEach((name, values) -> values.forEach(value -> requestBuilder.header(name, value)));
-
-        if (!browserCookies.isEmpty()) {
-            requestBuilder.header("Cookie", buildCookieHeader());
-        }
-
-        HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+    private HttpResponse<String> sendWithCookies(HttpRequest.Builder requestBuilder) throws Exception {
+        buildCookieHeader(requestBuilder);
+        HttpRequest request = requestBuilder.build();
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         captureSetCookies(response.headers());
         return response;
+
     }
 
-    private String buildCookieHeader() {
-        StringJoiner joiner = new StringJoiner("; ");
-        for (HttpCookie cookie : browserCookies.values()) {
-            joiner.add(cookie.getName() + "=" + cookie.getValue());
+    private void buildCookieHeader(HttpRequest.Builder requestBuilder) {
+        if (!browserCookies.isEmpty()) {
+            StringJoiner joiner = new StringJoiner("; ");
+            for (HttpCookie cookie : browserCookies.values()) {
+                joiner.add(cookie.getName() + "=" + cookie.getValue());
+            }
+            requestBuilder.header("Cookie", joiner.toString());
         }
-        return joiner.toString();
     }
 
     private void captureSetCookies(HttpHeaders headers) {
