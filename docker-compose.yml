@@ -147,6 +147,29 @@ services:
       retries: 10
       start_period: 60s
 
+  gateway-server:
+    image: ${DOCKERHUB_USERNAME}/gateway-server:${GATEWAY_SERVER_TAG:-latest}
+    container_name: gateway-server
+    ports:
+      - "8080:8080"
+    networks:
+      - roots_backend
+    depends_on:
+      bff-server-redis:
+        condition: service_healthy
+      bff-server:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      REDIS_HOST: bff-server-redis
+      REDIS_PORT: 6379
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent localhost:8080/actuator/health | grep UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
 networks:
   roots_backend:
     driver: bridge
