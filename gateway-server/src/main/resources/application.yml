@@ -36,7 +36,9 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,shutdown
+        include: health,info,shutdown,gateway
   endpoint:
+    gateway:
+      access: unrestricted
     shutdown:
       access: unrestricted
