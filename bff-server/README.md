@@ -11,12 +11,24 @@ The **backend-for-frontend** for the roots-app platform. Its end goal is to mana
 | `SERVER_PORT` | No | `8083` | HTTP port the server listens on |
 | `REDIS_HOST` | No | `localhost` | Redis host backing Spring Session + the token store (docker-compose sets `bff-server-redis`) |
 | `REDIS_PORT` | No | `6379` | Redis port |
+| `EUREKA_SERVER_URL` | No | `http://localhost:8070/eureka/` | Eureka registry URL; compose sets `http://eureka-server:8070/eureka/` |
 | `WEB_CLIENT_ORIGIN` | No | `http://localhost:3000` | The **only** origin allowed by CORS (property `web.client.origin`) |
 | `AUTH_SERVER_INTERNAL_LOCATION` | No | `http://localhost:9000` | Auth-server base URL reachable from **inside** the deployment network; used by the server-to-server RestClient (refresh-token exchange). Property `auth-server.internal-location`; docker-compose sets `http://auth-server:9000` |
 | `AUTH_SERVER_EXTERNAL_LOCATION` | No | `http://localhost:9000` | Auth-server base URL reachable from **outside** — i.e. by the user's browser; used in redirects the browser follows (the authorize kick-off). Property `auth-server.external-location`. Separate from the internal one because in docker `auth-server:9000` doesn't resolve outside the compose network — compose leaves this at the default |
 | `WEB_CLIENT_ID` | No | `WEB_CLIENT` | OAuth2 client id the bff authenticates as (property `web.client.id`) |
 | `WEB_CLIENT_SECRET` | **Yes** | — (no default) | Client secret for the above — must match the `WEB_CLIENT` `client_secret` seeded in auth-server's `oauth2_registered_client` table (`{noop}secret` in dev). Startup fails fast without it |
 | `REFRESH_TOKEN_TTL_SECONDS` | No | `3600` | Redis TTL applied to stored refresh tokens (property `token-store.refresh-token-ttl-seconds`); mirrors auth-server's `refresh-token-time-to-live` |
+
+## Eureka Service Discovery
+
+Bff-server is a Spring Cloud Netflix Eureka client. On startup, it automatically registers itself with the Eureka server (default: `http://localhost:8070/eureka/`), making itself discoverable by other services.
+
+**De-registration:** To gracefully de-register from Eureka:
+```bash
+curl -X POST http://localhost:8083/actuator/shutdown
+```
+
+This triggers a clean shutdown with proper Eureka de-registration before the process exits.
 
 ## Login status — `GET /api/auth/status`
 

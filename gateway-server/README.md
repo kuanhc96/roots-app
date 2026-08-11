@@ -48,7 +48,38 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}                # Gateway listen port
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8070/eureka/}  # Eureka registry
+
+info:
+  app:
+    name: ${spring.application.name}
+    description: API gateway service for roots-app
+    version: @project.version@             # Filtered by Maven at build time
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,shutdown      # Expose shutdown for de-registration
+  endpoint:
+    shutdown:
+      access: unrestricted                 # Allow graceful shutdown
 ```
+
+### Eureka Service Discovery
+
+Gateway-server is a Spring Cloud Netflix Eureka client. On startup, it automatically registers itself with the Eureka server (default: `http://localhost:8070/eureka/`), making itself discoverable by other services.
+
+**De-registration:** To gracefully de-register from Eureka:
+```bash
+curl -X POST http://localhost:8080/actuator/shutdown
+```
+
+This triggers a clean shutdown with proper Eureka de-registration before the process exits.
 
 ### Environment Variables
 
@@ -57,6 +88,7 @@ server:
 | `REDIS_HOST` | `localhost` | Redis hostname (compose: `bff-server-redis`) |
 | `REDIS_PORT` | `6379` | Redis port (shared with bff-server) |
 | `SERVER_PORT` | `8080` | Gateway listen port |
+| `EUREKA_SERVER_URL` | `http://localhost:8070/eureka/` | Eureka registry URL; compose sets `http://eureka-server:8070/eureka/` |
 | `SPRING_PROFILES_ACTIVE` | _(none)_ | Profile activation (e.g., `test` in CI) |
 
 ## Local Development
