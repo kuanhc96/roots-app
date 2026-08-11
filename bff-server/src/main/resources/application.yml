@@ -45,3 +45,23 @@ token-store:
   # TTL applied to stored refresh tokens. The refresh token is opaque (no readable
   # exp), so this mirrors auth-server's settings.token.refresh-token-time-to-live.
   refresh-token-ttl-seconds: ${REFRESH_TOKEN_TTL_SECONDS:3600}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8070/eureka/}
+
+info:
+  app:
+    name: ${spring.application.name}
+    description: Backend-for-frontend service for roots-app
+    version: @project.version@
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,shutdown
+  endpoint:
+    shutdown:
+      access: unrestricted
