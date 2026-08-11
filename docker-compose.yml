@@ -1,4 +1,20 @@
 services:
+  eureka-server:
+    image: ${DOCKERHUB_USERNAME}/eureka-server:${EUREKA_SERVER_TAG:-latest}
+    container_name: eureka-server
+    ports:
+      - "8070:8070"
+    networks:
+      - roots_backend
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent localhost:8070/actuator/health | grep UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
   auth-server-db:
     image: mysql:8
     container_name: auth-server-db
