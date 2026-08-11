@@ -21,6 +21,9 @@ info:
     version: @project.version@
 
 management:
+  info:
+    env:
+      enabled: true
   endpoints:
     web:
       exposure:
