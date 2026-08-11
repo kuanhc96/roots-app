@@ -4,15 +4,20 @@ import com.roots.bff_server.dto.response.TokenResponse;
 
 import tools.jackson.databind.ObjectMapper;
 
-import java.net.CookieManager;
+import java.net.HttpCookie;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.StringJoiner;
 
 /**
  * HTTP client for a live auth-server, used by the bff integration tests to mint
@@ -38,6 +43,9 @@ public class AuthServerClient implements AutoCloseable {
     private final HttpClient browser;
     private final HttpClient machineClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    // Manual browser cookie jar: mirrors auth-server integration tests and allows
+    // Secure cookies to be replayed on localhost HTTP test traffic.
+    private final Map<String, HttpCookie> browserCookies = new LinkedHashMap<>();
 
     public AuthServerClient(String baseUrl, String webClientLocation, String clientId, String clientSecret) {
         this.baseUrl = baseUrl;
@@ -45,7 +53,6 @@ public class AuthServerClient implements AutoCloseable {
         this.clientId = clientId;
         this.clientSecret = clientSecret;
         this.browser = HttpClient.newBuilder()
-                .cookieHandler(new CookieManager())
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
         this.machineClient = HttpClient.newBuilder()
@@ -80,12 +87,11 @@ public class AuthServerClient implements AutoCloseable {
     public String completeGuestLogin(String authorizeUrl, String callbackPrefix) throws Exception {
         followRedirects(get(authorizeUrl), callbackPrefix);
 
-        HttpRequest guestLogin = HttpRequest.newBuilder()
+        HttpRequest.Builder guestLogin = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/login/guest"))
-                .POST(HttpRequest.BodyPublishers.noBody())
-                .build();
+                .POST(HttpRequest.BodyPublishers.noBody());
         HttpResponse<String> response = followRedirects(
-                browser.send(guestLogin, HttpResponse.BodyHandlers.ofString()), callbackPrefix);
+                sendWithCookies(guestLogin), callbackPrefix);
 
         if (response.statusCode() != 302) {
             throw new IllegalStateException("Guest login did not reach the callback; status "
@@ -165,8 +171,40 @@ public class AuthServerClient implements AutoCloseable {
     }
 
     private HttpResponse<String> get(String url) throws Exception {
-        return browser.send(HttpRequest.newBuilder().uri(URI.create(url)).GET().build(),
-                HttpResponse.BodyHandlers.ofString());
+        return sendWithCookies(HttpRequest.newBuilder().uri(URI.create(url)).GET());
+    }
+
+    private HttpResponse<String> sendWithCookies(HttpRequest.Builder requestBuilder) throws Exception {
+        buildCookieHeader(requestBuilder);
+        HttpRequest request = requestBuilder.build();
+        HttpResponse<String> response = browser.send(request, HttpResponse.BodyHandlers.ofString());
+        captureSetCookies(response.headers());
+        return response;
+    }
+
+    private void buildCookieHeader(HttpRequest.Builder requestBuilder) {
+        if (!browserCookies.isEmpty()) {
+            StringJoiner joiner = new StringJoiner("; ");
+            for (HttpCookie cookie : browserCookies.values()) {
+                joiner.add(cookie.getName() + "=" + cookie.getValue());
+            }
+            requestBuilder.header("Cookie", joiner.toString());
+        }
+    }
+
+    private void captureSetCookies(HttpHeaders headers) {
+        for (String setCookie : headers.allValues("set-cookie")) {
+            List<HttpCookie> parsed = HttpCookie.parse(setCookie);
+            if (parsed.isEmpty()) {
+                continue;
+            }
+            HttpCookie cookie = parsed.get(0);
+            if (cookie.getMaxAge() == 0) {
+                browserCookies.remove(cookie.getName());
+                continue;
+            }
+            browserCookies.put(cookie.getName(), cookie);
+        }
     }
 
     private static String extractQueryParam(String url, String name) {
