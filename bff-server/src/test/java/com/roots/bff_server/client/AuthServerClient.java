@@ -47,9 +47,9 @@ public class AuthServerClient implements AutoCloseable {
     // Secure cookies to be replayed on localhost HTTP test traffic.
     private final Map<String, HttpCookie> browserCookies = new LinkedHashMap<>();
 
-    public AuthServerClient(String baseUrl, String webClientLocation, String clientId, String clientSecret) {
+    public AuthServerClient(String baseUrl, String callbackLocation, String clientId, String clientSecret) {
         this.baseUrl = baseUrl;
-        this.redirectUri = webClientLocation + "/callback";
+        this.redirectUri = callbackLocation + "/api/auth/callback";
         this.clientId = clientId;
         this.clientSecret = clientSecret;
         this.browser = HttpClient.newBuilder()

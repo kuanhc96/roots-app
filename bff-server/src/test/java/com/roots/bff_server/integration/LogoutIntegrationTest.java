@@ -67,7 +67,7 @@ class LogoutIntegrationTest {
     @BeforeEach
     void setUp() throws Exception {
         bffClient = new BffClient(bffServerLocation);
-        authServerClient = new AuthServerClient(authServerLocation, webClientLocation, webClientId, webClientSecret);
+        authServerClient = new AuthServerClient(authServerLocation, bffServerLocation, webClientId, webClientSecret);
 
         // First contact establishes the session; its cookie is base64(sessionId), the
         // Redis key prefix the bff clears at logout.
