@@ -419,15 +419,39 @@ The **gateway-server** (port `8080`) is the single entry point for all traffic. 
 
 **Downstream service ports remain published** (9000, 8083, 8081, 8082) for dev convenience — developers can still `curl localhost:9000` directly if needed. The gateway is the *production* entry point; direct-to-service calls are dev-only.
 
+**Eureka Service Registration:** gateway-server is a Spring Cloud Netflix Eureka client (via `spring-cloud-starter-netflix-eureka-client`). It automatically registers itself with eureka-server on startup, making itself discoverable to other services. De-registration is supported via `POST /actuator/shutdown` (requires `management.endpoint.shutdown.access: unrestricted`).
+
 **Configuration** (`application.yml`):
 ```yaml
 spring:
+  application:
+    name: gateway-server
   data:
     redis:
       host: ${REDIS_HOST:localhost}        # Shared bff-server Redis (compose: bff-server-redis)
       port: ${REDIS_PORT:6379}             # Default 6379 (shared with bff-server)
 server:
   port: ${SERVER_PORT:8080}                # Gateway listen port
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8070/eureka/}  # Eureka registry
+
+info:
+  app:
+    name: ${spring.application.name}
+    description: API gateway service for roots-app
+    version: @project.version@             # Filtered by Maven at build time
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,shutdown      # Expose shutdown for de-registration
+  endpoint:
+    shutdown:
+      access: unrestricted                 # Allow graceful shutdown
 ```
 
 See `gateway-server/README.md` for full details and CI/CD setup.
@@ -437,6 +461,8 @@ See `gateway-server/README.md` for full details and CI/CD setup.
 The **backend-for-frontend** (port `8083`, override `SERVER_PORT`). End goal: manage OAuth2 tokens on behalf of web-client so tokens no longer live in the browser. The browser holds only the `__Host-SESSION` cookie; tokens live in Redis keyed by the session id. First real endpoint is in place (`GET /api/auth/status`, below); the authorization-code callback that writes the *initial* tokens to Redis is still in web-client, so in real traffic the endpoint currently answers `isLoggedIn=false` until that move lands.
 
 **Token store (Redis).** Each session's values live under plain string keys — `<sessionId>:access_token`, `<sessionId>:refresh_token`, `<sessionId>:id_token`, plus the short-lived `<sessionId>:oauth_state` (`TokenStoreService`; `<sessionId>` is the Spring Session id, i.e. the base64-decoded `__Host-SESSION` cookie). Each key carries its own TTL: JWTs get TTL = their own `exp` minus now, the opaque refresh token gets `token-store.refresh-token-ttl-seconds` (default `3600`, matching auth-server's `refresh-token-time-to-live`). Redis therefore expires each token exactly when the token itself does — an absent key *is* the expiry check, which is why reads never look at `exp`.
+
+**Eureka Service Registration:** bff-server is a Spring Cloud Netflix Eureka client (via `spring-cloud-starter-netflix-eureka-client`). It automatically registers itself with eureka-server on startup, making itself discoverable to other services. De-registration is supported via `POST /actuator/shutdown` (requires `management.endpoint.shutdown.access: unrestricted`).
 
 **`GET /api/auth/status`** (`AuthController` → `AuthStatusService`; always 200 — "not logged in" is a normal answer):
 1. `<sessionId>:id_token` present → logged in. Decode its payload (no signature check — the bff itself stored it, and it originally came from auth-server over a server-to-server call) and return `{isLoggedIn: true, email, userGUID, roles}` (`LoginStatusResponse`, `NON_NULL` so a logged-out answer is just `{"isLoggedIn": false}`; a guest login has no `userGUID` field).
