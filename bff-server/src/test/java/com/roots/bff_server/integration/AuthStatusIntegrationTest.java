@@ -74,7 +74,7 @@ class AuthStatusIntegrationTest {
     @BeforeEach
     void setUp() throws Exception {
         bffClient = new BffClient(bffServerLocation);
-        authServerClient = new AuthServerClient(authServerLocation, webClientLocation, webClientId, webClientSecret);
+        authServerClient = new AuthServerClient(authServerLocation, bffServerLocation, webClientId, webClientSecret);
 
         // First contact establishes the session; its cookie is base64(sessionId), which
         // is the Redis key prefix the bff will look under for this browser.

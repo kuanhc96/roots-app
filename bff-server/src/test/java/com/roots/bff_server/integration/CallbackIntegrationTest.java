@@ -67,7 +67,7 @@ class CallbackIntegrationTest {
     @BeforeEach
     void setUp() {
         bffClient = new BffClient(bffServerLocation);
-        authServerClient = new AuthServerClient(authServerLocation, webClientLocation, webClientId, webClientSecret);
+        authServerClient = new AuthServerClient(authServerLocation, bffServerLocation, webClientId, webClientSecret);
     }
 
     @AfterEach
