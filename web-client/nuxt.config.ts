@@ -6,9 +6,10 @@ export default defineNuxtConfig({
   runtimeConfig: {
     public: {
       simpleResourceServerUrl: 'http://localhost:8081',
+      // All auth traffic goes through the gateway, which proxies to bff-server.
       // The bff-server owns the OAuth2 flow and the tokens; this is the only auth
       // surface the browser talks to (override: NUXT_PUBLIC_BFF_SERVER_URL).
-      bffServerUrl: 'http://localhost:8083',
+      bffServerUrl: 'http://localhost:8080/bff-server',
     },
   },
 })

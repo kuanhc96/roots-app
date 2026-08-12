@@ -9,19 +9,18 @@ All public runtime config variables follow Nuxt's `NUXT_PUBLIC_*` naming convent
 | Environment Variable | Default | Description |
 |---|---|---|
 | `NUXT_PUBLIC_SIMPLE_RESOURCE_SERVER_URL` | `http://localhost:8081` | Base URL of `simple-resource-server` |
-| `NUXT_PUBLIC_AUTH_SERVER_URL` | `http://localhost:9000` | Base URL of `auth-server` |
-| `NUXT_PUBLIC_WEB_CLIENT_ID` | `WEB_CLIENT` | OAuth2 client ID registered on auth-server |
-| `NUXT_PUBLIC_WEB_CLIENT_SECRET` | _(none — required)_ | OAuth2 client secret; must match `WEB_CLIENT_SECRET` on auth-server. Set in `.env.local` for local dev (never commit this file) |
-
-For local development, create a `.env.local` file in this directory:
-
-```
-NUXT_PUBLIC_WEB_CLIENT_SECRET=your-secret-here
-```
+| `NUXT_PUBLIC_BFF_SERVER_URL` | `http://localhost:8080/bff-server` | Gateway entry point for the bff-server; the gateway proxies the `/bff-server/**` prefix to the bff-server (Eureka discovery locator strips the prefix before forwarding) |
 
 ## OAuth2 Flow
 
-The app uses the Authorization Code grant type. Unauthenticated users are redirected from `/home` to the auth-server's `/oauth2/authorize` endpoint. After login, the auth-server redirects to `/callback` with an authorization code. The callback page exchanges the code for an access token via `POST /oauth2/token` and stores it in `sessionStorage`. All subsequent API calls to `simple-resource-server` include the token as a `Bearer` header.
+Auth is fully managed server-side by the bff-server, so the browser never sees tokens or the client secret. The web-client only ever handles id-token *claims* returned by `GET /api/auth/status`.
+
+1. **Authorize** — `useOAuth.authorize()` navigates the browser to `{bffServerUrl}/api/auth/authorize`. The bff mints a `state`, stores it in Redis, and 302s to auth-server's `/oauth2/authorize`.
+2. **Callback** — after login, auth-server redirects back to `/callback` with a `code` + `state`. The callback page exchanges the code at the bff's `/api/auth/callback`, which stores all three tokens (access, refresh, id) in Redis keyed by session id.
+3. **Status** — `useOAuth.checkStatus()` fetches `{bffServerUrl}/api/auth/status` (session cookie rides along). The bff decodes the stored id-token and returns its claims; the web-client stores them in `sessionStorage`.
+4. **Logout** — `useOAuth.startLogout()` navigates to `{bffServerUrl}/api/auth/logout`. The bff deletes the Redis token keys and drives OIDC RP-initiated logout against auth-server, which finally redirects the browser to `/logout`.
+
+All auth traffic is routed through `gateway-server` (port `8080`), which currently proxies transparently to the bff-server. The gateway is planned to add token-enrichment for downstream resource-server calls.
 
 ## Commands
 

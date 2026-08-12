@@ -12,11 +12,14 @@ spring:
           discovery:
             locator:
               enabled: true
+              lower-case-service-id: true
 
 server:
   port: ${SERVER_PORT:8080}
 
 eureka:
+  instance:
+    prefer-ip-address: true
   client:
     fetch-registry: true
     register-with-eureka: true
@@ -36,7 +39,13 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,shutdown
+        include: health,info,shutdown,gateway
   endpoint:
+    gateway:
+      access: unrestricted
     shutdown:
       access: unrestricted
+
+web:
+  client:
+    origin: ${WEB_CLIENT_ORIGIN:http://localhost:3000}
