@@ -8,7 +8,7 @@ All public runtime config variables follow Nuxt's `NUXT_PUBLIC_*` naming convent
 
 | Environment Variable | Default | Description |
 |---|---|---|
-| `NUXT_PUBLIC_SIMPLE_RESOURCE_SERVER_URL` | `http://localhost:8081` | Base URL of `simple-resource-server` |
+| `NUXT_PUBLIC_SIMPLE_RESOURCE_SERVER_URL` | `http://localhost:8080/simple-resource-server` | Gateway prefix used for simple-resource-server calls |
 | `NUXT_PUBLIC_BFF_SERVER_URL` | `http://localhost:8080/bff-server` | Gateway entry point for the bff-server; the gateway proxies the `/bff-server/**` prefix to the bff-server (Eureka discovery locator strips the prefix before forwarding) |
 
 ## OAuth2 Flow
@@ -20,7 +20,7 @@ Auth is fully managed server-side by the bff-server, so the browser never sees t
 3. **Status** — `useOAuth.checkStatus()` fetches `{bffServerUrl}/api/auth/status` (session cookie rides along). The bff decodes the stored id-token and returns its claims; the web-client stores them in `sessionStorage`.
 4. **Logout** — `useOAuth.startLogout()` navigates to `{bffServerUrl}/api/auth/logout`. The bff deletes the Redis token keys and drives OIDC RP-initiated logout against auth-server, which finally redirects the browser to `/logout`.
 
-All auth traffic is routed through `gateway-server` (port `8080`), which currently proxies transparently to the bff-server. The gateway is planned to add token-enrichment for downstream resource-server calls.
+All auth and resource-server traffic is routed through `gateway-server` (port `8080`), including the `/simple-resource-server/**` path used by role API calls.
 
 ## Commands
 

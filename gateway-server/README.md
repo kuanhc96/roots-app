@@ -30,7 +30,7 @@ Typical routes:
 | `/oauth2/**` | auth-server:9000 |
 | `/api/auth/**` | bff-server:8083 |
 | `/api/account/**` | account-management:8082 |
-| `/api/role/**` | simple-resource-server:8081 |
+| `/simple-resource-server/**` | simple-resource-server:8081 |
 | `/**` (catch-all) | auth-server:9000 (serves SPA / login form) |
 
 ## Configuration
@@ -89,6 +89,7 @@ This triggers a clean shutdown with proper Eureka de-registration before the pro
 | `REDIS_PORT` | `6379` | Redis port (shared with bff-server) |
 | `SERVER_PORT` | `8080` | Gateway listen port |
 | `EUREKA_SERVER_URL` | `http://localhost:8070/eureka/` | Eureka registry URL; compose sets `http://eureka-server:8070/eureka/` |
+| `WEB_CLIENT_ORIGIN` | `http://localhost:3000` | Allowed browser origin for CORS |
 | `SPRING_PROFILES_ACTIVE` | _(none)_ | Profile activation (e.g., `test` in CI) |
 
 ## Local Development
