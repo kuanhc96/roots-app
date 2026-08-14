@@ -10,16 +10,16 @@ Gateway-server runs on **port 8080** and acts as a reverse proxy for the entire 
 - Browser session cookie (`__Host-SESSION`) is preserved through the gateway
 - Gateway reads access tokens from **shared bff-server Redis** (port 6379) using the session ID decoded from the cookie
 - Tokens are attached to upstream requests targeting protected resource servers
-- Gateway is **stateless** — it does not refresh tokens or manage session state; bff-server owns token lifecycle
+- Gateway is **stateless** — it does not own login/session lifecycle, but it can perform refresh-token exchange with auth-server when only a refresh token is present
 
 ### Token Lookup Flow
 
 1. Browser sends request with `__Host-SESSION` cookie
 2. Gateway decodes the session ID from the cookie
 3. Gateway queries bff-server's Redis: `GET <sessionId>:access_token`
-4. If token exists, gateway attaches it to the upstream request as a bearer token
-5. Upstream service validates the token via JWT verification (fetching JWK from auth-server)
-6. If token is missing or expired, the upstream request fails — gateway does not refresh
+4. If access token exists, gateway attaches it to the upstream request as a bearer token
+5. If access token is missing but refresh token exists, gateway exchanges it at auth-server `/oauth2/token` and stores new tokens back in Redis
+6. Upstream service validates the token via JWT verification (fetching JWK from auth-server)
 
 ### Routing
 
@@ -90,6 +90,10 @@ This triggers a clean shutdown with proper Eureka de-registration before the pro
 | `SERVER_PORT` | `8080` | Gateway listen port |
 | `EUREKA_SERVER_URL` | `http://localhost:8070/eureka/` | Eureka registry URL; compose sets `http://eureka-server:8070/eureka/` |
 | `WEB_CLIENT_ORIGIN` | `http://localhost:3000` | Allowed browser origin for CORS |
+| `WEB_CLIENT_ID` | `WEB_CLIENT` | OAuth2 client ID used for refresh-token exchange |
+| `WEB_CLIENT_SECRET` | `secret` | OAuth2 client secret used for refresh-token exchange |
+| `AUTH_SERVER_INTERNAL_LOCATION` | `http://localhost:9000` | Auth-server URL used by gateway for token exchange |
+| `REFRESH_TOKEN_TTL_SECONDS` | `3600` | TTL used when persisting refreshed `refresh_token` |
 | `SPRING_PROFILES_ACTIVE` | _(none)_ | Profile activation (e.g., `test` in CI) |
 
 ## Local Development
