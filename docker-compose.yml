@@ -199,8 +199,15 @@ services:
       - "8081:8081"
     networks:
       - roots_backend
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      auth-server:
+        condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      AUTH_SERVER_JWK_URI: http://auth-server:9000/oauth2/jwks
+      EUREKA_SERVER_URL: http://eureka-server:8070/eureka/
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent localhost:8081/actuator/health | grep UP || exit 1"]
       interval: 15s
