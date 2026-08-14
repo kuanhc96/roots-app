@@ -25,6 +25,7 @@ public class AuthServerClient {
     @Value("${auth-server.internal-location:http://localhost:9000}")
     private String authServerInternalLocation;
 
+    // TODO: RCA-93: generalize for multiple clients/secrets
     @Value("${web.client.id:WEB_CLIENT}")
     private String webClientId;
 
