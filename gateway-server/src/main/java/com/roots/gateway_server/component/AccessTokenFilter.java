@@ -4,8 +4,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
-import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.http.HttpCookie;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.server.reactive.ServerHttpRequest;
@@ -15,11 +16,9 @@ import reactor.core.publisher.Mono;
 
 @Component
 @RequiredArgsConstructor
-public class AccessTokenFilter implements GlobalFilter {
+public class AccessTokenFilter implements GatewayFilter {
 
     private static final String SESSION_COOKIE_NAME = "__Host-SESSION";
-    private static final String SIMPLE_RESOURCE_ROUTE_PREFIX = "/simple-resource-server/";
-    private static final String SIMPLE_RESOURCE_ROUTE_EXACT = "/simple-resource-server";
     private static final String AUTHORIZATION_BEARER_PREFIX = "Bearer ";
 
     private final RedisClient redisClient;
@@ -41,10 +40,6 @@ public class AccessTokenFilter implements GlobalFilter {
                 .build();
 
         return chain.filter(exchange.mutate().request(enrichedRequest).build());
-    }
-
-    private static boolean isSimpleResourceRoute(String path) {
-        return SIMPLE_RESOURCE_ROUTE_EXACT.equals(path) || path.startsWith(SIMPLE_RESOURCE_ROUTE_PREFIX);
     }
 
     private static Optional<String> extractSessionId(ServerHttpRequest request) {
