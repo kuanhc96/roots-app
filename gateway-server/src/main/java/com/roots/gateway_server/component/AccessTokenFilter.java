@@ -1,13 +1,12 @@
 package com.roots.gateway_server.component;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.Optional;
+
+import com.roots.gateway_server.utility.SessionIdExtractor;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
-import org.springframework.http.HttpCookie;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
@@ -18,7 +17,6 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class AccessTokenFilter implements GatewayFilter {
 
-    private static final String SESSION_COOKIE_NAME = "__Host-SESSION";
     private static final String AUTHORIZATION_BEARER_PREFIX = "Bearer ";
 
     private final RedisClient redisClient;
@@ -27,7 +25,7 @@ public class AccessTokenFilter implements GatewayFilter {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
 
-        Optional<String> accessToken = extractSessionId(request)
+        Optional<String> accessToken = SessionIdExtractor.extractSessionId(request)
                 .flatMap(redisClient::getAccessToken);
 
         if (accessToken.isEmpty()) {
@@ -40,19 +38,5 @@ public class AccessTokenFilter implements GatewayFilter {
                 .build();
 
         return chain.filter(exchange.mutate().request(enrichedRequest).build());
-    }
-
-    private static Optional<String> extractSessionId(ServerHttpRequest request) {
-        HttpCookie sessionCookie = request.getCookies().getFirst(SESSION_COOKIE_NAME);
-        if (sessionCookie == null || sessionCookie.getValue() == null || sessionCookie.getValue().isBlank()) {
-            return Optional.empty();
-        }
-
-        try {
-            byte[] decoded = Base64.getDecoder().decode(sessionCookie.getValue());
-            return Optional.of(new String(decoded, StandardCharsets.UTF_8));
-        } catch (IllegalArgumentException ignored) {
-            return Optional.empty();
-        }
     }
 }
