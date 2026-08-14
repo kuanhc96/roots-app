@@ -6,12 +6,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import com.roots.gateway_server.component.AccessTokenFilter;
+import com.roots.gateway_server.component.RefreshTokenFilter;
 import lombok.RequiredArgsConstructor;
 
 @Configuration
 @RequiredArgsConstructor
 public class RouteConfig {
 
+    private final RefreshTokenFilter refreshTokenFilter;
     private final AccessTokenFilter accessTokenFilter;
 
     @Bean
@@ -20,6 +22,7 @@ public class RouteConfig {
                 .route(p -> p
                         .path("/simple-resource-server/**")
                         .filters(f -> f
+                                .filter(refreshTokenFilter)
                                 .filter(accessTokenFilter)
                                 .rewritePath("/simple-resource-server/(?<segment>.*)", "/$\\{segment}")
                         )
