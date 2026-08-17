@@ -192,6 +192,22 @@ services:
       retries: 10
       start_period: 60s
 
+  simple-resource-server:
+    image: ${DOCKERHUB_USERNAME}/simple-resource-server:${SIMPLE_RESOURCE_SERVER_TAG:-latest}
+    container_name: simple-resource-server
+    ports:
+      - "8081:8081"
+    networks:
+      - roots_backend
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent localhost:8081/actuator/health | grep UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
 networks:
   roots_backend:
     driver: bridge
