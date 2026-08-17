@@ -23,15 +23,14 @@ Gateway-server runs on **port 8080** and acts as a reverse proxy for the entire 
 
 ### Routing
 
-Typical routes:
+Gateway routing behavior:
 
 | Path | Upstream |
 |---|---|
-| `/oauth2/**` | auth-server:9000 |
-| `/api/auth/**` | bff-server:8083 |
-| `/api/account/**` | account-management:8082 |
-| `/simple-resource-server/**` | simple-resource-server:8081 |
-| `/**` (catch-all) | auth-server:9000 (serves SPA / login form) |
+| `/simple-resource-server/**` | `SIMPLE-RESOURCE-SERVER` via a custom route (`rewritePath` removes the prefix) with `RefreshTokenFilter` then `AccessTokenFilter` |
+| `/bff-server/**` | `BFF-SERVER` via discovery-locator route (service-id prefix) |
+| `/auth-server/**` | `AUTH-SERVER` via discovery-locator route (service-id prefix) |
+| `/account-management/**` | `ACCOUNT-MANAGEMENT` via discovery-locator route (service-id prefix) |
 
 ## Configuration
 
@@ -64,8 +63,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,shutdown      # Expose shutdown for de-registration
+        include: health,info,shutdown,gateway      # Expose gateway + shutdown endpoints
   endpoint:
+    gateway:
+      access: unrestricted
     shutdown:
       access: unrestricted                 # Allow graceful shutdown
 ```
@@ -129,8 +130,9 @@ docker compose logs -f gateway-server
 ### Compose Dependencies
 
 Gateway-server depends on:
-1. `bff-server-redis` (healthy) — the shared token store
-2. `bff-server` (healthy) — gateway chains this upstream service
+1. `eureka-server` (healthy) — service discovery for `lb://...` targets
+2. `bff-server-redis` (healthy) — the shared token store
+3. `bff-server` (healthy) — gateway routes browser auth traffic to `/bff-server/**`
    - Which transitively depends on `auth-server` (healthy)
      - Which transitively depends on `auth-server-db` (healthy)
 
