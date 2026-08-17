@@ -142,12 +142,14 @@ Gateway-server depends on:
 
 **Steps:**
 1. Checkout and setup JDK 21 + Maven cache
-2. Docker login (pull private `:latest` images of bff-server, auth-server)
-3. Build gateway-server jar: `mvn package -DskipTests`
-4. Build gateway-server image: `mvn jib:dockerBuild -Djib.to.image=...:ci`
-5. `docker compose up -d --wait gateway-server` (chains in dependencies, blocks until all healthy)
-6. Verify health: `curl http://localhost:8080/actuator/health | grep UP`
-7. Dump logs on failure
+2. Run unit tests first (fast-fail gate): `mvn test -Dtest="GatewayServerApplicationTests,AccessTokenFilterTest,RefreshTokenFilterTest"`
+3. Docker login (pull private `:latest` images of bff-server, auth-server)
+4. Build gateway-server jar: `mvn package -DskipTests`
+5. Build gateway-server image: `mvn jib:dockerBuild -Djib.to.image=...:ci`
+6. `docker compose up -d --wait gateway-server` (chains in dependencies, blocks until all healthy)
+7. Verify health: `curl http://localhost:8080/actuator/health | grep UP`
+8. Run integration tests after the stack is healthy: `mvn surefire:test -Dtest="GuestRoleGatewayIntegrationTest"`
+9. Dump logs on failure
 
 **Required GitHub Secrets:**
 - `DOCKERHUB_USERNAME` — for pulling/building images
@@ -174,6 +176,4 @@ Gateway-server depends on:
 
 ## Integration Testing
 
-Currently, gateway-server has **no integration tests**. The CI pipeline validates only that the container starts and reports healthy. 
-
-Future work: test routing logic and token injection.
+Gateway-server includes an integration test (`GuestRoleGatewayIntegrationTest`) that exercises the guest-login flow through the gateway and validates guest endpoint access.
