@@ -22,3 +22,21 @@ jobs:
       - name: Run tests
         working-directory: simple-resource-server
         run: mvn test
+
+      - name: Build Docker image
+        working-directory: simple-resource-server
+        run: mvn clean compile jib:dockerBuild -DskipTests -Djib.to.image=${{ secrets.DOCKERHUB_USERNAME }}/simple-resource-server:ci
+
+      - name: Start services
+        run: docker compose up -d --wait simple-resource-server
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          SIMPLE_RESOURCE_SERVER_TAG: ci
+          SPRING_PROFILES_ACTIVE: test
+
+      - name: Verify simple-resource-server health
+        run: curl --fail --silent http://localhost:8081/actuator/health | grep -q UP
+
+      - name: Stop services
+        if: always()
+        run: docker compose down
