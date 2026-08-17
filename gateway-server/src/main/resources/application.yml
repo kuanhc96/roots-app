@@ -49,3 +49,11 @@ management:
 web:
   client:
     origin: ${WEB_CLIENT_ORIGIN:http://localhost:3000}
+    id: ${WEB_CLIENT_ID:WEB_CLIENT}
+    secret: ${WEB_CLIENT_SECRET:secret}
+
+auth-server:
+  internal-location: ${AUTH_SERVER_INTERNAL_LOCATION:http://localhost:9000}
+
+token-store:
+  refresh-token-ttl-seconds: ${REFRESH_TOKEN_TTL_SECONDS:3600}

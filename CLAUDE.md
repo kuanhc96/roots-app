@@ -317,10 +317,10 @@ web-client/
 │   │   └── useSimpleResourceClient.ts   # instantiates SimpleResourceClient from runtimeConfig
 │   ├── pages/
 │   │   ├── home.vue                     # 2×2 card grid + 5th wide card (md="8"); does NOT auto-authenticate (onBeforeMount is empty) — authorization is initiated manually via the RoleApiCard "authorize" button
-│   │   ├── callback.vue                 # OAuth2 callback; exchanges auth code for access token, stores in sessionStorage
+│   │   ├── callback.vue                 # OAuth2 callback; sends code+state to bff-server /api/auth/callback, then stores returned login claims in sessionStorage
 │   │   └── logout.vue                   # post-logout landing page; clears sessionStorage tokens on mount; shows authorize button to re-authenticate
 │   └── utils/
-│       └── SimpleResourceClient.ts      # axios-based client class for simple-resource-server
+│       └── SimpleResourceClient.ts      # axios client for gateway's /simple-resource-server prefix (withCredentials=true so __Host-SESSION is sent)
 ├── nuxt.config.ts
 └── package.json
 ```
@@ -340,15 +340,13 @@ UI uses **Vuetify 4** (`vuetify-nuxt-module`). The home page grid is 12-column; 
 | `/api/role/member` | `I am a member` |
 | `/api/role/guest` | `I am a guest` |
 
-CORS is allowed from `http://localhost:3000` by default (overridable via `web.client.origin` property).
-
 simple-resource-server is an **OAuth2 Resource Server** (Spring Security 7.x). It validates JWT bearer tokens issued by auth-server.
 
 - JWK URI fetched from auth-server at `${AUTH_SERVER_JWK_URI:http://localhost:9000/oauth2/jwks}`
-- `anyRequest().permitAll()` at the filter chain level; security is enforced purely via `@PreAuthorize` on each method
 - `@EnableMethodSecurity` enables `@PreAuthorize` on each endpoint
 - Protected endpoints require both `WEB_CLIENT_READ` (from the JWT `scope` claim) and the matching `ROLE_*` (from the JWT `roles` claim, prefixed with `ROLE_` by `JwtAuthenticationConverter`)
-- `config/SecurityConfig.java` — `SecurityFilterChain` + `JwtAuthenticationConverter` (reads `scope` → `*` with no prefix, and `roles` → `ROLE_*`)
+- `config/SecurityConfig.java` defines `JwtAuthenticationConverter` (reads `scope` → `*` with no prefix, and `roles` → `ROLE_*`)
+- Eureka client is enabled (`spring-cloud-starter-netflix-eureka-client`); service registers at `${EUREKA_SERVER_URL:http://localhost:8070/eureka/}`
 
 **Role → endpoint mapping:**
 
@@ -406,16 +404,15 @@ The **gateway-server** (port `8080`) is the single entry point for all traffic. 
 1. Browser sends `__Host-SESSION` cookie (bff-server's Spring Session cookie)
 2. Gateway decodes the session ID from the cookie: `base64_decode(__Host-SESSION)`
 3. Gateway looks up `<sessionId>:access_token` in **shared bff-server Redis** (port 6379, not auth-server's 6381)
-4. If found, gateway attaches the token as a bearer `Authorization` header on upstream requests
-5. Downstream services validate the JWT (fetching JWKs from auth-server) without needing Redis access
+4. If missing, gateway tries `<sessionId>:refresh_token`; on hit it exchanges that token at auth-server `POST /oauth2/token` (as `WEB_CLIENT`) and stores refreshed tokens back in Redis
+5. Gateway attaches the resulting access token as a bearer `Authorization` header on upstream requests
+6. Downstream services validate the JWT (fetching JWKs from auth-server) without needing Redis access
 
-**Gateway is stateless:** it does not refresh tokens, store sessions, or manage authentication state. If a token is missing or expired, the upstream request fails (bff-server owns refreshes). This is a pure read-through enrichment.
+Gateway stays **session-stateless** (it does not own browser login/session lifecycle), but it now performs refresh-token exchange on the simple-resource route so browser requests can recover from expired access tokens without a bff round-trip first.
 
 **Routing targets** (internal network names in compose):
-- `http://auth-server:9000` — OAuth2 flows, SPA shell, login forms
-- `http://bff-server:8083` — token management, session lifecycle
-- `http://simple-resource-server:8081` — role-based API endpoints
-- `http://account-management:8082` — account CRUD (test endpoints)
+- `/simple-resource-server/**` → custom route to `lb://SIMPLE-RESOURCE-SERVER`, with filter chain `RefreshTokenFilter` then `AccessTokenFilter`, then `rewritePath("/simple-resource-server/(?<segment>.*)", "/${segment}")`
+- `/bff-server/**`, `/auth-server/**`, `/account-management/**` → Eureka discovery-locator routes (`lb://...`) using service-id prefixes
 
 **Downstream service ports remain published** (9000, 8083, 8081, 8082) for dev convenience — developers can still `curl localhost:9000` directly if needed. The gateway is the *production* entry point; direct-to-service calls are dev-only.
 
@@ -448,8 +445,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,shutdown      # Expose shutdown for de-registration
+        include: health,info,shutdown,gateway      # Expose gateway + shutdown endpoints
   endpoint:
+    gateway:
+      access: unrestricted
     shutdown:
       access: unrestricted                 # Allow graceful shutdown
 ```
@@ -558,9 +557,9 @@ docker compose up -d auth-server-redis
 
 - `auth-server/src/main/resources/application.yml` — server port defaults to `${SERVER_PORT:9000}`; `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` are required with no fallback; `MYSQL_AUTH_SERVER_DB_URL` defaults to `jdbc:mysql://localhost:3308/auth-server-db`; Redis defaults to `${REDIS_HOST:localhost}:${REDIS_PORT:6381}` (backs Spring Session + Google oauth_state); session cookie is `__Host-AUTH_SESSION` (`Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`); Gmail SMTP is configured under `spring.mail` — `SPRING_MAIL_USERNAME` and `SPRING_MAIL_PASSWORD` have no defaults and are required in every profile (the `JavaMailSender` is auto-configured in all profiles, and the Actuator mail health indicator connects to SMTP on each health poll); uses `smtp.gmail.com:587` with STARTTLS; `web-client.location` defaults to `http://localhost:3000` (override: `WEB_CLIENT_LOCATION`) — web-client hand-off target after magic-link verification when no saved request exists; `google.client-id` (override: `GOOGLE_CLIENT_ID`, safe public default) — expected `aud` for Google id_token verification
 - `auth-server/frontend/nuxt.config.ts` — `runtimeConfig.public.googleClientId` defaults to the dev Google OAuth client id (override: `NUXT_PUBLIC_GOOGLE_CLIENT_ID`); `runtimeConfig.public.googleClientSecret` has no default and must be set via `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET` — **at frontend build time, not server runtime**: the SPA is statically generated, so the value is baked into the JS bundle by `npm run generate` (set it in the shell running the Maven build, or in the gitignored `auth-server/frontend/.env`); changing it requires a rebuild (see "Required env vars at startup" above)
-- `simple-resource-server/src/main/resources/application.yml` — port defaults to `8081` (override: `SERVER_PORT`); JWK URI defaults to `http://localhost:9000/oauth2/jwks` (override: `AUTH_SERVER_JWK_URI`); CORS origin defaults to `http://localhost:3000` (override: `WEB_CLIENT_ORIGIN` via `web.client.origin` property)
+- `simple-resource-server/src/main/resources/application.yml` — port defaults to `8081` (override: `SERVER_PORT`); JWK URI defaults to `http://localhost:9000/oauth2/jwks` (override: `AUTH_SERVER_JWK_URI`); Eureka URL defaults to `http://localhost:8070/eureka/` (override: `EUREKA_SERVER_URL`)
 - `bff-server/src/main/resources/application.yml` — port defaults to `8083` (override: `SERVER_PORT`); Redis at `${REDIS_HOST:localhost}:${REDIS_PORT:6379}` (Spring Session + token store); CORS origin defaults to `http://localhost:3000` (override: `WEB_CLIENT_ORIGIN` via `web.client.origin`); `auth-server.internal-location` and `auth-server.external-location` both default to `http://localhost:9000` (overrides: `AUTH_SERVER_INTERNAL_LOCATION` / `AUTH_SERVER_EXTERNAL_LOCATION` — internal is what the RestClient calls, external is what browser-facing redirects use); `web.client.id` defaults to `WEB_CLIENT` (override: `WEB_CLIENT_ID`); `web.client.secret` is **required with no default** (`WEB_CLIENT_SECRET`, must match the WEB_CLIENT `client_secret` in `oauth2_registered_client`); `token-store.refresh-token-ttl-seconds` defaults to `3600` (override: `REFRESH_TOKEN_TTL_SECONDS`)
-- `web-client/nuxt.config.ts` — `runtimeConfig.public.simpleResourceServerUrl` defaults to `http://localhost:8081` (override: `NUXT_PUBLIC_SIMPLE_RESOURCE_SERVER_URL`); `runtimeConfig.public.authServerUrl` defaults to `http://localhost:9000` (override: `NUXT_PUBLIC_AUTH_SERVER_URL`); `runtimeConfig.public.webClientId` defaults to `WEB_CLIENT` (override: `NUXT_PUBLIC_WEB_CLIENT_ID`); `runtimeConfig.public.webClientSecret` has no default and **must** be set via `NUXT_PUBLIC_WEB_CLIENT_SECRET` (must match the `client_secret` stored in auth-server's `oauth2_registered_client` table)
+- `web-client/nuxt.config.ts` — `runtimeConfig.public.simpleResourceServerUrl` defaults to `http://localhost:8080/simple-resource-server` (override: `NUXT_PUBLIC_SIMPLE_RESOURCE_SERVER_URL`); `runtimeConfig.public.bffServerUrl` defaults to `http://localhost:8080/bff-server` (override: `NUXT_PUBLIC_BFF_SERVER_URL`)
 - All other services use `application.properties` with minimal config; most config is expected to come from `config-server`
 - All services target **Java 21** and use **Spring Boot 4.0.5** with **Spring Cloud 2025.1.1**
 
@@ -624,14 +623,14 @@ Identical pattern to account-management-cd: version bump, `mvn jib:build` pushin
 
 Triggers on `pull_request` `opened`/`synchronize`. Steps:
 1. Checkout and setup JDK 21 + Maven cache
-2. `docker login` — bff-server and auth-server are unchanged dependencies (pulled `:latest`; these are private repos, so authenticate)
-3. Build gateway-server jar: `mvn package -DskipTests`
-4. Build gateway-server image: `mvn jib:dockerBuild -Djib.to.image=$DOCKERHUB_USERNAME/gateway-server:ci`
-5. `docker compose up -d --wait gateway-server` with `GATEWAY_SERVER_TAG=ci`, `SPRING_PROFILES_ACTIVE=test`, which `depends_on`-chains in `bff-server-redis`, `bff-server`, and (transitively) `auth-server` + `auth-server-db`; blocks until all are healthy
-6. Verify gateway health: `curl --fail --silent http://localhost:8080/actuator/health | grep -q UP`
-7. Dump logs on failure
-
-**No integration tests yet** — the CI gate is healthcheck only (gateway can start and is responsive). See `gateway-server/README.md`.
+2. Fast-fail unit-test gate: `mvn test -Dtest="GatewayServerApplicationTests,AccessTokenFilterTest,RefreshTokenFilterTest"` (if this fails, no build/image work runs)
+3. `docker login` — bff-server and auth-server are unchanged dependencies (pulled `:latest`; these are private repos, so authenticate)
+4. Build gateway-server jar: `mvn package -DskipTests`
+5. Build gateway-server image: `mvn jib:dockerBuild -Djib.to.image=$DOCKERHUB_USERNAME/gateway-server:ci`
+6. `docker compose up -d --wait gateway-server` with `GATEWAY_SERVER_TAG=ci`, `SPRING_PROFILES_ACTIVE=test`, which `depends_on`-chains in `eureka-server`, `bff-server-redis`, `bff-server`, and (transitively) `auth-server` + `auth-server-db`; blocks until all are healthy
+7. Verify gateway health: `curl --fail --silent http://localhost:8080/actuator/health | grep -q UP`
+8. Run integration test: `mvn surefire:test '-Dtest=GuestRoleGatewayIntegrationTest'` (drives guest authorize→callback via `/bff-server/**` and validates `/simple-resource-server/api/role/guest` through the gateway)
+9. Dump logs on failure
 
 **Required secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `MYSQL_AUTH_SERVER_ROOT_USERNAME` (= `root`), `MYSQL_AUTH_SERVER_ROOT_PASSWORD`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`.
 

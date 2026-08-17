@@ -10,28 +10,27 @@ Gateway-server runs on **port 8080** and acts as a reverse proxy for the entire 
 - Browser session cookie (`__Host-SESSION`) is preserved through the gateway
 - Gateway reads access tokens from **shared bff-server Redis** (port 6379) using the session ID decoded from the cookie
 - Tokens are attached to upstream requests targeting protected resource servers
-- Gateway is **stateless** — it does not refresh tokens or manage session state; bff-server owns token lifecycle
+- Gateway is **stateless** — it does not own login/session lifecycle, but it can perform refresh-token exchange with auth-server when only a refresh token is present
 
 ### Token Lookup Flow
 
 1. Browser sends request with `__Host-SESSION` cookie
 2. Gateway decodes the session ID from the cookie
 3. Gateway queries bff-server's Redis: `GET <sessionId>:access_token`
-4. If token exists, gateway attaches it to the upstream request as a bearer token
-5. Upstream service validates the token via JWT verification (fetching JWK from auth-server)
-6. If token is missing or expired, the upstream request fails — gateway does not refresh
+4. If access token exists, gateway attaches it to the upstream request as a bearer token
+5. If access token is missing but refresh token exists, gateway exchanges it at auth-server `/oauth2/token` and stores new tokens back in Redis
+6. Upstream service validates the token via JWT verification (fetching JWK from auth-server)
 
 ### Routing
 
-Typical routes:
+Gateway routing behavior:
 
 | Path | Upstream |
 |---|---|
-| `/oauth2/**` | auth-server:9000 |
-| `/api/auth/**` | bff-server:8083 |
-| `/api/account/**` | account-management:8082 |
-| `/api/role/**` | simple-resource-server:8081 |
-| `/**` (catch-all) | auth-server:9000 (serves SPA / login form) |
+| `/simple-resource-server/**` | `SIMPLE-RESOURCE-SERVER` via a custom route (`rewritePath` removes the prefix) with `RefreshTokenFilter` then `AccessTokenFilter` |
+| `/bff-server/**` | `BFF-SERVER` via discovery-locator route (service-id prefix) |
+| `/auth-server/**` | `AUTH-SERVER` via discovery-locator route (service-id prefix) |
+| `/account-management/**` | `ACCOUNT-MANAGEMENT` via discovery-locator route (service-id prefix) |
 
 ## Configuration
 
@@ -64,8 +63,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,shutdown      # Expose shutdown for de-registration
+        include: health,info,shutdown,gateway      # Expose gateway + shutdown endpoints
   endpoint:
+    gateway:
+      access: unrestricted
     shutdown:
       access: unrestricted                 # Allow graceful shutdown
 ```
@@ -89,6 +90,11 @@ This triggers a clean shutdown with proper Eureka de-registration before the pro
 | `REDIS_PORT` | `6379` | Redis port (shared with bff-server) |
 | `SERVER_PORT` | `8080` | Gateway listen port |
 | `EUREKA_SERVER_URL` | `http://localhost:8070/eureka/` | Eureka registry URL; compose sets `http://eureka-server:8070/eureka/` |
+| `WEB_CLIENT_ORIGIN` | `http://localhost:3000` | Allowed browser origin for CORS |
+| `WEB_CLIENT_ID` | `WEB_CLIENT` | OAuth2 client ID used for refresh-token exchange |
+| `WEB_CLIENT_SECRET` | `secret` | OAuth2 client secret used for refresh-token exchange |
+| `AUTH_SERVER_INTERNAL_LOCATION` | `http://localhost:9000` | Auth-server URL used by gateway for token exchange |
+| `REFRESH_TOKEN_TTL_SECONDS` | `3600` | TTL used when persisting refreshed `refresh_token` |
 | `SPRING_PROFILES_ACTIVE` | _(none)_ | Profile activation (e.g., `test` in CI) |
 
 ## Local Development
@@ -124,8 +130,9 @@ docker compose logs -f gateway-server
 ### Compose Dependencies
 
 Gateway-server depends on:
-1. `bff-server-redis` (healthy) — the shared token store
-2. `bff-server` (healthy) — gateway chains this upstream service
+1. `eureka-server` (healthy) — service discovery for `lb://...` targets
+2. `bff-server-redis` (healthy) — the shared token store
+3. `bff-server` (healthy) — gateway routes browser auth traffic to `/bff-server/**`
    - Which transitively depends on `auth-server` (healthy)
      - Which transitively depends on `auth-server-db` (healthy)
 
@@ -137,12 +144,14 @@ Gateway-server depends on:
 
 **Steps:**
 1. Checkout and setup JDK 21 + Maven cache
-2. Docker login (pull private `:latest` images of bff-server, auth-server)
-3. Build gateway-server jar: `mvn package -DskipTests`
-4. Build gateway-server image: `mvn jib:dockerBuild -Djib.to.image=...:ci`
-5. `docker compose up -d --wait gateway-server` (chains in dependencies, blocks until all healthy)
-6. Verify health: `curl http://localhost:8080/actuator/health | grep UP`
-7. Dump logs on failure
+2. Run unit tests first (fast-fail gate): `mvn test -Dtest="GatewayServerApplicationTests,AccessTokenFilterTest,RefreshTokenFilterTest"`
+3. Docker login (pull private `:latest` images of bff-server, auth-server)
+4. Build gateway-server jar: `mvn package -DskipTests`
+5. Build gateway-server image: `mvn jib:dockerBuild -Djib.to.image=...:ci`
+6. `docker compose up -d --wait gateway-server` (chains in dependencies, blocks until all healthy)
+7. Verify health: `curl http://localhost:8080/actuator/health | grep UP`
+8. Run integration tests after the stack is healthy: `mvn surefire:test -Dtest="GuestRoleGatewayIntegrationTest"`
+9. Dump logs on failure
 
 **Required GitHub Secrets:**
 - `DOCKERHUB_USERNAME` — for pulling/building images
@@ -169,6 +178,4 @@ Gateway-server depends on:
 
 ## Integration Testing
 
-Currently, gateway-server has **no integration tests**. The CI pipeline validates only that the container starts and reports healthy. 
-
-Future work: test routing logic and token injection.
+Gateway-server includes an integration test (`GuestRoleGatewayIntegrationTest`) that exercises the guest-login flow through the gateway and validates guest endpoint access.

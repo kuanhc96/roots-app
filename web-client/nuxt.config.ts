@@ -5,7 +5,7 @@ export default defineNuxtConfig({
   modules: ['vuetify-nuxt-module'],
   runtimeConfig: {
     public: {
-      simpleResourceServerUrl: 'http://localhost:8081',
+      simpleResourceServerUrl: 'http://localhost:8080/simple-resource-server',
       // All auth traffic goes through the gateway, which proxies to bff-server.
       // The bff-server owns the OAuth2 flow and the tokens; this is the only auth
       // surface the browser talks to (override: NUXT_PUBLIC_BFF_SERVER_URL).

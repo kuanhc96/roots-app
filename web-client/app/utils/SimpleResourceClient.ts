@@ -1,13 +1,16 @@
 import axios, { type AxiosInstance } from 'axios'
 
-// NOTE: calls are currently unauthenticated — the browser no longer holds an
-// access token (the bff-server keeps tokens server-side), so protected endpoints
-// answer 401 until resource calls move behind the bff in a later step.
+// Calls go through gateway-server's /simple-resource-server prefix. The browser
+// sends only the __Host-SESSION cookie; gateway-server resolves and injects the
+// bearer token from Redis before proxying to simple-resource-server.
 export class SimpleResourceClient {
   private readonly http: AxiosInstance
 
   constructor(baseUrl: string) {
-    this.http = axios.create({ baseURL: baseUrl })
+    this.http = axios.create({
+      baseURL: baseUrl,
+      withCredentials: true,
+    })
   }
 
   getPastor() {

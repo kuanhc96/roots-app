@@ -20,6 +20,12 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
+      # Fast fail gate: run unit tests before any build/image work.
+      # If this step fails, GitHub Actions stops the job and no build proceeds.
+      - name: Run unit tests
+        working-directory: gateway-server
+        run: mvn test -Dtest="GatewayServerApplicationTests,AccessTokenFilterTest,RefreshTokenFilterTest"
+
       # bff-server and auth-server are unchanged dependencies for this workflow (the paths
       # filter means a triggering PR only touched gateway-server), so pull their published
       # :latest images rather than rebuilding them. These are private repos, so authenticate.
@@ -60,6 +66,11 @@ jobs:
 
       - name: Verify gateway-server health
         run: curl --fail --silent http://localhost:8080/actuator/health | grep -q UP
+
+      # Integration tests run after the docker network/services are up.
+      - name: Run integration tests
+        working-directory: gateway-server
+        run: mvn surefire:test -Dtest="GuestRoleGatewayIntegrationTest"
 
       - name: Dump container logs on failure
         if: failure()
