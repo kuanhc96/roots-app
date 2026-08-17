@@ -9,3 +9,26 @@ spring:
 
 server:
   port: ${SERVER_PORT:8081}
+
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    fetch-registry: true
+    register-with-eureka: true
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8070/eureka/}
+info:
+  app:
+    name: ${spring.application.name}
+    description: simple resource server for roots-app testing
+    version: @project.version@
+
+management:
+  info:
+    env:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,shutdown

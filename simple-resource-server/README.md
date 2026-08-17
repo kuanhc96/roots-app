@@ -40,6 +40,7 @@ CORS is allowed from `http://localhost:3000` by default (see `WEB_CLIENT_ORIGIN`
 | `SERVER_PORT` | `8081` | Port the service listens on |
 | `AUTH_SERVER_JWK_URI` | `http://localhost:9000/oauth2/jwks` | JWK set URI used to verify JWT signatures |
 | `WEB_CLIENT_ORIGIN` | `http://localhost:3000` | Origin allowed by CORS on all `/api/role/` endpoints |
+| `EUREKA_SERVER_URL` | `http://localhost:8070/eureka/` | Eureka registry URL used for service registration/discovery |
 
 ## Running
 
@@ -49,6 +50,8 @@ mvn spring-boot:run
 ```
 
 `auth-server` must be reachable at `AUTH_SERVER_JWK_URI` by the time the first authenticated request arrives. It does not need to be available at startup.
+
+On startup, the service also registers itself with Eureka (`simple-resource-server`) so gateway-server discovery routes can target it by service ID.
 
 ## CI
 
