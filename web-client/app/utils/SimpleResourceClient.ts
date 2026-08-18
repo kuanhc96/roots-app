@@ -24,26 +24,26 @@ export class SimpleResourceClient {
   }
 
   getPastor() {
-    return this.http.get<string>('/api/role/pastor')
+    return this.http.get<string>('/role/pastor')
   }
 
   getDeacon() {
-    return this.http.get<string>('/api/role/deacon')
+    return this.http.get<string>('/role/deacon')
   }
 
   getSmallGroupLeader() {
-    return this.http.get<string>('/api/role/small-group-leader')
+    return this.http.get<string>('/role/small-group-leader')
   }
 
   getViceSmallGroupLeader() {
-    return this.http.get<string>('/api/role/vice-small-group-leader')
+    return this.http.get<string>('/role/vice-small-group-leader')
   }
 
   getMember() {
-    return this.http.get<string>('/api/role/member')
+    return this.http.get<string>('/role/member')
   }
 
   getGuest() {
-    return this.http.get<string>('/api/role/guest')
+    return this.http.get<string>('/role/guest')
   }
 }

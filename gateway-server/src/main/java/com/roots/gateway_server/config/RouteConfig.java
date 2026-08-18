@@ -20,13 +20,20 @@ public class RouteConfig {
     public RouteLocator routeFilterConfig(RouteLocatorBuilder routeLocatorBuilder) {
         return routeLocatorBuilder.routes()
                 .route(p -> p
-                        .path("/simple-resource-server/**")
+                        .path("/roots-app/simple-resource-server/**")
                         .filters(f -> f
                                 .filter(refreshTokenFilter)
                                 .filter(accessTokenFilter)
-                                .rewritePath("/simple-resource-server/(?<segment>.*)", "/$\\{segment}")
+                                .rewritePath("/roots-app/simple-resource-server/(?<segment>.*)", "/api/$\\{segment}")
                         )
                         .uri("lb://SIMPLE-RESOURCE-SERVER")
+                )
+                .route(p -> p
+                        .path("/roots-app/bff-server/**")
+                        .filters(f -> f
+                                .rewritePath("/roots-app/bff-server/(?<segment>.*)", "/api/$\\{segment}")
+                        )
+                        .uri("lb://BFF-SERVER")
                 )
                 .build();
     }
