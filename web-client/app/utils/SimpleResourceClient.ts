@@ -11,6 +11,16 @@ export class SimpleResourceClient {
       baseURL: baseUrl,
       withCredentials: true,
     })
+
+    this.http.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          window.location.href = `/session-expired`
+        }
+        return Promise.reject(error)
+      },
+    )
   }
 
   getPastor() {
