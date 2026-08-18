@@ -1,7 +1,8 @@
 <script setup lang="ts">
-const config = useRuntimeConfig()
+const { login } = useOAuth()
 
-onBeforeMount(() => {
+onBeforeMount(async () => {
+  await login()
 })
 </script>
 

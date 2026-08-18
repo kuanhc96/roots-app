@@ -65,8 +65,12 @@ export function useOAuth() {
 
   /** The full login flow: already logged in? claims are stored and we're done — otherwise authorize. */
   async function login() {
-    const status = await checkStatus()
-    if (!status.isLoggedIn) {
+    try {
+      const status = await checkStatus()
+      if (!status.isLoggedIn) {
+        authorize()
+      }
+    } catch {
       authorize()
     }
   }
