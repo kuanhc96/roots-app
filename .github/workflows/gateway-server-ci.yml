@@ -67,6 +67,22 @@ jobs:
       - name: Verify gateway-server health
         run: curl --fail --silent http://localhost:8080/actuator/health | grep -q UP
 
+      # compose --wait ensures containers are healthy, but discovery-backed routes can
+      # still be briefly unavailable until gateway has refreshed its Eureka registry.
+      - name: Wait for gateway discovery route to bff-server
+        run: |
+          for i in {1..60}; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/bff-server/api/auth/status || true)
+            if [ "$code" = "200" ]; then
+              echo "Route is ready."
+              exit 0
+            fi
+            echo "Attempt $i: /bff-server/api/auth/status -> $code"
+            sleep 2
+          done
+          echo "Timed out waiting for /bff-server route readiness"
+          exit 1
+
       # Integration tests run after the docker network/services are up.
       - name: Run integration tests
         working-directory: gateway-server
