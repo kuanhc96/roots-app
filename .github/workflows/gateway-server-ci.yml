@@ -67,20 +67,23 @@ jobs:
       - name: Verify gateway-server health
         run: curl --fail --silent http://localhost:8080/actuator/health | grep -q UP
 
-      # compose --wait ensures containers are healthy, but discovery-backed routes can
-      # still be briefly unavailable until gateway has refreshed its Eureka registry.
-      - name: Wait for gateway discovery route to bff-server
+      # compose --wait ensures containers are healthy, but integration tests need all
+      # discovery participants registered in Eureka before gateway routing is reliable.
+      - name: Wait for Eureka app registrations
         run: |
           for i in {1..60}; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/bff-server/api/auth/status || true)
-            if [ "$code" = "200" ]; then
-              echo "Route is ready."
+            apps_json=$(curl --silent --fail -H "Accept: application/json" http://localhost:8070/eureka/apps || true)
+            compact_json=$(echo "$apps_json" | tr -d '\n\r[:space:]')
+            if echo "$compact_json" | grep -q '"name":"GATEWAY-SERVER"' \
+              && echo "$compact_json" | grep -q '"name":"SIMPLE-RESOURCE-SERVER"' \
+              && echo "$compact_json" | grep -q '"name":"BFF-SERVER"'; then
+              echo "All required apps are registered in Eureka."
               exit 0
             fi
-            echo "Attempt $i: /bff-server/api/auth/status -> $code"
+            echo "Attempt $i: waiting for GATEWAY-SERVER, SIMPLE-RESOURCE-SERVER, BFF-SERVER in /eureka/apps"
             sleep 2
           done
-          echo "Timed out waiting for /bff-server route readiness"
+          echo "Timed out waiting for required Eureka app registrations"
           exit 1
 
       # Integration tests run after the docker network/services are up.
