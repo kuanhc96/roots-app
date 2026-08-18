@@ -38,7 +38,7 @@ export function useOAuth() {
    * the raw status response.
    */
   async function checkStatus(): Promise<LoginStatus> {
-    const response = await fetch(`${config.public.bffServerUrl}/api/auth/status`, {
+    const response = await fetch(`${config.public.bffServerUrl}/auth/status`, {
       credentials: 'include',
     })
     if (!response.ok) {
@@ -60,7 +60,7 @@ export function useOAuth() {
    * which owns the state and every OAuth2 parameter and 302s on to auth-server.
    */
   function authorize() {
-    window.location.href = `${config.public.bffServerUrl}/api/auth/authorize`
+    window.location.href = `${config.public.bffServerUrl}/auth/authorize`
   }
 
   /** The full login flow: already logged in? claims are stored and we're done — otherwise authorize. */
@@ -84,7 +84,7 @@ export function useOAuth() {
    * clear the stored claims — kept separate so the post-logout landing can't loop.
    */
   function startLogout() {
-    window.location.href = `${config.public.bffServerUrl}/api/auth/logout`
+    window.location.href = `${config.public.bffServerUrl}/auth/logout`
   }
 
   /**
