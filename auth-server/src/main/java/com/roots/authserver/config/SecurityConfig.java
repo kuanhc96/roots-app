@@ -58,6 +58,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.security.provisioning.JdbcUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 
 import javax.sql.DataSource;
@@ -107,6 +109,7 @@ public class SecurityConfig {
             MfaRedirectAuthenticationSuccessHandler successHandler,
             TokenBasedRememberMeServices rememberMeServices,
             RememberMeAuthenticationFilter rememberMeAuthenticationFilter) throws Exception {
+        CsrfTokenRequestAttributeHandler csrfTokenRequestAttributeHandler = new CsrfTokenRequestAttributeHandler();
         http
                 .authenticationManager(authenticationManager)
                 .authorizeHttpRequests(auth -> auth
@@ -128,7 +131,10 @@ public class SecurityConfig {
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
                 )
-                .csrf(AbstractHttpConfigurer::disable);
+                .csrf(csrfConfig -> csrfConfig
+                        .csrfTokenRequestHandler(csrfTokenRequestAttributeHandler)
+                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                );
 
         return http.build();
     }
