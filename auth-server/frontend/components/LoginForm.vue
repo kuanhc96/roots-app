@@ -1,7 +1,11 @@
 <template>
   <div>
-    <form id="login-form" method="post" action="/login"></form>
-    <form id="guest-form" method="post" action="/login/guest"></form>
+    <form id="login-form" method="post" action="/login" @submit="syncCsrfTokenFromCookie">
+      <input type="hidden" name="_csrf" value="">
+    </form>
+    <form id="guest-form" method="post" action="/login/guest" @submit="syncCsrfTokenFromCookie">
+      <input type="hidden" name="_csrf" value="">
+    </form>
 
     <v-card width="400">
       <v-card-title>Login</v-card-title>
@@ -42,6 +46,24 @@
 const route = useRoute()
 const email = ref((route.query.email as string) ?? '')
 const showNotice = ref(route.query.notice === 'tempPasswordSent')
+
+const readCookie = (name: string): string => {
+  const prefix = `${name}=`
+  const cookie = document.cookie
+    .split(';')
+    .map(part => part.trim())
+    .find(part => part.startsWith(prefix))
+
+  return cookie ? cookie.slice(prefix.length) : ''
+}
+
+const syncCsrfTokenFromCookie = (event: Event): void => {
+  const form = event.target as HTMLFormElement | null
+  const csrfInput = form?.querySelector<HTMLInputElement>('input[name="_csrf"]')
+  if (csrfInput) {
+    csrfInput.value = readCookie('XSRF-TOKEN')
+  }
+}
 
 // A failed login 302s here with ?e=<code> (e.g. invalid_login); the composable
 // maps it to display text and scrubs the code from the URL after mount.
