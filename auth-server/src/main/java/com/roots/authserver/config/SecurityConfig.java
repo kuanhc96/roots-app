@@ -59,6 +59,7 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
 import org.springframework.security.provisioning.JdbcUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 
@@ -108,7 +109,8 @@ public class SecurityConfig {
             AuthenticationManager authenticationManager,
             MfaRedirectAuthenticationSuccessHandler successHandler,
             TokenBasedRememberMeServices rememberMeServices,
-            RememberMeAuthenticationFilter rememberMeAuthenticationFilter) throws Exception {
+            RememberMeAuthenticationFilter rememberMeAuthenticationFilter,
+            LoginCsrfTokenCookieFilter loginCsrfTokenCookieFilter) throws Exception {
         CsrfTokenRequestAttributeHandler csrfTokenRequestAttributeHandler = new CsrfTokenRequestAttributeHandler();
         http
                 .authenticationManager(authenticationManager)
@@ -134,7 +136,8 @@ public class SecurityConfig {
                 .csrf(csrfConfig -> csrfConfig
                         .csrfTokenRequestHandler(csrfTokenRequestAttributeHandler)
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                );
+                )
+                .addFilterAfter(loginCsrfTokenCookieFilter, CsrfFilter.class);
 
         return http.build();
     }

@@ -45,6 +45,19 @@ class LoginIntegrationTest extends IntegrationTestBase {
     private String email;
     private String userGUID;
 
+    @Test
+    void getLogin_setsXsrfTokenCookie() throws Exception {
+        HttpResponse<String> loginPage = authServerClient.getOnSession(authServerLocation + "/login");
+        assertThat(loginPage.statusCode()).isEqualTo(200);
+
+        String xsrfSetCookie = loginPage.headers().allValues("set-cookie").stream()
+                .filter(header -> header.startsWith("XSRF-TOKEN="))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("No XSRF-TOKEN cookie issued on GET /login"));
+        assertThat(HttpCookie.parse(xsrfSetCookie).get(0).getValue()).isNotBlank();
+        assertThat(xsrfSetCookie.toLowerCase()).doesNotContain("httponly");
+    }
+
     @AfterEach
     void deleteTestAccount() {
         // Tests create their own account; a test that fails before doing so leaves
