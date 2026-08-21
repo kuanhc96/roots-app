@@ -34,8 +34,8 @@ class NegativeCaseIntegrationTest extends IntegrationTestBase {
     @Value("${integration-test-client-secret}")
     private String integrationTestClientSecret;
 
-    @Value("${web-client-location}")
-    private String webClientLocation;
+    @Value("${bff-server-location}")
+    private String bffServerLocation;
 
     private static String uniqueEmail() {
         return "itest+" + UUID.randomUUID() + "@example.com";
@@ -43,8 +43,8 @@ class NegativeCaseIntegrationTest extends IntegrationTestBase {
 
     @BeforeEach
     void setUp() throws Exception {
-        // 2. Start the authorization-code flow
-        String redirectUri = webClientLocation + "/callback";
+        // 2. Start the authorization-code flow in order to generate CSRF token
+        String redirectUri = bffServerLocation + "/callback";
         HttpResponse<String> authorizeResponse =
                 authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
         assertThat(authorizeResponse.statusCode()).isEqualTo(302);

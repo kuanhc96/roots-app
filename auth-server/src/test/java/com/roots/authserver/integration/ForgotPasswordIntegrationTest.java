@@ -34,8 +34,8 @@ class ForgotPasswordIntegrationTest extends IntegrationTestBase {
     private String email;
     private String userGUID;
 
-    @Value("${web-client-location}")
-    private String webClientLocation;
+    @Value("${bff-server-location}")
+    private String bffServerLocation;
 
     @BeforeEach
     void createTestAccount() throws Exception {
@@ -66,7 +66,7 @@ class ForgotPasswordIntegrationTest extends IntegrationTestBase {
 
         // 2. Start the authorization-code flow so a SavedRequest is held in the session;
         //    a fully authenticated login redirects back to it (and thus to the callback).
-        String redirectUri = webClientLocation + "/callback";
+        String redirectUri = bffServerLocation + "/callback";
         HttpResponse<String> authorizeResponse =
                 authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
         assertThat(authorizeResponse.statusCode()).isEqualTo(302);
@@ -76,6 +76,7 @@ class ForgotPasswordIntegrationTest extends IntegrationTestBase {
         HttpResponse<String> loginResponse = authServerClient.login(email, tempPassword);
         assertThat(loginResponse.statusCode()).isEqualTo(302);
         assertThat(loginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/reset-password");
+        // need to followRedirects back to the loginForm in order to get CSRF token
         HttpFlowUtils.followRedirects(authServerClient, authServerLocation, authorizeResponse, redirectUri);
 
         // 3. Set the new password.

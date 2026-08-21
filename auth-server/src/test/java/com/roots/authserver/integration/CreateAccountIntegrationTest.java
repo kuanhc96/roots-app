@@ -17,15 +17,15 @@ class CreateAccountIntegrationTest extends IntegrationTestBase {
     private static final String TEST_NAME = "Integration Test User";
     private static final String TEST_PASSWORD = "Password123";
 
-    @Value("${web-client-location}")
-    private String webClientLocation;
+    @Value("${bff-server-location}")
+    private String bffServerLocation;
 
     private String redirectUri;
     private String email;
 
     @BeforeEach
     void startOAuth2AuthorizationFlow() throws Exception {
-        redirectUri = webClientLocation + "/callback";
+        redirectUri = bffServerLocation + "/callback";
         email = "itest_" + UUID.randomUUID() + "@example.com";
 
         // Start the authorization-code flow so a SavedRequest is held in the session;
