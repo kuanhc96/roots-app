@@ -135,6 +135,7 @@ public class SecurityConfig {
                 )
                 .csrf(csrfConfig -> csrfConfig
                         .csrfTokenRequestHandler(csrfTokenRequestAttributeHandler)
+                        .ignoringRequestMatchers("/**/test")
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 )
                 .addFilterAfter(loginCsrfTokenCookieFilter, CsrfFilter.class);
