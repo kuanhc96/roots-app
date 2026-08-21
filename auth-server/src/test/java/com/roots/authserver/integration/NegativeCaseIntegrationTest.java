@@ -2,7 +2,9 @@ package com.roots.authserver.integration;
 
 import com.roots.authserver.dto.TokenResponse;
 import com.roots.authserver.enums.ErrorCode;
+import com.roots.authserver.util.HttpFlowUtils;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -32,8 +34,22 @@ class NegativeCaseIntegrationTest extends IntegrationTestBase {
     @Value("${integration-test-client-secret}")
     private String integrationTestClientSecret;
 
+    @Value("${web-client-location}")
+    private String webClientLocation;
+
     private static String uniqueEmail() {
         return "itest+" + UUID.randomUUID() + "@example.com";
+    }
+
+    @BeforeEach
+    void setUp() throws Exception {
+        // 2. Start the authorization-code flow
+        String redirectUri = webClientLocation + "/callback";
+        HttpResponse<String> authorizeResponse =
+                authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
+        assertThat(authorizeResponse.statusCode()).isEqualTo(302);
+        HttpFlowUtils.followRedirects(authServerClient, authServerLocation, authorizeResponse, redirectUri);
+
     }
 
     @Nested

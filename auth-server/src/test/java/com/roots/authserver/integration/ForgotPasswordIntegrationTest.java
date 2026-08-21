@@ -2,10 +2,12 @@ package com.roots.authserver.integration;
 
 import com.roots.authserver.dto.CreateTestAccountResponse;
 import com.roots.authserver.dto.UserCredentialTestingResponse;
+import com.roots.authserver.util.HttpFlowUtils;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -31,6 +33,9 @@ class ForgotPasswordIntegrationTest extends IntegrationTestBase {
 
     private String email;
     private String userGUID;
+
+    @Value("${web-client-location}")
+    private String webClientLocation;
 
     @BeforeEach
     void createTestAccount() throws Exception {
@@ -59,11 +64,19 @@ class ForgotPasswordIntegrationTest extends IntegrationTestBase {
         String tempPassword = tempPasswordResponse.body();
         assertThat(tempPassword).isNotBlank();
 
+        // 2. Start the authorization-code flow so a SavedRequest is held in the session;
+        //    a fully authenticated login redirects back to it (and thus to the callback).
+        String redirectUri = webClientLocation + "/callback";
+        HttpResponse<String> authorizeResponse =
+                authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
+        assertThat(authorizeResponse.statusCode()).isEqualTo(302);
+        HttpFlowUtils.followRedirects(authServerClient, authServerLocation, authorizeResponse, redirectUri);
         // 2. Log in with the temp password. passwordChangeRequired=true, so we are routed
         //    to the reset step rather than fully authenticated.
         HttpResponse<String> loginResponse = authServerClient.login(email, tempPassword);
         assertThat(loginResponse.statusCode()).isEqualTo(302);
         assertThat(loginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/reset-password");
+        HttpFlowUtils.followRedirects(authServerClient, authServerLocation, authorizeResponse, redirectUri);
 
         // 3. Set the new password.
         HttpResponse<String> resetResponse = authServerClient.resetPassword(NEW_PASSWORD);

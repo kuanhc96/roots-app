@@ -203,7 +203,7 @@ class LoginIntegrationTest extends IntegrationTestBase {
     @Nested
     class InvalidCredentials {
         @BeforeEach
-        void createTestAccount() {
+        void createTestAccount() throws Exception {
             // 1. Create a fully set-up account (MFA off, verified, no password change) so
             //    the only thing that can fail the login is the credentials themselves.
             email = "itest_" + UUID.randomUUID() + "@example.com";
@@ -214,6 +214,13 @@ class LoginIntegrationTest extends IntegrationTestBase {
             assertThat(createResponse.getBody()).isNotNull();
             userGUID = createResponse.getBody().userGUID();
             assertThat(userGUID).isNotBlank();
+
+            // 2. Start the authorization-code flow
+            String redirectUri = webClientLocation + "/callback";
+            HttpResponse<String> authorizeResponse =
+                    authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
+            assertThat(authorizeResponse.statusCode()).isEqualTo(302);
+            HttpFlowUtils.followRedirects(authServerClient, authServerLocation, authorizeResponse, redirectUri);
         }
 
         @Test
