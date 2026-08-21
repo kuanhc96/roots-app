@@ -15,15 +15,10 @@ import jakarta.servlet.http.HttpServletResponse;
 public class LoginCsrfTokenCookieFilter extends OncePerRequestFilter {
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-            throws ServletException, IOException {
-        if ("GET".equals(request.getMethod()) && "/login".equals(request.getServletPath())) {
-            CsrfToken csrfToken = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
-            if (csrfToken != null) {
-                csrfToken.getToken();
-            }
-        }
-
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+        CsrfToken csrfToken = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
+        // ensures that a csrf token is generated
+        csrfToken.getToken();
         filterChain.doFilter(request, response);
     }
 }
