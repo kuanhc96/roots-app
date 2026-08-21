@@ -1,10 +1,10 @@
 <template>
   <div>
-    <form id="login-form" method="post" action="/login" @submit="syncCsrfTokenFromCookie">
-      <input type="hidden" name="_csrf" :value="state.csrfInput">
+    <form id="login-form" method="post" action="/login">
+      <input type="hidden" name="_csrf" :value="csrfToken">
     </form>
-    <form id="guest-form" method="post" action="/login/guest" @submit="syncCsrfTokenFromCookie">
-      <input type="hidden" name="_csrf" :value="state.csrfInput">
+    <form id="guest-form" method="post" action="/login/guest">
+      <input type="hidden" name="_csrf" :value="csrfToken">
     </form>
 
     <v-card width="400">
@@ -46,26 +46,7 @@
 const route = useRoute()
 const email = ref((route.query.email as string) ?? '')
 const showNotice = ref(route.query.notice === 'tempPasswordSent')
-const state = reactive({
-  csrfInput: ''
-})
-
-const readCookie = (name: string): string => {
-  const prefix = `${name}=`
-  const cookie = document.cookie
-    .split(';')
-    .map(part => part.trim())
-    .find(part => part.startsWith(prefix))
-
-  return cookie ? cookie.slice(prefix.length) : ''
-}
-
-const syncCsrfTokenFromCookie = (event: Event): void => {
-  if (state.csrfInput) {
-    state.csrfInput = readCookie('XSRF-TOKEN')
-  }
-}
-
+const { csrfToken } = useCsrfToken()
 // A failed login 302s here with ?e=<code> (e.g. invalid_login); the composable
 // maps it to display text and scrubs the code from the URL after mount.
 const loginErrorMessage = useServerErrorMessage()
