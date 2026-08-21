@@ -21,6 +21,15 @@ describe('OttLoginForm', () => {
     expect(submit.text()).toContain('Verify')
   })
 
+  it('populates the _csrf hidden field from the XSRF-TOKEN cookie on mount', async () => {
+    document.cookie = 'XSRF-TOKEN=ott-token'
+    const wrapper = await mountSuspended(OttLoginForm, { route: '/ott/login' })
+
+    const csrf = wrapper.find('input[name="_csrf"]')
+    expect(csrf.attributes('type')).toBe('hidden')
+    expect((csrf.element as HTMLInputElement).value).toBe('ott-token')
+  })
+
   it('shows the invalid_token message when the server redirects back with ?e=invalid_token', async () => {
     const wrapper = await mountSuspended(OttLoginForm, {
       route: '/ott/login?e=invalid_token',

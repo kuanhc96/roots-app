@@ -19,17 +19,15 @@ describe('LoginForm', () => {
       expect(guestForm.find('input[name="_csrf"]').attributes('type')).toBe('hidden')
     })
 
-    it('copies the XSRF-TOKEN cookie into each form _csrf field at submit time', async () => {
+    it('populates each form\'s _csrf field from the XSRF-TOKEN cookie on mount', async () => {
       document.cookie = 'XSRF-TOKEN=test-token'
       const wrapper = await mountSuspended(LoginForm, { route: '/login' })
 
-      const loginForm = wrapper.find('form#login-form')
-      await loginForm.trigger('submit')
-      expect((loginForm.find('input[name="_csrf"]').element as HTMLInputElement).value).toBe('test-token')
+      const loginCsrf = wrapper.find('form#login-form input[name="_csrf"]')
+      expect((loginCsrf.element as HTMLInputElement).value).toBe('test-token')
 
-      const guestForm = wrapper.find('form#guest-form')
-      await guestForm.trigger('submit')
-      expect((guestForm.find('input[name="_csrf"]').element as HTMLInputElement).value).toBe('test-token')
+      const guestCsrf = wrapper.find('form#guest-form input[name="_csrf"]')
+      expect((guestCsrf.element as HTMLInputElement).value).toBe('test-token')
     })
 
     it('binds email, password, and remember-me to the login form via the HTML form attribute', async () => {
