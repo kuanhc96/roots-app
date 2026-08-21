@@ -1,10 +1,10 @@
 <template>
   <div>
     <form id="login-form" method="post" action="/login" @submit="syncCsrfTokenFromCookie">
-      <input type="hidden" name="_csrf" value="">
+      <input type="hidden" name="_csrf" :value="state.csrfInput">
     </form>
     <form id="guest-form" method="post" action="/login/guest" @submit="syncCsrfTokenFromCookie">
-      <input type="hidden" name="_csrf" value="">
+      <input type="hidden" name="_csrf" :value="state.csrfInput">
     </form>
 
     <v-card width="400">
@@ -46,6 +46,9 @@
 const route = useRoute()
 const email = ref((route.query.email as string) ?? '')
 const showNotice = ref(route.query.notice === 'tempPasswordSent')
+const state = reactive({
+  csrfInput: ''
+})
 
 const readCookie = (name: string): string => {
   const prefix = `${name}=`
@@ -58,10 +61,8 @@ const readCookie = (name: string): string => {
 }
 
 const syncCsrfTokenFromCookie = (event: Event): void => {
-  const form = event.target as HTMLFormElement | null
-  const csrfInput = form?.querySelector<HTMLInputElement>('input[name="_csrf"]')
-  if (csrfInput) {
-    csrfInput.value = readCookie('XSRF-TOKEN')
+  if (state.csrfInput) {
+    state.csrfInput = readCookie('XSRF-TOKEN')
   }
 }
 
