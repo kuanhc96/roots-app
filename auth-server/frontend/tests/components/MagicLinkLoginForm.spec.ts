@@ -33,6 +33,17 @@ describe('MagicLinkLoginForm', () => {
     expect(wrapper.find('input[name="magicLinkToken"]').attributes('value')).toBe('')
   })
 
+  it('carries a _csrf hidden field populated from the XSRF-TOKEN cookie on mount', async () => {
+    document.cookie = 'XSRF-TOKEN=magic-token'
+    const wrapper = await mountSuspended(MagicLinkLoginForm, {
+      route: '/magic-link/login?magicLinkToken=abc-123',
+    })
+
+    const csrf = wrapper.find('input[name="_csrf"]')
+    expect(csrf.attributes('type')).toBe('hidden')
+    expect((csrf.element as HTMLInputElement).value).toBe('magic-token')
+  })
+
   it('shows the invalid_token message when verification fails and the server redirects back', async () => {
     const wrapper = await mountSuspended(MagicLinkLoginForm, {
       route: '/magic-link/login?e=invalid_token',

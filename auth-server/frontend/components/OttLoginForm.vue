@@ -1,11 +1,13 @@
 <script setup lang="ts">
 // A failed verification 302s back here with ?e=<code> (e.g. invalid_token).
 const ottErrorMessage = useServerErrorMessage()
+const { csrfToken } = useCsrfToken()
 </script>
 
 <template>
   <v-card width="400">
     <form method="post" action="/ott/login">
+      <input type="hidden" name="_csrf" :value="csrfToken" />
       <v-card-title>OTT Login</v-card-title>
       <v-card-text>
         <v-text-field name="ott" label="One Time Token" type="text" />

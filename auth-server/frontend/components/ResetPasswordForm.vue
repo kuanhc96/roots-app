@@ -3,6 +3,7 @@ import { useForm, useField } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/yup'
 import * as yup from 'yup'
 
+const { csrfToken } = useCsrfToken()
 // Same complexity rules as account creation; confirm-match is enforced here client-side
 // (the server only receives newPassword, mirroring how account creation doesn't re-check
 // the confirm field).
@@ -45,6 +46,7 @@ const onSubmit = handleSubmit(() => {
     <!-- Native form submitted after client-side validation passes -->
     <form ref="resetForm" method="post" action="/reset-password" style="display: none">
       <input type="hidden" name="newPassword" :value="newPassword" />
+      <input type="hidden" name="_csrf" :value="csrfToken" />
     </form>
     <v-form @submit.prevent="onSubmit">
       <v-card-title>Set a New Password</v-card-title>

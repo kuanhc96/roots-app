@@ -4,6 +4,7 @@ const magicLinkToken = (route.query.magicLinkToken as string) ?? ''
 
 // A failed verification 302s back here with ?e=invalid_token.
 const magicLinkErrorMessage = useServerErrorMessage()
+const { csrfToken } = useCsrfToken()
 </script>
 
 <template>
@@ -13,6 +14,7 @@ const magicLinkErrorMessage = useServerErrorMessage()
          the one-time token, which keeps email link-prefetchers from burning it. -->
     <form method="post" action="/magic-link/login">
       <input type="hidden" name="magicLinkToken" :value="magicLinkToken" />
+      <input type="hidden" name="_csrf" :value="csrfToken" />
       <v-card-title>Verify your email</v-card-title>
       <v-card-text>
         Click below to complete your sign in.

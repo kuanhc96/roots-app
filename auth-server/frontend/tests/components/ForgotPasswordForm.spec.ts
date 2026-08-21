@@ -56,6 +56,7 @@ describe('ForgotPasswordForm', () => {
 
   describe('temp-password request', () => {
     it('POSTs the email as JSON to /api/temp-password and returns to /login with prefill + notice', async () => {
+      document.cookie = 'XSRF-TOKEN=forgot-token'
       await submitWithEmail('user@example.com')
 
       expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -63,6 +64,7 @@ describe('ForgotPasswordForm', () => {
       expect(url).toBe('/api/temp-password')
       expect(init.method).toBe('POST')
       expect(init.headers['Content-Type']).toBe('application/json')
+      expect(init.headers['X-XSRF-TOKEN']).toBe('forgot-token')
       expect(JSON.parse(init.body)).toEqual({ email: 'user@example.com' })
 
       expect(navigateToMock).toHaveBeenCalledWith({
