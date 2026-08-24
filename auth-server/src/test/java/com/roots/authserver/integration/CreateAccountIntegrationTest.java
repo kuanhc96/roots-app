@@ -25,7 +25,7 @@ class CreateAccountIntegrationTest extends IntegrationTestBase {
 
     @BeforeEach
     void startOAuth2AuthorizationFlow() throws Exception {
-        redirectUri = bffServerLocation + "/callback";
+        redirectUri = bffServerLocation + "/api/auth/callback";
         email = "itest_" + UUID.randomUUID() + "@example.com";
 
         // Start the authorization-code flow so a SavedRequest is held in the session;

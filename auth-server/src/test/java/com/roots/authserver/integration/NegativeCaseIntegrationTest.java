@@ -44,7 +44,7 @@ class NegativeCaseIntegrationTest extends IntegrationTestBase {
     @BeforeEach
     void setUp() throws Exception {
         // 2. Start the authorization-code flow in order to generate CSRF token
-        String redirectUri = bffServerLocation + "/callback";
+        String redirectUri = bffServerLocation + "/api/auth/callback";
         HttpResponse<String> authorizeResponse =
                 authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
         assertThat(authorizeResponse.statusCode()).isEqualTo(302);

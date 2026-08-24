@@ -25,7 +25,7 @@ class GuestLoginIntegrationTest extends IntegrationTestBase {
 
     @Test
     void guestLogin_shouldReturnAccessToken() throws Exception {
-        String redirectUri = bffServerLocation + "/callback";
+        String redirectUri = bffServerLocation + "/api/auth/callback";
 
         HttpResponse<String> authorizeResponse =
                 authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");

@@ -1,5 +1,6 @@
 auth-server-location: http://localhost:9000
 account-management-location: http://localhost:8082
+bff-server-location: http://localhost:8083
 web-client-location: http://localhost:3000
 web-client-secret: secret
 integration-test-client-secret: integration-test-secret

@@ -33,6 +33,7 @@ class ForgotPasswordIntegrationTest extends IntegrationTestBase {
 
     private String email;
     private String userGUID;
+    private String redirectUri;
 
     @Value("${bff-server-location}")
     private String bffServerLocation;
@@ -49,6 +50,8 @@ class ForgotPasswordIntegrationTest extends IntegrationTestBase {
 
         userGUID = createResponse.getBody().userGUID();
         assertThat(userGUID).isNotBlank();
+
+        redirectUri = bffServerLocation + "/api/auth/callback";
     }
 
     @AfterEach
@@ -66,7 +69,6 @@ class ForgotPasswordIntegrationTest extends IntegrationTestBase {
 
         // 2. Start the authorization-code flow so a SavedRequest is held in the session;
         //    a fully authenticated login redirects back to it (and thus to the callback).
-        String redirectUri = bffServerLocation + "/callback";
         HttpResponse<String> authorizeResponse =
                 authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
         assertThat(authorizeResponse.statusCode()).isEqualTo(302);

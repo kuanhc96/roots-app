@@ -69,6 +69,7 @@ class LoginIntegrationTest extends IntegrationTestBase {
 
     @Nested
     class MfaDisabled_EmailVerified_PasswordChangeNotRequired {
+        private String redirectUri;
         @BeforeEach
         void createTestAccount() {
             // 1. Create an account with default roles, MFA disabled, email verified, and no
@@ -81,13 +82,13 @@ class LoginIntegrationTest extends IntegrationTestBase {
             assertThat(createResponse.getBody()).isNotNull();
             userGUID = createResponse.getBody().userGUID();
             assertThat(userGUID).isNotBlank();
+            redirectUri = bffServerLocation + "/api/auth/callback";
         }
 
         @Test
         void login_completesAuthorizationCodeFlow() throws Exception {
             // 2. Start the authorization-code flow so a SavedRequest is held in the session;
             //    a fully authenticated login redirects back to it (and thus to the callback).
-            String redirectUri = bffServerLocation + "/callback";
             HttpResponse<String> authorizeResponse =
                     authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
             assertThat(authorizeResponse.statusCode()).isEqualTo(302);
@@ -150,7 +151,6 @@ class LoginIntegrationTest extends IntegrationTestBase {
         @Test
         void login_withRememberMe_reAuthenticatesWithCookieAfterSessionCleared() throws Exception {
             // 2. Start the authorization-code flow and log in with "remember me" checked.
-            String redirectUri = bffServerLocation + "/callback";
             HttpResponse<String> authorizeResponse =
                     authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
             assertThat(authorizeResponse.statusCode()).isEqualTo(302);
@@ -216,7 +216,7 @@ class LoginIntegrationTest extends IntegrationTestBase {
             assertThat(userGUID).isNotBlank();
 
             // 2. Start the authorization-code flow to generate CSRF token
-            String redirectUri = bffServerLocation + "/callback";
+            String redirectUri = bffServerLocation + "/api/auth/callback";
             HttpResponse<String> authorizeResponse =
                     authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
             assertThat(authorizeResponse.statusCode()).isEqualTo(302);
@@ -249,6 +249,7 @@ class LoginIntegrationTest extends IntegrationTestBase {
 
     @Nested
     class MfaEnabled_EmailVerified_PasswordChangeNotRequired {
+        private String redirectUri;
         @BeforeEach
         void createTestAccount() {
             // 1. Create an account with default roles and MFA enabled — the first factor
@@ -261,12 +262,12 @@ class LoginIntegrationTest extends IntegrationTestBase {
             assertThat(createResponse.getBody()).isNotNull();
             userGUID = createResponse.getBody().userGUID();
             assertThat(userGUID).isNotBlank();
+            redirectUri = bffServerLocation + "/api/auth/callback";
         }
 
         @Test
         void login_noRememberMe_browserNotRemembered() throws Exception {
             // 2. Start the authorization-code flow and log in (no remember-me).
-            String redirectUri = bffServerLocation + "/callback";
             HttpResponse<String> authorizeResponse =
                     authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
             assertThat(authorizeResponse.statusCode()).isEqualTo(302);
@@ -321,7 +322,6 @@ class LoginIntegrationTest extends IntegrationTestBase {
         @Test
         void login_noRememberMe_browserRemembered() throws Exception {
             // 2. Start the authorization-code flow and log in (no remember-me).
-            String redirectUri = bffServerLocation + "/callback";
             HttpResponse<String> authorizeResponse =
                     authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
             assertThat(authorizeResponse.statusCode()).isEqualTo(302);
@@ -384,7 +384,6 @@ class LoginIntegrationTest extends IntegrationTestBase {
         @Test
         void login_withRememberMe_browserNotRemembered() throws Exception {
             // 2. Start the authorization-code flow and log in with "remember me" checked.
-            String redirectUri = bffServerLocation + "/callback";
             HttpResponse<String> authorizeResponse =
                     authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
             assertThat(authorizeResponse.statusCode()).isEqualTo(302);
@@ -461,7 +460,6 @@ class LoginIntegrationTest extends IntegrationTestBase {
         @Test
         void login_withRememberMe_browserRemembered() throws Exception {
             // 2. Start the authorization-code flow and log in with "remember me" checked.
-            String redirectUri = bffServerLocation + "/callback";
             HttpResponse<String> authorizeResponse =
                     authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");
             assertThat(authorizeResponse.statusCode()).isEqualTo(302);
