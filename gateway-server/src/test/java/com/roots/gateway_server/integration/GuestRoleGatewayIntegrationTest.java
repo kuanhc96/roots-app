@@ -56,8 +56,10 @@ class GuestRoleGatewayIntegrationTest {
                 .orElseThrow(() -> new IllegalStateException("No __Host-SESSION cookie on status response"));
 
         HttpResponse<String> authorizeResponse = gatewayClient.getAuthorize(sessionCookie);
-        assertThat(authorizeResponse.statusCode()).isEqualTo(302);
-        String authorizeLocation = authorizeResponse.headers().firstValue("Location").orElseThrow();
+        // getAuthorize follows the bff-server 302 to auth-server's /oauth2/authorize;
+        // that endpoint in turn redirects to /login (saving the request), so we assert
+        // on the URI of the request that produced this response — the authorize URL itself.
+        String authorizeLocation = authorizeResponse.uri().toString();
         assertThat(authorizeLocation).startsWith(authServerLocation + "/oauth2/authorize?");
 
         String callbackPrefix = bffServerLocation + "/api/auth/callback";
