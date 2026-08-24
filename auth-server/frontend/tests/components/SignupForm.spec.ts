@@ -61,8 +61,16 @@ describe('SignupForm', () => {
       expect(wrapper.find('button[type="submit"]').attributes('form')).toBe('signup-form')
     })
 
-    it('links back to /login', async () => {
+    it('carries a _csrf hidden field in the form populated from the XSRF-TOKEN cookie on mount', async () => {
+      document.cookie = 'XSRF-TOKEN=signup-token'
       const wrapper = await mountForm()
+
+      const csrf = wrapper.find('form#signup-form input[name="_csrf"]')
+      expect(csrf.attributes('type')).toBe('hidden')
+      expect((csrf.element as HTMLInputElement).value).toBe('signup-token')
+    })
+
+    it('links back to /login', async () => {      const wrapper = await mountForm()
 
       const hrefs = wrapper.findAll('a').map(a => a.attributes('href'))
       expect(hrefs).toContain('/login')

@@ -3,6 +3,8 @@ import {toTypedSchema} from "@vee-validate/yup";
 import * as yup from "yup";
 import {useField, useForm} from "vee-validate";
 
+const { csrfToken } = useCsrfToken()
+
 const schema = toTypedSchema(
     yup.object({
       email: yup
@@ -24,13 +26,15 @@ const onSubmit = handleSubmit(async (values) => {
   try {
     await fetch('/api/temp-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: values.email,
-      }),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-XSRF-TOKEN': csrfToken.value,
+      },
+      body: JSON.stringify({ email: values.email }),
     })
   } catch (e) {
     // Intentionally ignored — see above.
+    console.log(e)
   } finally {
     await navigateTo({ path: '/login', query: { email: values.email, notice: 'tempPasswordSent' } })
   }

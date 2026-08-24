@@ -17,15 +17,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class GuestLoginIntegrationTest extends IntegrationTestBase {
 
-    @Value("${web-client-location}")
-    private String webClientLocation;
+    @Value("${bff-server-location}")
+    private String bffServerLocation;
 
     @Value("${web-client-secret}")
     private String webClientSecret;
 
     @Test
     void guestLogin_shouldReturnAccessToken() throws Exception {
-        String redirectUri = webClientLocation + "/callback";
+        String redirectUri = bffServerLocation + "/api/auth/callback";
 
         HttpResponse<String> authorizeResponse =
                 authServerClient.startOAuth2AuthorizationFlow("WEB_CLIENT", redirectUri, "openid WEB_CLIENT_READ", "test-state");

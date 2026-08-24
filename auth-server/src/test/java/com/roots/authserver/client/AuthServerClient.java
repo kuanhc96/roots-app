@@ -239,11 +239,7 @@ public class AuthServerClient implements AutoCloseable {
                 .uri(URI.create(baseUrl + "/magic-link/login"))
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString("magicLinkToken=" + encode(magicLinkToken)));
-        buildCookieHeader(requestBuilder);
-        HttpRequest request = requestBuilder.build();
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        captureSetCookies(response.headers());
-        return response;
+        return sendWithCookies(requestBuilder);
     }
 
     /**
@@ -274,11 +270,19 @@ public class AuthServerClient implements AutoCloseable {
 
     private HttpResponse<String> sendWithCookies(HttpRequest.Builder requestBuilder) throws Exception {
         buildCookieHeader(requestBuilder);
+        // For non-safe methods, inject the CSRF token read from the XSRF-TOKEN browser cookie.
+        // Spring Security's CookieCsrfTokenRepository validates the X-XSRF-TOKEN request header.
+        String method = requestBuilder.build().method();
+        if (!"GET".equals(method) && !"HEAD".equals(method)) {
+            String csrf = getCsrfTokenFromBrowserCookies();
+            if (!csrf.isEmpty()) {
+                requestBuilder.header("X-XSRF-TOKEN", csrf);
+            }
+        }
         HttpRequest request = requestBuilder.build();
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         captureSetCookies(response.headers());
         return response;
-
     }
 
     private void buildCookieHeader(HttpRequest.Builder requestBuilder) {
@@ -289,6 +293,11 @@ public class AuthServerClient implements AutoCloseable {
             }
             requestBuilder.header("Cookie", joiner.toString());
         }
+    }
+
+    private String getCsrfTokenFromBrowserCookies() {
+        HttpCookie csrfCookie = browserCookies.get("XSRF-TOKEN");
+        return csrfCookie != null ? csrfCookie.getValue() : "";
     }
 
     private void captureSetCookies(HttpHeaders headers) {

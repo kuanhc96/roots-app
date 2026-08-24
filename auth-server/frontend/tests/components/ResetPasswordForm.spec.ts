@@ -35,16 +35,22 @@ async function submit(wrapper: Awaited<ReturnType<typeof mountForm>>, values: { 
 
 describe('ResetPasswordForm', () => {
   describe('form contract', () => {
-    it('carries only newPassword in the hidden native form posting to /reset-password', async () => {
+    it('carries newPassword and _csrf hidden inputs in the native form posting to /reset-password', async () => {
+      document.cookie = 'XSRF-TOKEN=reset-token'
       const wrapper = await mountForm()
 
       const nativeForm = wrapper.find('form[action="/reset-password"]')
       expect(nativeForm.attributes('method')).toBe('post')
 
       const inputs = nativeForm.findAll('input')
-      expect(inputs).toHaveLength(1)
-      expect(inputs[0].attributes('type')).toBe('hidden')
-      expect(inputs[0].attributes('name')).toBe('newPassword')
+      expect(inputs).toHaveLength(2)
+
+      const newPasswordInput = inputs.find(i => i.attributes('name') === 'newPassword')!
+      expect(newPasswordInput.attributes('type')).toBe('hidden')
+
+      const csrfInput = inputs.find(i => i.attributes('name') === '_csrf')!
+      expect(csrfInput.attributes('type')).toBe('hidden')
+      expect((csrfInput.element as HTMLInputElement).value).toBe('reset-token')
     })
   })
 

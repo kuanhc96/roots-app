@@ -11,10 +11,23 @@ describe('LoginForm', () => {
       const loginForm = wrapper.find('form#login-form')
       expect(loginForm.attributes('action')).toBe('/login')
       expect(loginForm.attributes('method')).toBe('post')
+      expect(loginForm.find('input[name="_csrf"]').attributes('type')).toBe('hidden')
 
       const guestForm = wrapper.find('form#guest-form')
       expect(guestForm.attributes('action')).toBe('/login/guest')
       expect(guestForm.attributes('method')).toBe('post')
+      expect(guestForm.find('input[name="_csrf"]').attributes('type')).toBe('hidden')
+    })
+
+    it('populates each form\'s _csrf field from the XSRF-TOKEN cookie on mount', async () => {
+      document.cookie = 'XSRF-TOKEN=test-token'
+      const wrapper = await mountSuspended(LoginForm, { route: '/login' })
+
+      const loginCsrf = wrapper.find('form#login-form input[name="_csrf"]')
+      expect((loginCsrf.element as HTMLInputElement).value).toBe('test-token')
+
+      const guestCsrf = wrapper.find('form#guest-form input[name="_csrf"]')
+      expect((guestCsrf.element as HTMLInputElement).value).toBe('test-token')
     })
 
     it('binds email, password, and remember-me to the login form via the HTML form attribute', async () => {

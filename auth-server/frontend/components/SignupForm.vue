@@ -27,6 +27,7 @@ const schema = toTypedSchema(
   })
 )
 
+const { csrfToken } = useCsrfToken()
 // A rejected signup 302s back here with ?e=<code>&name=…&email=… — prefill the
 // non-secret fields so the user only re-types the password.
 const route = useRoute()
@@ -59,7 +60,9 @@ const onSubmit = handleSubmit((_values, { evt }) => {
 
 <template>
   <div>
-    <form id="signup-form" method="post" action="/signup" @submit="onSubmit"></form>
+    <form id="signup-form" method="post" action="/signup" @submit="onSubmit">
+      <input type="hidden" name="_csrf" :value="csrfToken"/>
+    </form>
 
     <v-card width="400">
       <v-card-title>Create Account</v-card-title>
