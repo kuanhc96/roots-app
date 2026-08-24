@@ -18,11 +18,11 @@ import lombok.RequiredArgsConstructor;
  * Completes the authorization-code flow when auth-server redirects the browser back:
  * validates the returned {@code state} against the one minted at
  * {@code /api/auth/authorize} (strictly one-time — it is consumed on every callback
- * attempt, valid or not), exchanges the code server-side as WEB_CLIENT, stores the
- * token set in Redis under the session, and hands the browser to web-client. Any
- * failure — an {@code error} from auth-server, missing parameters, a state mismatch,
- * or a rejected exchange — lands on web-client with one generic error code; the
- * specific cause is only logged.
+ * attempt, valid or not), consumes the one-time PKCE verifier and exchanges the code
+ * server-side, stores the token set in Redis under the session, and hands the browser
+ * to web-client. Any failure — an {@code error} from auth-server, missing parameters,
+ * a state mismatch, a missing verifier, or a rejected exchange — lands on web-client
+ * with one generic error code; the specific cause is only logged.
  */
 @Service
 @RequiredArgsConstructor
@@ -47,7 +47,9 @@ public class AuthCallbackService {
     public URI handleCallback(String sessionId, String code, String state, String error) {
         // Consume the pending state unconditionally: one-time use, success or not.
         Optional<String> storedState = tokenStore.find(sessionId, TokenType.OAUTH_STATE);
+        Optional<String> storedCodeVerifier = tokenStore.find(sessionId, TokenType.OAUTH_CODE_VERIFIER);
         tokenStore.delete(sessionId, TokenType.OAUTH_STATE);
+        tokenStore.delete(sessionId, TokenType.OAUTH_CODE_VERIFIER);
 
         if (error != null) {
             log.warn("Authorization failed at auth-server for session {}: {}", sessionId, error);
@@ -61,9 +63,13 @@ public class AuthCallbackService {
             log.warn("State mismatch on callback for session {} — possible CSRF or expired flow", sessionId);
             return failureRedirect();
         }
+        if (storedCodeVerifier.isEmpty()) {
+            log.warn("Missing PKCE code_verifier on callback for session {}", sessionId);
+            return failureRedirect();
+        }
 
         Optional<TokenResponse> tokens = authServerTokenClient
-                .exchangeAuthorizationCode(code, bffServerExternalLocation + CALLBACK_PATH)
+                .exchangeAuthorizationCode(code, bffServerExternalLocation + CALLBACK_PATH, storedCodeVerifier.get())
                 .filter(response -> response.idToken() != null && response.accessToken() != null);
         if (tokens.isEmpty()) {
             log.warn("Authorization-code exchange failed for session {}", sessionId);

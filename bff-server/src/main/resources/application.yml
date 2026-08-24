@@ -35,10 +35,11 @@ auth-server:
 
 web:
   client:
-    id: ${WEB_CLIENT_ID:WEB_CLIENT}
-    # Required, no default: must match the WEB_CLIENT client_secret seeded in
-    # auth-server's oauth2_registered_client table ({noop}secret in dev).
-    secret: ${WEB_CLIENT_SECRET}
+    # Default to the public PKCE client; can be overridden for legacy flows/tests.
+    id: ${WEB_CLIENT_ID:WEB_CLIENT_PKCE}
+    # Optional for public PKCE clients (empty by default). Legacy confidential clients
+    # can still provide this to use client_secret_basic.
+    secret: ${WEB_CLIENT_SECRET:}
     origin: ${WEB_CLIENT_ORIGIN:http://localhost:3000}
 
 token-store:
