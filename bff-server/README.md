@@ -16,7 +16,7 @@ The **backend-for-frontend** for the roots-app platform. Its end goal is to mana
 | `AUTH_SERVER_INTERNAL_LOCATION` | No | `http://localhost:9000` | Auth-server base URL reachable from **inside** the deployment network; used by the server-to-server RestClient (refresh-token exchange). Property `auth-server.internal-location`; docker-compose sets `http://auth-server:9000` |
 | `AUTH_SERVER_EXTERNAL_LOCATION` | No | `http://localhost:9000` | Auth-server base URL reachable from **outside** — i.e. by the user's browser; used in redirects the browser follows (the authorize kick-off). Property `auth-server.external-location`. Separate from the internal one because in docker `auth-server:9000` doesn't resolve outside the compose network — compose leaves this at the default |
 | `WEB_CLIENT_ID` | No | `WEB_CLIENT_PKCE` | OAuth2 client id the bff uses for authorize/token exchanges (property `web.client.id`) |
-| `WEB_CLIENT_SECRET` | No | empty | Optional: needed only when using a legacy confidential client; unused for `WEB_CLIENT_PKCE` public PKCE flow |
+| `WEB_CLIENT_SECRET` | **Yes** | — (no default) | Client secret for `WEB_CLIENT_PKCE` confidential PKCE flow (`client_secret_basic`) |
 | `REFRESH_TOKEN_TTL_SECONDS` | No | `3600` | Redis TTL applied to stored refresh tokens (property `token-store.refresh-token-ttl-seconds`); mirrors auth-server's `refresh-token-time-to-live` |
 
 ## Eureka Service Discovery
@@ -102,7 +102,7 @@ HTTP sessions are stored in Redis via **Spring Session** (`spring-boot-starter-s
 docker compose up -d bff-server-redis
 
 # 2. Run the service (from bff-server/)
-mvn spring-boot:run
+WEB_CLIENT_SECRET=secret mvn spring-boot:run
 ```
 
 For the refresh-exchange path (and the integration tests), auth-server and its DB must also be running — see `auth-server/README.md`.
@@ -169,7 +169,7 @@ The workflow at `.github/workflows/bff-server-ci.yml` runs on pull requests that
 1. `docker login` — auth-server is an **unchanged dependency** here (the paths filter means the PR only touched bff-server), so its image is pulled as `:latest` rather than rebuilt.
 2. Builds the JAR + test classes with `mvn package -DskipTests`.
 3. Builds a local image via Jib: `mvn jib:dockerBuild -Djib.to.image=${DOCKERHUB_USERNAME}/bff-server:ci` (no registry push).
-4. `docker compose up -d --wait bff-server` with `BFF_SERVER_TAG=ci`, `SPRING_PROFILES_ACTIVE=test`, and `WEB_CLIENT_SECRET=secret` — this keeps compatibility with legacy confidential-client test wiring (`WEB_CLIENT`), though the PKCE default client no longer requires a secret at runtime. `depends_on` chains in `bff-server-redis` and `auth-server` (which chains in the self-seeding DB). `--wait` blocks until everything is healthy; bff-server's healthcheck polls `/actuator/health`, whose Redis indicator proves the session store is reachable.
+4. `docker compose up -d --wait bff-server` with `BFF_SERVER_TAG=ci`, `SPRING_PROFILES_ACTIVE=test`, and `WEB_CLIENT_SECRET=secret` — required because the default PKCE client (`WEB_CLIENT_PKCE`) is confidential (`client_secret_basic`). `depends_on` chains in `bff-server-redis` and `auth-server` (which chains in the self-seeding DB). `--wait` blocks until everything is healthy; bff-server's healthcheck polls `/actuator/health`, whose Redis indicator proves the session store is reachable.
 5. Runs the integration tests on the host against `localhost:8083`: `mvn surefire:test '-Dtest=%regex[.*integration.*]'` — the four `/api/auth/status` paths (which drive a real guest login against the auth-server container).
 6. On failure, dumps all container logs (`docker compose logs --no-color`).
 
@@ -185,7 +185,7 @@ The workflow at `.github/workflows/bff-server-ci.yml` runs on pull requests that
 | `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | any password — same |
 | `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` | real Gmail address + App Password — auth-server builds its `JavaMailSender` in every profile and its Actuator mail health indicator opens an SMTP connection on each health poll, so invalid creds would fail the `--wait` step |
 
-The MySQL and mail secrets exist purely for the **auth-server dependency container** — bff-server itself needs no secrets; its only external dependency is Redis, which runs without auth in dev/CI.
+The MySQL and mail secrets exist purely for the **auth-server dependency container**. bff-server also requires `WEB_CLIENT_SECRET` because it authenticates as confidential `WEB_CLIENT_PKCE` during token and refresh exchanges.
 
 ## CD
 
