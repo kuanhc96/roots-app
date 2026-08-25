@@ -73,6 +73,13 @@ public class AuthServerClient implements AutoCloseable {
 
     private HttpResponse<String> sendWithCookies(HttpRequest.Builder requestBuilder) throws Exception {
         buildCookieHeader(requestBuilder);
+        String method = requestBuilder.build().method();
+        if (!"GET".equals(method) && !"HEAD".equals(method)) {
+            String csrf = getCsrfTokenFromBrowserCookies();
+            if (!csrf.isEmpty()) {
+                requestBuilder.header("X-XSRF-TOKEN", csrf);
+            }
+        }
         HttpRequest request = requestBuilder.build();
         HttpResponse<String> response = browser.send(request, HttpResponse.BodyHandlers.ofString());
         captureSetCookies(response.headers());
@@ -103,4 +110,10 @@ public class AuthServerClient implements AutoCloseable {
             browserCookies.put(cookie.getName(), cookie);
         }
     }
+
+    private String getCsrfTokenFromBrowserCookies() {
+        HttpCookie csrfCookie = browserCookies.get("XSRF-TOKEN");
+        return csrfCookie != null ? csrfCookie.getValue() : "";
+    }
+
 }
