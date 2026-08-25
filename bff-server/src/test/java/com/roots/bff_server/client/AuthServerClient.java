@@ -13,6 +13,9 @@ import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -46,6 +49,7 @@ public class AuthServerClient implements AutoCloseable {
     // Manual browser cookie jar: mirrors auth-server integration tests and allows
     // Secure cookies to be replayed on localhost HTTP test traffic.
     private final Map<String, HttpCookie> browserCookies = new LinkedHashMap<>();
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     public AuthServerClient(String baseUrl, String callbackLocation, String clientId, String clientSecret) {
         this.baseUrl = baseUrl;
@@ -67,13 +71,17 @@ public class AuthServerClient implements AutoCloseable {
      * id_token and WEB_CLIENT's grants include refresh_token).
      */
     public TokenResponse fetchGuestTokens() throws Exception {
+        String codeVerifier = generateCodeVerifier();
+        String codeChallenge = toS256CodeChallenge(codeVerifier);
         String authorizeUrl = baseUrl + "/oauth2/authorize?response_type=code"
                 + "&client_id=" + encode(clientId)
                 + "&redirect_uri=" + encode(redirectUri)
                 + "&scope=" + encode("openid WEB_CLIENT_READ")
+                + "&code_challenge=" + encode(codeChallenge)
+                + "&code_challenge_method=" + encode("S256")
                 + "&state=bff-guest-test";
         String callback = completeGuestLogin(authorizeUrl, redirectUri);
-        return exchangeCode(extractQueryParam(callback, "code"));
+        return exchangeCode(extractQueryParam(callback, "code"), codeVerifier);
     }
 
     /**
@@ -131,12 +139,13 @@ public class AuthServerClient implements AutoCloseable {
         machineClient.close();
     }
 
-    private TokenResponse exchangeCode(String code) throws Exception {
+    private TokenResponse exchangeCode(String code, String codeVerifier) throws Exception {
         String basicAuth = Base64.getEncoder().encodeToString(
                 (clientId + ":" + clientSecret).getBytes(StandardCharsets.UTF_8));
         String body = "grant_type=authorization_code"
                 + "&code=" + encode(code)
-                + "&redirect_uri=" + encode(redirectUri);
+                + "&redirect_uri=" + encode(redirectUri)
+                + "&code_verifier=" + encode(codeVerifier);
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/oauth2/token"))
@@ -176,6 +185,13 @@ public class AuthServerClient implements AutoCloseable {
 
     private HttpResponse<String> sendWithCookies(HttpRequest.Builder requestBuilder) throws Exception {
         buildCookieHeader(requestBuilder);
+        String method = requestBuilder.build().method();
+        if (!"GET".equals(method) && !"HEAD".equals(method)) {
+            String csrf = getCsrfTokenFromBrowserCookies();
+            if (!csrf.isEmpty()) {
+                requestBuilder.header("X-XSRF-TOKEN", csrf);
+            }
+        }
         HttpRequest request = requestBuilder.build();
         HttpResponse<String> response = browser.send(request, HttpResponse.BodyHandlers.ofString());
         captureSetCookies(response.headers());
@@ -219,5 +235,26 @@ public class AuthServerClient implements AutoCloseable {
 
     private static String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private String getCsrfTokenFromBrowserCookies() {
+        HttpCookie csrfCookie = browserCookies.get("XSRF-TOKEN");
+        return csrfCookie != null ? csrfCookie.getValue() : "";
+    }
+
+    private static String generateCodeVerifier() {
+        byte[] randomBytes = new byte[32];
+        SECURE_RANDOM.nextBytes(randomBytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+    }
+
+    private static String toS256CodeChallenge(String codeVerifier) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(codeVerifier.getBytes(StandardCharsets.US_ASCII));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
     }
 }
