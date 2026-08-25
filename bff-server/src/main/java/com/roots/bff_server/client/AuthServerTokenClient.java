@@ -30,7 +30,7 @@ public class AuthServerTokenClient {
 
     @Value("${web.client.id}")
     private String clientId;
-    @Value("${web.client.secret:}")
+    @Value("${web.client.secret}")
     private String clientSecret;
     @Value("${auth-server.internal-location}")
     private String authServerInternalLocation;
