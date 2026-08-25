@@ -3,6 +3,7 @@ package com.roots.gateway_server.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.roots.gateway_server.client.AuthServerClient;
+import com.roots.gateway_server.client.BffClient;
 import com.roots.gateway_server.client.GatewayClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,17 +34,20 @@ class GuestRoleGatewayIntegrationTest {
 
     private GatewayClient gatewayClient;
     private AuthServerClient authServerClient;
+    private BffClient bffClient;
 
     @BeforeEach
     void setUp() {
         gatewayClient = new GatewayClient(gatewayServerLocation);
         authServerClient = new AuthServerClient(authServerLocation);
+        bffClient = new BffClient();
     }
 
     @AfterEach
     void tearDown() {
         gatewayClient.close();
         authServerClient.close();
+        bffClient.close();
     }
 
     @Test
@@ -56,10 +60,8 @@ class GuestRoleGatewayIntegrationTest {
                 .orElseThrow(() -> new IllegalStateException("No __Host-SESSION cookie on status response"));
 
         HttpResponse<String> authorizeResponse = gatewayClient.getAuthorize(sessionCookie);
-        // getAuthorize follows the bff-server 302 to auth-server's /oauth2/authorize;
-        // that endpoint in turn redirects to /login (saving the request), so we assert
-        // on the URI of the request that produced this response — the authorize URL itself.
-        String authorizeLocation = authorizeResponse.uri().toString();
+        assertThat(authorizeResponse.statusCode()).isEqualTo(302);
+        String authorizeLocation = authorizeResponse.headers().firstValue("Location").orElseThrow();
         assertThat(authorizeLocation).startsWith(authServerLocation + "/oauth2/authorize?");
 
         String callbackPrefix = bffServerLocation + "/api/auth/callback";
@@ -67,7 +69,7 @@ class GuestRoleGatewayIntegrationTest {
         assertThat(callbackUrl).startsWith(callbackPrefix);
         assertThat(queryParam(callbackUrl, "code")).isNotBlank();
 
-        HttpResponse<String> callbackResponse = gatewayClient.getCallback(callbackUrl, sessionCookie);
+        HttpResponse<String> callbackResponse = bffClient.getCallback(callbackUrl, sessionCookie);
         assertThat(callbackResponse.statusCode()).isEqualTo(302);
         sessionCookie = extractSessionCookie(callbackResponse).orElse(sessionCookie);
 
