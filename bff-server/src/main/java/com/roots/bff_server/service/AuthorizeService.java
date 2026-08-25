@@ -6,8 +6,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.nio.charset.StandardCharsets;
 import java.net.URI;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -26,6 +31,7 @@ public class AuthorizeService {
 
     /** Ample time to complete a login before the pending flow's state evaporates. */
     private static final Duration STATE_TIME_TO_LIVE = Duration.ofMinutes(5);
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final TokenStoreService tokenStore;
 
@@ -40,7 +46,10 @@ public class AuthorizeService {
 
     public URI buildAuthorizeRedirect(String sessionId) {
         String state = UUID.randomUUID().toString();
+        String codeVerifier = generateCodeVerifier();
+        String codeChallenge = generateCodeChallenge(codeVerifier);
         tokenStore.store(sessionId, TokenType.OAUTH_STATE, state, STATE_TIME_TO_LIVE);
+        tokenStore.store(sessionId, TokenType.OAUTH_CODE_VERIFIER, codeVerifier, STATE_TIME_TO_LIVE);
 
         return UriComponentsBuilder.fromUriString(authServerExternalLocation)
                 .path("/oauth2/authorize")
@@ -51,8 +60,26 @@ public class AuthorizeService {
                 .queryParam("redirect_uri", bffServerExternalLocation + AuthCallbackService.CALLBACK_PATH)
                 .queryParam("scope", "openid WEB_CLIENT_READ")
                 .queryParam("state", state)
+                .queryParam("code_challenge", codeChallenge)
+                .queryParam("code_challenge_method", "S256")
                 .encode()
                 .build()
                 .toUri();
+    }
+
+    private static String generateCodeVerifier() {
+        byte[] randomBytes = new byte[32];
+        SECURE_RANDOM.nextBytes(randomBytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+    }
+
+    private static String generateCodeChallenge(String codeVerifier) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(codeVerifier.getBytes(StandardCharsets.US_ASCII));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
     }
 }

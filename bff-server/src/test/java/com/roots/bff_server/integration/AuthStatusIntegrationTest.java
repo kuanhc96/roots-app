@@ -54,9 +54,6 @@ class AuthStatusIntegrationTest {
     @Value("${auth-server-location}")
     private String authServerLocation;
 
-    @Value("${web-client-location}")
-    private String webClientLocation;
-
     @Value("${web-client-id}")
     private String webClientId;
 

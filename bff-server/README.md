@@ -2,7 +2,7 @@
 
 The **backend-for-frontend** for the roots-app platform. Its end goal is to manage OAuth2 tokens on behalf of `web-client`, so tokens no longer need to be stored in the browser (today web-client keeps them in `sessionStorage`). The browser holds only a `__Host-SESSION` cookie; the tokens live server-side in **Redis, keyed by the session id**.
 
-> **Current state.** The login-status endpoint (`GET /api/auth/status`, below) is implemented and fully tested, but the authorization-code callback that writes the *initial* tokens to Redis still lives in web-client — so in real traffic the endpoint answers `isLoggedIn=false` until that move lands. Everything else remains foundation: the security posture, Redis-backed sessions, the docker-compose topology, and the CI/CD pipelines.
+> **Current state.** The bff now owns the full authorization-code callback path (including PKCE verifier handling) and stores token sets in Redis; `GET /api/auth/status` reads/refreshes those server-side tokens per session.
 
 ## Environment Variables
 
@@ -15,8 +15,8 @@ The **backend-for-frontend** for the roots-app platform. Its end goal is to mana
 | `WEB_CLIENT_ORIGIN` | No | `http://localhost:3000` | The **only** origin allowed by CORS (property `web.client.origin`) |
 | `AUTH_SERVER_INTERNAL_LOCATION` | No | `http://localhost:9000` | Auth-server base URL reachable from **inside** the deployment network; used by the server-to-server RestClient (refresh-token exchange). Property `auth-server.internal-location`; docker-compose sets `http://auth-server:9000` |
 | `AUTH_SERVER_EXTERNAL_LOCATION` | No | `http://localhost:9000` | Auth-server base URL reachable from **outside** — i.e. by the user's browser; used in redirects the browser follows (the authorize kick-off). Property `auth-server.external-location`. Separate from the internal one because in docker `auth-server:9000` doesn't resolve outside the compose network — compose leaves this at the default |
-| `WEB_CLIENT_ID` | No | `WEB_CLIENT` | OAuth2 client id the bff authenticates as (property `web.client.id`) |
-| `WEB_CLIENT_SECRET` | **Yes** | — (no default) | Client secret for the above — must match the `WEB_CLIENT` `client_secret` seeded in auth-server's `oauth2_registered_client` table (`{noop}secret` in dev). Startup fails fast without it |
+| `WEB_CLIENT_ID` | No | `WEB_CLIENT_PKCE` | OAuth2 client id the bff uses for authorize/token exchanges (property `web.client.id`) |
+| `WEB_CLIENT_SECRET` | **Yes** | — (no default) | Client secret for `WEB_CLIENT_PKCE` confidential PKCE flow (`client_secret_basic`) |
 | `REFRESH_TOKEN_TTL_SECONDS` | No | `3600` | Redis TTL applied to stored refresh tokens (property `token-store.refresh-token-ttl-seconds`); mirrors auth-server's `refresh-token-time-to-live` |
 
 ## Eureka Service Discovery
@@ -47,7 +47,7 @@ The endpoint web-client calls to ask "does this browser have a valid login?". Se
 **Flow** (`AuthController` → `AuthStatusService`):
 
 1. `<sessionId>:id_token` present → logged in. Its payload is decoded (no signature verification — the bff itself stored it, and it originally came from auth-server over a server-to-server call) and returned as `{"isLoggedIn": true, "email": …, "userGUID": …, "roles": […]}`. A guest login has no `user_credential` row, so its response carries no `userGUID` field.
-2. No id_token, but `<sessionId>:refresh_token` present → `AuthServerTokenClient` performs the `refresh_token` grant against `POST {auth-server.internal-location}/oauth2/token`, authenticating as **WEB_CLIENT** (refresh tokens are bound to the client they were issued to, so the bff must use the same registered client web-client's authorization codes are issued for). On success all three fresh tokens are stored and the id_token claims returned. auth-server seeds WEB_CLIENT with `reuse-refresh-tokens=false`, so every exchange **rotates** the refresh token — the stored one is always new.
+2. No id_token, but `<sessionId>:refresh_token` present → `AuthServerTokenClient` performs the `refresh_token` grant against `POST {auth-server.internal-location}/oauth2/token`, using the configured `web.client.id` (refresh tokens are bound to the issuing client). On success all three fresh tokens are stored and the id_token claims returned. auth-server seeds both web clients with `reuse-refresh-tokens=false`, so every exchange **rotates** the refresh token — the stored one is always new.
 3. The exchange fails (expired, revoked, already-rotated, or garbage token → 400) → the stored refresh token is deleted (rotation means it can never succeed later) and the answer is `{"isLoggedIn": false}`.
 4. Neither key → `{"isLoggedIn": false}` (claim fields omitted entirely — `NON_NULL` serialization).
 
@@ -62,13 +62,14 @@ HTTP/1.1 302
 Location: {auth-server.external-location}/oauth2/authorize
   ?response_type=code
   &client_id={web.client.id}
-  &redirect_uri={web.client.origin}/callback
+  &redirect_uri={bff-server.external-location}/api/auth/callback
   &scope=openid%20WEB_CLIENT_READ
   &state=<uuid>
+  &code_challenge=<sha256(verifier)>
+  &code_challenge_method=S256
 ```
 
-- **state** is minted by the bff and stored at `<sessionId>:oauth_state` (TTL 5 minutes) — the bff, not the browser, owns CSRF validation when the flow returns. The future bff callback endpoint validates against this key; when web-client is repointed at this endpoint (a later step) its own sessionStorage state logic goes away. Until that repoint, nothing calls this endpoint in production.
-- **redirect_uri** stays web-client's `/callback` for now (the only URI registered for WEB_CLIENT in the DB seed); moving the code exchange behind a bff callback is a later step.
+- **state** and **PKCE code_verifier** are minted by the bff and stored at `<sessionId>:oauth_state` and `<sessionId>:oauth_code_verifier` (TTL 5 minutes); both are consumed one-time on callback.
 - **No logged-in short-circuit**: if the auth-server session is already authenticated the flow completes silently without a login form; web-client should consult `/api/auth/status` first anyway.
 - The Location uses `auth-server.external-location`, not `auth-server.internal-location` — the browser follows this redirect from outside the docker network, where the internal hostname doesn't resolve.
 
@@ -100,7 +101,7 @@ HTTP sessions are stored in Redis via **Spring Session** (`spring-boot-starter-s
 # 1. Start the Redis instance (no env vars needed)
 docker compose up -d bff-server-redis
 
-# 2. Run the service (from bff-server/); the secret must match auth-server's WEB_CLIENT seed
+# 2. Run the service (from bff-server/)
 WEB_CLIENT_SECRET=secret mvn spring-boot:run
 ```
 
@@ -113,7 +114,7 @@ curl -i http://localhost:8083/actuator/health     # expect 200, {"status":"UP"},
 docker exec bff-server-redis redis-cli --scan --pattern "spring:session:*"
 ```
 
-The full stack can also be run from images via `docker compose up -d --wait bff-server`, which chains in `bff-server-redis` and `auth-server` (and its DB) through `depends_on`. The auth-server dependency exists so the compose topology is ready for the upcoming token work — no bff-server code talks to auth-server yet.
+The full stack can also be run from images via `docker compose up -d --wait bff-server`, which chains in `bff-server-redis` and `auth-server` (and its DB) through `depends_on`.
 
 ## Integration Tests
 
@@ -168,7 +169,7 @@ The workflow at `.github/workflows/bff-server-ci.yml` runs on pull requests that
 1. `docker login` — auth-server is an **unchanged dependency** here (the paths filter means the PR only touched bff-server), so its image is pulled as `:latest` rather than rebuilt.
 2. Builds the JAR + test classes with `mvn package -DskipTests`.
 3. Builds a local image via Jib: `mvn jib:dockerBuild -Djib.to.image=${DOCKERHUB_USERNAME}/bff-server:ci` (no registry push).
-4. `docker compose up -d --wait bff-server` with `BFF_SERVER_TAG=ci`, `SPRING_PROFILES_ACTIVE=test`, and `WEB_CLIENT_SECRET=secret` — the secret is hardcoded in the workflow (not a GitHub secret) because it matches the `{noop}secret` WEB_CLIENT seed already public in the checked-in SQL. `depends_on` chains in `bff-server-redis` and `auth-server` (which chains in the self-seeding DB). `--wait` blocks until everything is healthy; bff-server's healthcheck polls `/actuator/health`, whose Redis indicator proves the session store is reachable.
+4. `docker compose up -d --wait bff-server` with `BFF_SERVER_TAG=ci`, `SPRING_PROFILES_ACTIVE=test`, and `WEB_CLIENT_SECRET=secret` — required because the default PKCE client (`WEB_CLIENT_PKCE`) is confidential (`client_secret_basic`). `depends_on` chains in `bff-server-redis` and `auth-server` (which chains in the self-seeding DB). `--wait` blocks until everything is healthy; bff-server's healthcheck polls `/actuator/health`, whose Redis indicator proves the session store is reachable.
 5. Runs the integration tests on the host against `localhost:8083`: `mvn surefire:test '-Dtest=%regex[.*integration.*]'` — the four `/api/auth/status` paths (which drive a real guest login against the auth-server container).
 6. On failure, dumps all container logs (`docker compose logs --no-color`).
 
@@ -184,7 +185,7 @@ The workflow at `.github/workflows/bff-server-ci.yml` runs on pull requests that
 | `MYSQL_AUTH_SERVER_ROOT_PASSWORD` | any password — same |
 | `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` | real Gmail address + App Password — auth-server builds its `JavaMailSender` in every profile and its Actuator mail health indicator opens an SMTP connection on each health poll, so invalid creds would fail the `--wait` step |
 
-The MySQL and mail secrets exist purely for the **auth-server dependency container** — bff-server itself needs no secrets; its only external dependency is Redis, which runs without auth in dev/CI.
+The MySQL and mail secrets exist purely for the **auth-server dependency container**. bff-server also requires `WEB_CLIENT_SECRET` because it authenticates as confidential `WEB_CLIENT_PKCE` during token and refresh exchanges.
 
 ## CD
 
