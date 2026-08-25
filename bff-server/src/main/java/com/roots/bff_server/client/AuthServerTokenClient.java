@@ -75,11 +75,7 @@ public class AuthServerTokenClient {
         try {
             return Optional.ofNullable(restClient.post()
                     .uri("/oauth2/token")
-                    .headers(headers -> {
-                        if (!clientSecret.isBlank()) {
-                            headers.setBasicAuth(clientId, clientSecret);
-                        }
-                    })
+                    .headers(headers -> headers.setBasicAuth(clientId, clientSecret))
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(form)
                     .retrieve()
