@@ -62,6 +62,27 @@ public class AuthServerClient implements AutoCloseable {
     }
 
     /**
+     * Starts the Authorization Code flow with PKCE parameters.
+     */
+    public HttpResponse<String> startOAuth2AuthorizationFlowWithPKCE(
+            String clientId,
+            String redirectUri,
+            String scope,
+            String state,
+            String codeChallenge,
+            String codeChallengeMethod) throws Exception {
+        String authorizeUrl = baseUrl + "/oauth2/authorize?response_type=code"
+                + "&client_id=" + encode(clientId)
+                + "&redirect_uri=" + encode(redirectUri)
+                + "&scope=" + encode(scope)
+                + "&state=" + encode(state)
+                + "&code_challenge=" + encode(codeChallenge)
+                + "&code_challenge_method=" + encode(codeChallengeMethod);
+
+        return getOnSession(authorizeUrl);
+    }
+
+    /**
      * Submits POST /login/guest and returns the auth-server's immediate response.
      * The caller follows the resulting redirect chain (via {@link #getOnSession(String)})
      * and asserts on the status / Location.

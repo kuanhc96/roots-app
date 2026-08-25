@@ -75,6 +75,33 @@ public class OAuth2Client implements AutoCloseable {
         return objectMapper.readValue(response.body(), TokenResponse.class);
     }
 
+    /**
+     * Performs an authorization_code exchange for a confidential PKCE client.
+     */
+    public TokenResponse getAuthorizationGrantTokenWithPKCE(
+            String code,
+            String clientId,
+            String clientSecret,
+            String redirectUri,
+            String codeVerifier) throws Exception {
+        String credentials = Base64.getEncoder().encodeToString(
+                (clientId + ":" + clientSecret).getBytes(StandardCharsets.UTF_8));
+        String body = "grant_type=authorization_code"
+                + "&code=" + encode(code)
+                + "&redirect_uri=" + encode(redirectUri)
+                + "&code_verifier=" + encode(codeVerifier);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/oauth2/token"))
+                .header("Authorization", "Basic " + credentials)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        return objectMapper.readValue(response.body(), TokenResponse.class);
+    }
+
     private static String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
