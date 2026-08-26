@@ -12,7 +12,9 @@ public enum TokenType {
     /** The OAuth2 state minted at /api/auth/authorize; validated by the future callback. */
     OAUTH_STATE("oauth_state"),
     /** The PKCE code_verifier minted at /api/auth/authorize; consumed at callback. */
-    OAUTH_CODE_VERIFIER("oauth_code_verifier");
+    OAUTH_CODE_VERIFIER("oauth_code_verifier"),
+    /** The OIDC nonce minted at /api/auth/authorize; validated against the id_token claim at callback. */
+    OAUTH_NONCE("oauth_nonce");
 
     private final String key;
 

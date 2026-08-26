@@ -48,8 +48,10 @@ public class AuthorizeService {
         String state = UUID.randomUUID().toString();
         String codeVerifier = generateCodeVerifier();
         String codeChallenge = generateCodeChallenge(codeVerifier);
+        String nonce = generateNonce();
         tokenStore.store(sessionId, TokenType.OAUTH_STATE, state, STATE_TIME_TO_LIVE);
         tokenStore.store(sessionId, TokenType.OAUTH_CODE_VERIFIER, codeVerifier, STATE_TIME_TO_LIVE);
+        tokenStore.store(sessionId, TokenType.OAUTH_NONCE, nonce, STATE_TIME_TO_LIVE);
 
         return UriComponentsBuilder.fromUriString(authServerExternalLocation)
                 .path("/oauth2/authorize")
@@ -60,11 +62,16 @@ public class AuthorizeService {
                 .queryParam("redirect_uri", bffServerExternalLocation + AuthCallbackService.CALLBACK_PATH)
                 .queryParam("scope", "openid WEB_CLIENT_READ")
                 .queryParam("state", state)
+                .queryParam("nonce", nonce)
                 .queryParam("code_challenge", codeChallenge)
                 .queryParam("code_challenge_method", "S256")
                 .encode()
                 .build()
                 .toUri();
+    }
+
+    private static String generateNonce() {
+        return UUID.randomUUID().toString();
     }
 
     private static String generateCodeVerifier() {

@@ -90,6 +90,13 @@ class AuthorizeIntegrationTest {
         assertThat(state).isNotBlank();
         assertThat(tokenStore.find(sessionId, TokenType.OAUTH_STATE)).contains(state);
         assertThat(tokenStore.getTimeToLive(sessionId, TokenType.OAUTH_STATE)).isPositive();
+
+        // The nonce in the URL is exactly the one held for this session; the bff
+        // validates it against the id_token claim at callback.
+        String nonce = AuthServerClient.queryParam(location, "nonce");
+        assertThat(nonce).isNotBlank();
+        assertThat(tokenStore.find(sessionId, TokenType.OAUTH_NONCE)).contains(nonce);
+        assertThat(tokenStore.getTimeToLive(sessionId, TokenType.OAUTH_NONCE)).isPositive();
     }
 
     @Test
