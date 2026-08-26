@@ -96,8 +96,9 @@ class CallbackIntegrationTest {
         assertThat(tokenStore.getTimeToLive(sessionId, TokenType.ID_TOKEN)).isPositive();
         assertThat(tokenStore.getTimeToLive(sessionId, TokenType.ACCESS_TOKEN)).isPositive();
         assertThat(tokenStore.getTimeToLive(sessionId, TokenType.REFRESH_TOKEN)).isPositive();
-        // The state is single-use: consumed by the callback.
+        // The state and nonce are single-use: consumed by the callback.
         assertThat(tokenStore.find(sessionId, TokenType.OAUTH_STATE)).isEmpty();
+        assertThat(tokenStore.find(sessionId, TokenType.OAUTH_NONCE)).isEmpty();
 
         // The session is now a logged-in session as far as the status endpoint goes.
         HttpResponse<String> status = bffClient.getLoginStatus(sessionCookie);
