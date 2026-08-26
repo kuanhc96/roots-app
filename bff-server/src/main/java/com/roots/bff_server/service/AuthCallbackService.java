@@ -3,6 +3,7 @@ package com.roots.bff_server.service;
 import com.roots.bff_server.client.AuthServerTokenClient;
 import com.roots.bff_server.dto.response.TokenResponse;
 import com.roots.bff_server.enums.TokenType;
+import com.roots.bff_server.util.JwtPayload;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,11 +46,13 @@ public class AuthCallbackService {
     private String webClientOrigin;
 
     public URI handleCallback(String sessionId, String code, String state, String error) {
-        // Consume the pending state unconditionally: one-time use, success or not.
+        // Consume all pending one-time values unconditionally: one-time use, success or not.
         Optional<String> storedState = tokenStore.find(sessionId, TokenType.OAUTH_STATE);
         Optional<String> storedCodeVerifier = tokenStore.find(sessionId, TokenType.OAUTH_CODE_VERIFIER);
+        Optional<String> storedNonce = tokenStore.find(sessionId, TokenType.OAUTH_NONCE);
         tokenStore.delete(sessionId, TokenType.OAUTH_STATE);
         tokenStore.delete(sessionId, TokenType.OAUTH_CODE_VERIFIER);
+        tokenStore.delete(sessionId, TokenType.OAUTH_NONCE);
 
         if (error != null) {
             log.warn("Authorization failed at auth-server for session {}: {}", sessionId, error);
@@ -73,6 +76,12 @@ public class AuthCallbackService {
                 .filter(response -> response.idToken() != null && response.accessToken() != null);
         if (tokens.isEmpty()) {
             log.warn("Authorization-code exchange failed for session {}", sessionId);
+            return failureRedirect();
+        }
+
+        String idTokenNonce = JwtPayload.parse(tokens.get().idToken()).getString("nonce");
+        if (storedNonce.isEmpty() || !storedNonce.get().equals(idTokenNonce)) {
+            log.warn("Nonce mismatch on callback for session {} — id_token nonce does not match stored nonce", sessionId);
             return failureRedirect();
         }
 
