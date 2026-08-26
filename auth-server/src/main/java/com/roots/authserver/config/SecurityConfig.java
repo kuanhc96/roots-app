@@ -120,7 +120,7 @@ public class SecurityConfig {
                 .rememberMe(rm -> rm.rememberMeServices(rememberMeServices))
                 .addFilterAfter(rememberMeAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .formLogin(form -> form
-                        .loginPage("/login")
+                        .loginPage("/sso/login")
                         .loginProcessingUrl("/login")
                         .usernameParameter("email")
                         .successHandler(successHandler)

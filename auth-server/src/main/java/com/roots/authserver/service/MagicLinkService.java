@@ -24,7 +24,7 @@ public class MagicLinkService {
     public void issueAndEmail(String email) {
         OneTimeToken oneTimeToken = jdbcOneTimeTokenService.generate(new GenerateOneTimeTokenRequest(email));
         String magicLink = ServletUriComponentsBuilder.fromCurrentContextPath()
-                .path("/magic-link/login")
+                .path("/sso/magic-link/login")
                 .queryParam("magicLinkToken", oneTimeToken.getTokenValue())
                 .build()
                 .toUriString();

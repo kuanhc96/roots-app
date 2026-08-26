@@ -24,7 +24,7 @@ public class SpaLoginEntryPoint implements AuthenticationEntryPoint {
         MultiValueMap<String, String> originalParams =
                 UriComponentsBuilder.fromUriString(originalUrl).build().getQueryParams();
 
-        UriComponentsBuilder redirect = UriComponentsBuilder.fromPath("/login");
+        UriComponentsBuilder redirect = UriComponentsBuilder.fromPath("/sso/login");
         for (String param : PASSTHROUGH_PARAMS) {
             String value = originalParams.getFirst(param);
             if (value != null) redirect.queryParam(param, value);
