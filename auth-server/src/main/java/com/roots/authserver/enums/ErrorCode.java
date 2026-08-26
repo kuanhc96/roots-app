@@ -16,8 +16,9 @@ public enum ErrorCode {
     INVALID_TOKEN("invalid_token"),
     INVALID_PASSWORD("invalid_password"),
     OAUTH_REDIRECT_FAILED("oauth_redirect_failed"),
-    /** Reserved: mapped in errorMessages.ts but not currently emitted by the server. */
+    /** Emitted when session-bound flows are called without the required pending session token. */
     NO_MFA_PENDING("no_mfa_pending"),
+    OTT_RESEND_COOLDOWN("ott_resend_cooldown"),
     EMAIL_TAKEN("email_taken"),
     INVALID_REQUEST("invalid_request"),
     /**

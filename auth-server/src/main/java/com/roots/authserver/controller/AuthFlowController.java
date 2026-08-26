@@ -1,11 +1,16 @@
 package com.roots.authserver.controller;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ott.JdbcOneTimeTokenService;
+import org.springframework.security.authentication.ott.GenerateOneTimeTokenRequest;
+import org.springframework.security.authentication.ott.OneTimeToken;
 import org.springframework.security.authentication.ott.OneTimeTokenAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
@@ -20,6 +25,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.util.UriUtils;
 
 import com.roots.authserver.dto.request.CreateAccountRequest;
@@ -33,6 +39,7 @@ import com.roots.authserver.principal.MfaPendingAuthenticationToken;
 import com.roots.authserver.exception.SocialLoginException;
 import com.roots.authserver.principal.PasswordChangePendingAuthenticationToken;
 import com.roots.authserver.principal.SocialLoginAuthenticationToken;
+import com.roots.authserver.service.EmailService;
 import com.roots.authserver.service.GoogleAuthorizeService;
 import com.roots.authserver.service.InMemoryOneTimePinService;
 import com.roots.authserver.service.MagicLinkService;
@@ -64,12 +71,14 @@ import lombok.extern.slf4j.Slf4j;
 public class AuthFlowController {
     /** Must match the path of {@link #googleCallback}. */
     private static final String GOOGLE_CALLBACK_PATH = "/login/google/callback";
+    private static final Duration OTT_RESEND_COOLDOWN = Duration.ofSeconds(30);
 
     private final InMemoryOneTimePinService inMemoryOneTimePinService;
     private final JdbcOneTimeTokenService jdbcOneTimeTokenService;
     private final UserCredentialService userCredentialService;
     private final UserDetailsService userDetailsService;
     private final MagicLinkService magicLinkService;
+    private final EmailService emailService;
     private final SocialLoginService socialLoginService;
     private final GoogleAuthorizeService googleAuthorizeService;
     private final AuthenticationManager authenticationManager;
@@ -201,6 +210,31 @@ public class AuthFlowController {
                 return "redirect:/sso/ott/login?e=" + ErrorCode.OAUTH_REDIRECT_FAILED;
             }
         }
+    }
+
+    @PostMapping("/api/ott/resend")
+    @ResponseBody
+    public ResponseEntity<OttResendResponse> resendOtt() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (!(authentication instanceof MfaPendingAuthenticationToken pending)) {
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(OttResendResponse.error(ErrorCode.NO_MFA_PENDING, 0));
+        }
+
+        UserDetails user = (UserDetails) pending.getPrincipal();
+        long retryAfterSeconds = inMemoryOneTimePinService.getResendCooldownRemainingSeconds(
+                user.getUsername(), OTT_RESEND_COOLDOWN);
+        if (retryAfterSeconds > 0) {
+            return ResponseEntity
+                    .status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(OttResendResponse.error(ErrorCode.OTT_RESEND_COOLDOWN, retryAfterSeconds));
+        }
+
+        GenerateOneTimeTokenRequest generateOneTimeTokenRequest = new GenerateOneTimeTokenRequest(user.getUsername());
+        OneTimeToken oneTimeToken = inMemoryOneTimePinService.generate(generateOneTimeTokenRequest);
+        emailService.sendOTTEmail(user.getUsername(), oneTimeToken.getTokenValue());
+        return ResponseEntity.ok(OttResendResponse.success());
     }
 
     @Operation(
@@ -415,6 +449,16 @@ public class AuthFlowController {
             return "redirect:" + savedRequest.getRedirectUrl();
         } else {
             return "redirect:/sso/login?e=" + ErrorCode.OAUTH_REDIRECT_FAILED;
+        }
+    }
+
+    private record OttResendResponse(String status, String error, long retryAfterSeconds) {
+        private static OttResendResponse success() {
+            return new OttResendResponse("ok", null, 0);
+        }
+
+        private static OttResendResponse error(ErrorCode errorCode, long retryAfterSeconds) {
+            return new OttResendResponse("error", errorCode.getValue(), retryAfterSeconds);
         }
     }
 }

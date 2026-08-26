@@ -9,6 +9,7 @@ export const errorMessages: Record<string, string> = {
   invalid_password: 'The new password does not meet the password requirements',
   oauth_redirect_failed: 'Something went wrong resuming your sign-in. Please start over.',
   no_mfa_pending: 'Your login session has expired. Please log in again.',
+  ott_resend_cooldown: 'Please wait before requesting another verification code.',
   email_taken: 'The email you provided already exists on another account. Please log in',
   invalid_request: 'The signup information provided is invalid. Please try again.',
   social_login_failed: 'Google sign-in failed. Please try again or sign in with your password.'
