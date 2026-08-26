@@ -108,7 +108,7 @@ const onSubmit = handleSubmit((_values, { evt }) => {
           Create Account
         </v-btn>
         <v-spacer></v-spacer>
-        <NuxtLink to="/login">Already have an account? Log in</NuxtLink>
+        <NuxtLink to="/sso/login">Already have an account? Log in</NuxtLink>
       </v-card-actions>
     </v-card>
   </div>

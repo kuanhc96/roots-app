@@ -36,7 +36,7 @@ const onSubmit = handleSubmit(async (values) => {
     // Intentionally ignored — see above.
     console.log(e)
   } finally {
-    await navigateTo({ path: '/login', query: { email: values.email, notice: 'tempPasswordSent' } })
+    await navigateTo({ path: '/sso/login', query: { email: values.email, notice: 'tempPasswordSent' } })
   }
 })
 </script>
@@ -59,7 +59,7 @@ const onSubmit = handleSubmit(async (values) => {
           Get Temporary Password
         </v-btn>
         <v-spacer></v-spacer>
-        <NuxtLink to="/login">Back To Log in</NuxtLink>
+        <NuxtLink to="/sso/login">Back To Log in</NuxtLink>
       </v-card-actions>
     </v-form>
   </v-card>
