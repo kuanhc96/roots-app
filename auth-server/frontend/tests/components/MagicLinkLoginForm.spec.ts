@@ -6,7 +6,7 @@ import { errorMessages } from '~/utils/errorMessages'
 describe('MagicLinkLoginForm', () => {
   it('posts the token from the emailed link as a hidden field to /magic-link/login', async () => {
     const wrapper = await mountSuspended(MagicLinkLoginForm, {
-      route: '/magic-link/login?magicLinkToken=abc-123',
+      route: '/sso/magic-link/login?magicLinkToken=abc-123',
     })
 
     const form = wrapper.find('form')
@@ -20,7 +20,7 @@ describe('MagicLinkLoginForm', () => {
 
   it('requires a button click to consume the token — no auto-submitting script', async () => {
     const wrapper = await mountSuspended(MagicLinkLoginForm, {
-      route: '/magic-link/login?magicLinkToken=abc-123',
+      route: '/sso/magic-link/login?magicLinkToken=abc-123',
     })
 
     const submit = wrapper.find('button[type="submit"]')
@@ -28,7 +28,7 @@ describe('MagicLinkLoginForm', () => {
   })
 
   it('posts an empty token when the link carries none (the server answers with invalid_token)', async () => {
-    const wrapper = await mountSuspended(MagicLinkLoginForm, { route: '/magic-link/login' })
+    const wrapper = await mountSuspended(MagicLinkLoginForm, { route: '/sso/magic-link/login' })
 
     expect(wrapper.find('input[name="magicLinkToken"]').attributes('value')).toBe('')
   })
@@ -36,7 +36,7 @@ describe('MagicLinkLoginForm', () => {
   it('carries a _csrf hidden field populated from the XSRF-TOKEN cookie on mount', async () => {
     document.cookie = 'XSRF-TOKEN=magic-token'
     const wrapper = await mountSuspended(MagicLinkLoginForm, {
-      route: '/magic-link/login?magicLinkToken=abc-123',
+      route: '/sso/magic-link/login?magicLinkToken=abc-123',
     })
 
     const csrf = wrapper.find('input[name="_csrf"]')
@@ -46,7 +46,7 @@ describe('MagicLinkLoginForm', () => {
 
   it('shows the invalid_token message when verification fails and the server redirects back', async () => {
     const wrapper = await mountSuspended(MagicLinkLoginForm, {
-      route: '/magic-link/login?e=invalid_token',
+      route: '/sso/magic-link/login?e=invalid_token',
     })
 
     expect(wrapper.text()).toContain(errorMessages.invalid_token)

@@ -38,15 +38,15 @@ public class MfaRedirectAuthenticationSuccessHandler extends SavedRequestAwareAu
             // Temp password accepted; force the user to set a new one. The temporary
             // password was already emailed during the forgot-password request, so nothing
             // is generated here — just send them to the reset form.
-            response.sendRedirect("/reset-password");
+            response.sendRedirect("/sso/reset-password");
         } else if (auth instanceof MfaPendingAuthenticationToken) {
             GenerateOneTimeTokenRequest generateOneTimeTokenRequest = new GenerateOneTimeTokenRequest(auth.getName());
             OneTimeToken oneTimeToken = inMemoryOneTimePinService.generate(generateOneTimeTokenRequest);
             emailService.sendOTTEmail(auth.getName(), oneTimeToken.getTokenValue());
-            response.sendRedirect("/ott/login");
+            response.sendRedirect("/sso/ott/login");
         } else if (auth instanceof CreateAccountPendingAuthenticationToken) {
             magicLinkService.issueAndEmail(auth.getName());
-            response.sendRedirect("/signup/success");
+            response.sendRedirect("/sso/signup/success");
         } else {
             super.onAuthenticationSuccess(request, response, auth);
         }

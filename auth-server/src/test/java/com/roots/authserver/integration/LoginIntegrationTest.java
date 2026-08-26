@@ -150,7 +150,7 @@ class LoginIntegrationTest extends IntegrationTestBase {
             HttpResponse<String> loginPage = HttpFlowUtils.followRedirects(
                     authServerClient, authServerLocation, secondAuthorize, redirectUri);
             assertThat(loginPage.statusCode()).isEqualTo(200);
-            assertThat(loginPage.uri().getPath()).isEqualTo("/login");
+            assertThat(loginPage.uri().getPath()).isEqualTo("/sso/login");
         }
 
         @Test
@@ -341,8 +341,8 @@ class LoginIntegrationTest extends IntegrationTestBase {
             // 3. The first factor alone lands on the MFA page, not the callback.
             HttpResponse<String> loginResponse = authServerClient.login(email, TEST_PASSWORD);
             assertThat(loginResponse.statusCode()).isEqualTo(302);
-            assertThat(loginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/ott/login");
-            HttpResponse<String> ottPage = authServerClient.getOnSession(authServerLocation + "/ott/login");
+            assertThat(loginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/sso/ott/login");
+            HttpResponse<String> ottPage = authServerClient.getOnSession(authServerLocation + "/sso/ott/login");
             assertThat(ottPage.statusCode()).isEqualTo(200);
 
             // 4. Obtain the OTT out-of-band and submit it, leaving "Remember this
@@ -381,7 +381,7 @@ class LoginIntegrationTest extends IntegrationTestBase {
 
             HttpResponse<String> secondLoginResponse = authServerClient.login(email, TEST_PASSWORD);
             assertThat(secondLoginResponse.statusCode()).isEqualTo(302);
-            assertThat(secondLoginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/ott/login");
+            assertThat(secondLoginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/sso/ott/login");
         }
 
         @Test
@@ -395,8 +395,8 @@ class LoginIntegrationTest extends IntegrationTestBase {
             // 3. The first factor alone lands on the MFA page, not the callback.
             HttpResponse<String> loginResponse = authServerClient.login(email, TEST_PASSWORD);
             assertThat(loginResponse.statusCode()).isEqualTo(302);
-            assertThat(loginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/ott/login");
-            HttpResponse<String> ottPage = authServerClient.getOnSession(authServerLocation + "/ott/login");
+            assertThat(loginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/sso/ott/login");
+            HttpResponse<String> ottPage = authServerClient.getOnSession(authServerLocation + "/sso/ott/login");
             assertThat(ottPage.statusCode()).isEqualTo(200);
 
             // 4. Obtain the OTT out-of-band and submit it with "Remember this browser?"
@@ -459,13 +459,13 @@ class LoginIntegrationTest extends IntegrationTestBase {
             //    remember-me provider applies the same MFA check as the password one).
             HttpResponse<String> loginResponse = authServerClient.login(email, TEST_PASSWORD, true /* rememberMe */);
             assertThat(loginResponse.statusCode()).isEqualTo(302);
-            assertThat(loginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/ott/login");
+            assertThat(loginResponse.headers().firstValue("Location").orElseThrow()).endsWith("/sso/ott/login");
             String rememberMeSetCookie = loginResponse.headers().allValues("set-cookie").stream()
                     .filter(header -> header.startsWith("remember-me="))
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("No remember-me cookie issued on the login response"));
             assertThat(HttpCookie.parse(rememberMeSetCookie).get(0).getValue()).isNotBlank();
-            HttpResponse<String> ottPage = authServerClient.getOnSession(authServerLocation + "/ott/login");
+            HttpResponse<String> ottPage = authServerClient.getOnSession(authServerLocation + "/sso/ott/login");
             assertThat(ottPage.statusCode()).isEqualTo(200);
 
             // 4. Obtain the OTT out-of-band and submit it, leaving "Remember this
@@ -504,7 +504,7 @@ class LoginIntegrationTest extends IntegrationTestBase {
             HttpResponse<String> secondOttPage = HttpFlowUtils.followRedirects(
                     authServerClient, authServerLocation, secondAuthorize, redirectUri);
             assertThat(secondOttPage.statusCode()).isEqualTo(200);
-            assertThat(secondOttPage.uri().getPath()).isEqualTo("/ott/login");
+            assertThat(secondOttPage.uri().getPath()).isEqualTo("/sso/ott/login");
 
             // 8. A fresh OTT completes the second login to the callback.
             HttpResponse<String> secondOttResponse = authServerClient.generateOtt(email);
@@ -540,7 +540,7 @@ class LoginIntegrationTest extends IntegrationTestBase {
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("No remember-me cookie issued on the login response"));
             assertThat(HttpCookie.parse(rememberMeSetCookie).get(0).getValue()).isNotBlank();
-            HttpResponse<String> ottPage = authServerClient.getOnSession(authServerLocation + "/ott/login");
+            HttpResponse<String> ottPage = authServerClient.getOnSession(authServerLocation + "/sso/ott/login");
             assertThat(ottPage.statusCode()).isEqualTo(200);
 
             // 4. Obtain the OTT out-of-band and submit it with "Remember this browser?"

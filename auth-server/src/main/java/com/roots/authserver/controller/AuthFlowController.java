@@ -94,7 +94,7 @@ public class AuthFlowController {
             responses = @ApiResponse(responseCode = "200", description = "The Nuxt SPA shell",
                     content = @Content(mediaType = "text/html"))
     )
-    @GetMapping({"/ott/login", "/magic-link/login", "/reset-password", "/signup"})
+    @GetMapping({"/sso/ott/login", "/sso/magic-link/login", "/sso/reset-password", "/sso/signup"})
     public String forwardSpaShell() {
         return "forward:/index.html";
     }
@@ -142,13 +142,13 @@ public class AuthFlowController {
         securityContextRepository.saveContext(securityContext, request, response);
 
         magicLinkService.issueAndEmail(email);
-        return "redirect:/signup/success";
+        return "redirect:/sso/signup/success";
     }
 
     private static String signupErrorRedirect(ErrorCode code, String name, String email) {
         // Strict percent-encoding (space -> %20, + -> %2B) so the values survive both
         // the Location header and Vue Router's query parsing on the signup page.
-        return "redirect:/signup?e=" + code
+        return "redirect:/sso/signup?e=" + code
                 + "&name=" + UriUtils.encode(StringUtils.isBlank(name) ? "" : name, StandardCharsets.UTF_8)
                 + "&email=" + UriUtils.encode(StringUtils.isBlank(name) ? "" : email, StandardCharsets.UTF_8);
     }
@@ -176,13 +176,13 @@ public class AuthFlowController {
             HttpServletResponse response) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if(!(authentication instanceof MfaPendingAuthenticationToken pending)) {
-            return "redirect:/login";
+            return "redirect:/sso/login";
         }
 
         UserDetails user = (UserDetails) pending.getPrincipal();
         var consumedToken = inMemoryOneTimePinService.consume(new OneTimeTokenAuthenticationToken(ott));
         if (consumedToken == null || !consumedToken.getUsername().equals(user.getUsername())) {
-            return "redirect:/ott/login?e=" + ErrorCode.INVALID_TOKEN;
+            return "redirect:/sso/ott/login?e=" + ErrorCode.INVALID_TOKEN;
         } else {
             if (rememberBrowser) {
                 userCredentialService.disableMfa(user.getUsername());
@@ -198,7 +198,7 @@ public class AuthFlowController {
             if (savedRequest != null) {
                 return "redirect:" + savedRequest.getRedirectUrl();
             } else {
-                return "redirect:/ott/login?e=" + ErrorCode.OAUTH_REDIRECT_FAILED;
+                return "redirect:/sso/ott/login?e=" + ErrorCode.OAUTH_REDIRECT_FAILED;
             }
         }
     }
@@ -228,17 +228,17 @@ public class AuthFlowController {
     ) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if(!(authentication instanceof CreateAccountPendingAuthenticationToken pending)) {
-            return "redirect:/login";
+            return "redirect:/sso/login";
         }
 
         if (StringUtils.isBlank(magicLinkToken)) {
-            return "redirect:/magic-link/login?e=" + ErrorCode.INVALID_TOKEN;
+            return "redirect:/sso/magic-link/login?e=" + ErrorCode.INVALID_TOKEN;
         }
 
         UserDetails user = (UserDetails) pending.getPrincipal();
         var consumedToken = jdbcOneTimeTokenService.consume(new OneTimeTokenAuthenticationToken(magicLinkToken));
         if (consumedToken == null || !consumedToken.getUsername().equals(user.getUsername())) {
-            return "redirect:/magic-link/login?e=" + ErrorCode.INVALID_TOKEN;
+            return "redirect:/sso/magic-link/login?e=" + ErrorCode.INVALID_TOKEN;
         } else {
             userCredentialService.verifyEmail(user.getUsername());
 
@@ -264,13 +264,13 @@ public class AuthFlowController {
             summary = "Complete the forgot-password reset",
             description = "Sets the new password for a temp-password login. Requires a "
                     + "PasswordChangePendingAuthenticationToken in the session (else redirect to "
-                    + "/login). Validates the new password against the shared complexity policy "
+                    + "/sso/login). Validates the new password against the shared complexity policy "
                     + "(failure redirects back with e=invalid_password), stores it, clears the "
                     + "password-change flag, marks the email verified, upgrades the session, and "
                     + "redirects to the saved OAuth2 request.",
             responses = @ApiResponse(responseCode = "302",
                     description = "Redirect to the saved OAuth2 request (or the web-client base URL "
-                            + "when none exists), or back to /reset-password or /login with an error",
+                            + "when none exists), or back to /sso/reset-password or /sso/login with an error",
                     content = @Content)
     )
     @PostMapping("/reset-password")
@@ -281,7 +281,7 @@ public class AuthFlowController {
             HttpServletResponse response) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (!(authentication instanceof PasswordChangePendingAuthenticationToken pending)) {
-            return "redirect:/login";
+            return "redirect:/sso/login";
         }
 
         UserDetails user = (UserDetails) pending.getPrincipal();
@@ -337,11 +337,11 @@ public class AuthFlowController {
                     + "SocialLoginAuthenticationToken — Google is trusted as both factors, so no OTT "
                     + "step runs regardless of is_mfa_enabled — and the browser is redirected to the "
                     + "saved OAuth2 authorization request. Any failure (Google's own error param, a "
-                    + "state mismatch, or a rejected exchange) redirects to /login with one generic "
+                    + "state mismatch, or a rejected exchange) redirects to /sso/login with one generic "
                     + "code; the specific reason is log-only.",
             responses = @ApiResponse(responseCode = "302",
                     description = "Redirect to the saved OAuth2 request (or the web-client base URL "
-                            + "when none exists), or to /login with e=social_login_failed",
+                            + "when none exists), or to /sso/login with e=social_login_failed",
                     content = @Content)
     )
     @GetMapping(GOOGLE_CALLBACK_PATH)
@@ -359,11 +359,11 @@ public class AuthFlowController {
 
         if (error != null) {
             log.warn("Google authorization failed for session {}: {}", sessionId, error);
-            return "redirect:/login?e=" + ErrorCode.SOCIAL_LOGIN_FAILED;
+            return "redirect:/sso/login?e=" + ErrorCode.SOCIAL_LOGIN_FAILED;
         }
         if (StringUtils.isBlank(code) || !stateValid) {
             log.warn("Google callback for session {} is missing code or failed state validation", sessionId);
-            return "redirect:/login?e=" + ErrorCode.SOCIAL_LOGIN_FAILED;
+            return "redirect:/sso/login?e=" + ErrorCode.SOCIAL_LOGIN_FAILED;
         }
 
         String email;
@@ -372,7 +372,7 @@ public class AuthFlowController {
         } catch (SocialLoginException e) {
             // One generic code for every failure mode; the specific reason is log-only.
             log.warn("Google login rejected: {}", e.getMessage());
-            return "redirect:/login?e=" + ErrorCode.SOCIAL_LOGIN_FAILED;
+            return "redirect:/sso/login?e=" + ErrorCode.SOCIAL_LOGIN_FAILED;
         }
 
         UserDetails user = userDetailsService.loadUserByUsername(email);
@@ -386,7 +386,7 @@ public class AuthFlowController {
         if (savedRequest != null) {
             return "redirect:" + savedRequest.getRedirectUrl();
         } else {
-            // No in-progress OAuth2 flow (direct /login visit). Hand off to web-client,
+            // No in-progress OAuth2 flow (direct /sso/login visit). Hand off to web-client,
             // which initiates /oauth2/authorize with its own state.
             return "redirect:" + webClientLocation;
         }
@@ -399,7 +399,7 @@ public class AuthFlowController {
                     + "OAuth2 authorization request.",
             responses = @ApiResponse(responseCode = "302",
                     description = "Redirect to the saved OAuth2 request on success, or back to "
-                            + "/login with an error when none exists",
+                            + "/sso/login with an error when none exists",
                     content = @Content)
     )
     @PostMapping("/login/guest")
@@ -414,7 +414,7 @@ public class AuthFlowController {
         if (savedRequest != null) {
             return "redirect:" + savedRequest.getRedirectUrl();
         } else {
-            return "redirect:/login?e=" + ErrorCode.OAUTH_REDIRECT_FAILED;
+            return "redirect:/sso/login?e=" + ErrorCode.OAUTH_REDIRECT_FAILED;
         }
     }
 }

@@ -6,7 +6,7 @@
         Account creation succeeded. Please check your email to continue.
       </v-card-text>
       <v-card-actions>
-        <NuxtLink to="/login">Back to login</NuxtLink>
+        <NuxtLink to="/sso/login">Back to login</NuxtLink>
       </v-card-actions>
     </v-card>
   </v-container>

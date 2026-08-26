@@ -10,9 +10,9 @@ beforeEach(() => {
 })
 
 describe('index page', () => {
-  it('redirects / to /login, replacing the history entry', async () => {
+  it('redirects / to /sso/login, replacing the history entry', async () => {
     await mountSuspended(Index, { route: '/' })
 
-    expect(navigateToMock).toHaveBeenCalledWith('/login', { replace: true })
+    expect(navigateToMock).toHaveBeenCalledWith('/sso/login', { replace: true })
   })
 })

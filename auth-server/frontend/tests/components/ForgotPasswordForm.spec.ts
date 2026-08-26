@@ -19,7 +19,7 @@ afterEach(() => {
 })
 
 async function submitWithEmail(email?: string) {
-  const wrapper = await mountSuspended(ForgotPasswordForm, { route: '/forgot-password' })
+  const wrapper = await mountSuspended(ForgotPasswordForm, { route: '/sso/forgot-password' })
   if (email !== undefined) {
     await wrapper.find('input[name="email"]').setValue(email)
   }
@@ -29,11 +29,11 @@ async function submitWithEmail(email?: string) {
 }
 
 describe('ForgotPasswordForm', () => {
-  it('links back to /login', async () => {
-    const wrapper = await mountSuspended(ForgotPasswordForm, { route: '/forgot-password' })
+  it('links back to /sso/login', async () => {
+    const wrapper = await mountSuspended(ForgotPasswordForm, { route: '/sso/forgot-password' })
 
     const hrefs = wrapper.findAll('a').map(a => a.attributes('href'))
-    expect(hrefs).toContain('/login')
+    expect(hrefs).toContain('/sso/login')
   })
 
   describe('client-side validation', () => {
@@ -55,7 +55,7 @@ describe('ForgotPasswordForm', () => {
   })
 
   describe('temp-password request', () => {
-    it('POSTs the email as JSON to /api/temp-password and returns to /login with prefill + notice', async () => {
+    it('POSTs the email as JSON to /api/temp-password and returns to /sso/login with prefill + notice', async () => {
       document.cookie = 'XSRF-TOKEN=forgot-token'
       await submitWithEmail('user@example.com')
 
@@ -68,7 +68,7 @@ describe('ForgotPasswordForm', () => {
       expect(JSON.parse(init.body)).toEqual({ email: 'user@example.com' })
 
       expect(navigateToMock).toHaveBeenCalledWith({
-        path: '/login',
+        path: '/sso/login',
         query: { email: 'user@example.com', notice: 'tempPasswordSent' },
       })
     })
@@ -79,7 +79,7 @@ describe('ForgotPasswordForm', () => {
       await submitWithEmail('user@example.com')
 
       expect(navigateToMock).toHaveBeenCalledWith({
-        path: '/login',
+        path: '/sso/login',
         query: { email: 'user@example.com', notice: 'tempPasswordSent' },
       })
     })
@@ -90,7 +90,7 @@ describe('ForgotPasswordForm', () => {
       await submitWithEmail('user@example.com')
 
       expect(navigateToMock).toHaveBeenCalledWith({
-        path: '/login',
+        path: '/sso/login',
         query: { email: 'user@example.com', notice: 'tempPasswordSent' },
       })
     })

@@ -12,7 +12,7 @@
       <v-card-text>
         <v-text-field v-model="email" name="email" label="Email" type="email" form="login-form" />
         <v-text-field name="password" label="Password" type="password" form="login-form" />
-        <NuxtLink to="/forgot-password">Forgot?</NuxtLink>
+        <NuxtLink to="/sso/forgot-password">Forgot?</NuxtLink>
         <v-checkbox name="remember-me" value="true" label="Remember Me?" form="login-form" />
         <v-alert v-if="loginErrorMessage" type="warning" density="compact">
           {{ loginErrorMessage }}
@@ -24,7 +24,7 @@
         <v-btn type="submit" form="guest-form" variant="text">Continue as Guest</v-btn>
       </v-card-actions>
       <v-card-actions>
-        <NuxtLink to="/signup">Create an account</NuxtLink>
+        <NuxtLink to="/sso/signup">Create an account</NuxtLink>
         <v-spacer></v-spacer>
         <v-btn variant="text" href="/login/google/authorize">Sign in with Google</v-btn>
       </v-card-actions>
