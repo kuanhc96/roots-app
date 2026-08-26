@@ -71,9 +71,7 @@ public class AuthorizeService {
     }
 
     private static String generateNonce() {
-        byte[] randomBytes = new byte[32];
-        SECURE_RANDOM.nextBytes(randomBytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        return UUID.randomUUID().toString();
     }
 
     private static String generateCodeVerifier() {
