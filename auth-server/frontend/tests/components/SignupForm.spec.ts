@@ -16,7 +16,7 @@ afterEach(() => {
   nativeSubmit.mockRestore()
 })
 
-async function mountForm(route = '/signup') {
+async function mountForm(route = '/sso/signup') {
   return mountSuspended(SignupForm, { route })
 }
 
@@ -70,29 +70,29 @@ describe('SignupForm', () => {
       expect((csrf.element as HTMLInputElement).value).toBe('signup-token')
     })
 
-    it('links back to /login', async () => {      const wrapper = await mountForm()
+    it('links back to /sso/login', async () => {      const wrapper = await mountForm()
 
       const hrefs = wrapper.findAll('a').map(a => a.attributes('href'))
-      expect(hrefs).toContain('/login')
+      expect(hrefs).toContain('/sso/login')
     })
   })
 
   describe('server redirect handling', () => {
     it('pre-fills name and email from the error-redirect query', async () => {
-      const wrapper = await mountForm('/signup?e=invalid_request&name=Test%20User&email=user%40example.com')
+      const wrapper = await mountForm('/sso/signup?e=invalid_request&name=Test%20User&email=user%40example.com')
 
       expect((wrapper.find('input[name="name"]').element as HTMLInputElement).value).toBe('Test User')
       expect((wrapper.find('input[name="email"]').element as HTMLInputElement).value).toBe('user@example.com')
     })
 
     it('shows the email_taken message when the server redirects back with ?e=email_taken', async () => {
-      const wrapper = await mountForm('/signup?e=email_taken')
+      const wrapper = await mountForm('/sso/signup?e=email_taken')
 
       expect(wrapper.text()).toContain(errorMessages.email_taken)
     })
 
     it('shows the invalid_request message when the server redirects back with ?e=invalid_request', async () => {
-      const wrapper = await mountForm('/signup?e=invalid_request')
+      const wrapper = await mountForm('/sso/signup?e=invalid_request')
 
       expect(wrapper.text()).toContain(errorMessages.invalid_request)
     })

@@ -26,7 +26,7 @@ async function mountHost(route: string) {
 
 describe('useServerErrorMessage', () => {
   it('maps a known ?e= code to its display text and scrubs it from the URL, keeping other params', async () => {
-    const wrapper = await mountHost('/login?e=invalid_login&email=user%40example.com')
+    const wrapper = await mountHost('/sso/login?e=invalid_login&email=user%40example.com')
 
     expect(wrapper.text()).toBe(errorMessages.invalid_login)
 
@@ -36,14 +36,14 @@ describe('useServerErrorMessage', () => {
   })
 
   it('displays nothing for an unmapped code but still scrubs it', async () => {
-    const wrapper = await mountHost('/login?e=not_a_real_code')
+    const wrapper = await mountHost('/sso/login?e=not_a_real_code')
 
     expect(wrapper.text()).toBe('')
     expect(wrapper.vm.route.query.e).toBeUndefined()
   })
 
   it('returns undefined and leaves the URL alone when no code is present', async () => {
-    const wrapper = await mountHost('/login?email=user%40example.com')
+    const wrapper = await mountHost('/sso/login?email=user%40example.com')
 
     expect(wrapper.text()).toBe('')
     expect(wrapper.vm.route.query.email).toBe('user@example.com')

@@ -14,7 +14,7 @@ afterEach(() => {
   nativeSubmit.mockRestore()
 })
 
-async function mountForm(route = '/reset-password') {
+async function mountForm(route = '/sso/reset-password') {
   return mountSuspended(ResetPasswordForm, { route })
 }
 
@@ -56,7 +56,7 @@ describe('ResetPasswordForm', () => {
 
   describe('server redirect handling', () => {
     it('shows the invalid_password message when the server redirects back with ?e=invalid_password', async () => {
-      const wrapper = await mountForm('/reset-password?e=invalid_password')
+      const wrapper = await mountForm('/sso/reset-password?e=invalid_password')
 
       expect(wrapper.text()).toContain(errorMessages.invalid_password)
     })
