@@ -104,6 +104,35 @@ public class AccountManagementClient {
         return objectMapper.readTree(createResponseBody).get("userGUID").asText();
     }
 
+    /**
+     * Public endpoint call: updates mfaEnabled via
+     * PUT /api/account/mfa/{userGUID} with body {"mfaEnabled": ...}.
+     */
+    public HttpResponse<String> updateMfaByUserGUID(String userGUID, Boolean mfaEnabled) throws Exception {
+        String json = objectMapper.writeValueAsString(Map.of("mfaEnabled", mfaEnabled));
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/account/mfa/" + encode(userGUID)))
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Public endpoint call for negative tests: caller supplies raw JSON body.
+     */
+    public HttpResponse<String> updateMfaByUserGUIDRaw(String userGUID, String jsonBody) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/account/mfa/" + encode(userGUID)))
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
     private HttpResponse<String> getTestAccount(String accessToken, String query) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/account/test?" + query))

@@ -14,7 +14,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.roots.account_management.controller.AccountController;
 import com.roots.account_management.dto.request.CreateAccountRequest;
+import com.roots.account_management.dto.request.UpdateMfaRequest;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
+import com.roots.account_management.dto.response.UpdateMfaResponse;
 import com.roots.account_management.enums.Role;
 import com.roots.account_management.exception.EmailAlreadyExistsException;
 import com.roots.account_management.exception.GlobalExceptionHandler;
@@ -23,6 +25,7 @@ import com.roots.account_management.service.AccountService;
 import com.roots.account_management.validator.Validator;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -30,6 +33,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -150,5 +154,42 @@ class AccountControllerTest {
 
         verify(accountService, never()).deleteTestAccountByEmail(anyString());
         verify(accountService, never()).deleteTestAccountByUserGUID(anyString());
+    }
+
+    @Test
+    void updateMfaEnabled_withValidRequest_returns200AndBody() throws Exception {
+        String userGUID = "test-guid";
+        UpdateMfaRequest request = new UpdateMfaRequest(false);
+        when(accountService.updateMfaEnabledByUserGUID(userGUID, false))
+                .thenReturn(UpdateMfaResponse.builder()
+                        .userGUID(userGUID)
+                        .mfaEnabled(false)
+                        .build());
+
+        mockMvc.perform(put("/api/account/mfa/{userGUID}", userGUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userGUID").value(userGUID))
+                .andExpect(jsonPath("$.mfaEnabled").value(false));
+
+        verify(validator).validateUserGUID(userGUID);
+        verify(validator).validateUpdateMfaRequest(any(UpdateMfaRequest.class));
+        verify(accountService).updateMfaEnabledByUserGUID(userGUID, false);
+    }
+
+    @Test
+    void updateMfaEnabled_whenRequestValidationFails_returns400WithError() throws Exception {
+        String userGUID = "test-guid";
+        doThrow(new InvalidRequestException("mfaEnabled is required"))
+                .when(validator).validateUpdateMfaRequest(any(UpdateMfaRequest.class));
+
+        mockMvc.perform(put("/api/account/mfa/{userGUID}", userGUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateMfaRequest(null))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("mfaEnabled is required"));
+
+        verify(accountService, never()).updateMfaEnabledByUserGUID(anyString(), anyBoolean());
     }
 }

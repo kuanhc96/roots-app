@@ -14,8 +14,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
+import com.roots.account_management.dto.response.UpdateMfaResponse;
 import com.roots.account_management.enums.Role;
 import com.roots.account_management.exception.EmailAlreadyExistsException;
+import com.roots.account_management.exception.UserCredentialNotFoundException;
 import com.roots.account_management.model.UserCredential;
 import com.roots.account_management.repository.RoleRepository;
 import com.roots.account_management.repository.UserCredentialRepository;
@@ -182,5 +184,34 @@ class AccountServiceTest {
 
         verify(roleRepository, never()).deleteByCredentialId(anyLong());
         verify(userCredentialRepository, never()).deleteById(anyLong());
+    }
+
+    @Test
+    void updateMfaEnabledByUserGUID_whenFound_updatesAndReturnsResponse() throws Exception {
+        String userGUID = "guid-123";
+        UserCredential updated = new UserCredential(
+                5L, userGUID, "jane@example.com", "Jane", "hash", false, true, false);
+        when(userCredentialRepository.findByUserGUID(userGUID)).thenReturn(Optional.of(updated));
+        when(userCredentialRepository.setMfaEnabledByUserGUID(5L, false)).thenReturn(1);
+
+        UpdateMfaResponse result = accountService.updateMfaEnabledByUserGUID(userGUID, false);
+
+        verify(userCredentialRepository).findByUserGUID(userGUID);
+        verify(userCredentialRepository).setMfaEnabledByUserGUID(5L, false);
+        assertThat(result.userGUID()).isEqualTo(userGUID);
+        assertThat(result.mfaEnabled()).isFalse();
+    }
+
+    @Test
+    void updateMfaEnabledByUserGUID_whenNotFound_throws() {
+        String userGUID = "missing-guid";
+        when(userCredentialRepository.findByUserGUID(userGUID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> accountService.updateMfaEnabledByUserGUID(userGUID, true))
+                .isInstanceOf(UserCredentialNotFoundException.class)
+                .hasMessage("No account found for userGUID " + userGUID);
+
+        verify(userCredentialRepository).findByUserGUID(userGUID);
+        verify(userCredentialRepository, never()).setMfaEnabledByUserGUID(anyLong(), anyBoolean());
     }
 }
