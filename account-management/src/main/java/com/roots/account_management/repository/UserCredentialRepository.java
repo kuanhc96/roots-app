@@ -71,4 +71,12 @@ public class UserCredentialRepository {
         }, keyHolder);
         return keyHolder.getKey().longValue();
     }
+
+    public int setMfaEnabledByUserGUID(Long userId, boolean mfaEnabled) {
+        return jdbcTemplate.update(
+                "UPDATE user_credential SET is_mfa_enabled = ? WHERE id = ?",
+                mfaEnabled,
+                userId
+        );
+    }
 }

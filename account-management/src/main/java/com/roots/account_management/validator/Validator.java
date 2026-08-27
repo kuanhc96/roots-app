@@ -5,6 +5,7 @@ import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
+import com.roots.account_management.dto.request.UpdateMfaRequest;
 import com.roots.account_management.exception.InvalidRequestException;
 
 @Component
@@ -31,6 +32,18 @@ public class Validator {
         }
         if (!hasEmail && !hasUserGUID) {
             throw new InvalidRequestException("Provide either email or userGUID");
+        }
+    }
+
+    public void validateUserGUID(String userGUID) {
+        if (userGUID == null || userGUID.isBlank()) {
+            throw new InvalidRequestException("userGUID is required");
+        }
+    }
+
+    public void validateUpdateMfaRequest(UpdateMfaRequest request) {
+        if (request == null || request.mfaEnabled() == null) {
+            throw new InvalidRequestException("mfaEnabled is required");
         }
     }
 

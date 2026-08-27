@@ -5,7 +5,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -13,7 +15,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
+import com.roots.account_management.dto.request.UpdateMfaRequest;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
+import com.roots.account_management.dto.response.UpdateMfaResponse;
 import com.roots.account_management.dto.response.UserCredentialResponse;
 import com.roots.account_management.dto.response.UserCredentialTestingResponse;
 import com.roots.account_management.exception.UserCredentialNotFoundException;
@@ -94,6 +98,21 @@ public class AccountController {
             @Parameter(description = "GUID of the account to fetch; provide this or email, not both")
             @RequestParam(required = false) String userGUID) throws UserCredentialNotFoundException {
         return UserCredentialResponse.from(lookup(email, userGUID));
+    }
+
+    @Operation(
+            summary = "Update MFA enabled status",
+            description = "Public endpoint: updates is_mfa_enabled by userGUID and returns the updated "
+                    + "restricted account view."
+    )
+    @PutMapping("/mfa/{userGUID}")
+    public UpdateMfaResponse updateMfaEnabled(
+            @Parameter(description = "GUID of the account to update")
+            @PathVariable String userGUID,
+            @RequestBody UpdateMfaRequest updateMfaRequest) throws UserCredentialNotFoundException {
+        validator.validateUserGUID(userGUID);
+        validator.validateUpdateMfaRequest(updateMfaRequest);
+        return accountService.updateMfaEnabledByUserGUID(userGUID, updateMfaRequest.mfaEnabled());
     }
 
     // Validates that exactly one identifier is present, then reads the credential by
