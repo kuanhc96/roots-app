@@ -19,11 +19,13 @@ import org.springframework.web.bind.annotation.RestController;
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.request.DeleteAccountsRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
+import com.roots.account_management.dto.request.UpdateNameRequest;
 import com.roots.account_management.dto.request.UpdatePasswordRequest;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
+import com.roots.account_management.dto.response.UpdateNameResponse;
 import com.roots.account_management.dto.response.UpdatePasswordResponse;
 import com.roots.account_management.dto.response.UserCredentialResponse;
 import com.roots.account_management.dto.response.UserCredentialTestingResponse;
@@ -196,6 +198,20 @@ public class AccountController {
         validator.validateUserGUID(userGUID);
         validator.validateUpdatePasswordRequest(updatePasswordRequest);
         return accountService.updatePasswordByUserGUID(userGUID, updatePasswordRequest.password());
+    }
+
+    @Operation(
+            summary = "Update account name",
+            description = "Public endpoint: updates name by userGUID. Name is trimmed and must be non-blank."
+    )
+    @PutMapping("/name/{userGUID}")
+    public UpdateNameResponse updateName(
+            @Parameter(description = "GUID of the account to update")
+            @PathVariable String userGUID,
+            @RequestBody UpdateNameRequest updateNameRequest) throws UserCredentialNotFoundException {
+        validator.validateUserGUID(userGUID);
+        validator.validateUpdateNameRequest(updateNameRequest);
+        return accountService.updateNameByUserGUID(userGUID, updateNameRequest.name());
     }
 
     private UserCredential lookup(String email, String userGUID) throws UserCredentialNotFoundException {

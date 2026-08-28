@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.request.DeleteAccountsRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
+import com.roots.account_management.dto.request.UpdateNameRequest;
 import com.roots.account_management.dto.request.UpdatePasswordRequest;
 import com.roots.account_management.exception.InvalidRequestException;
 
@@ -80,6 +81,14 @@ public class Validator {
         if (request == null || request.mfaEnabled() == null) {
             throw new InvalidRequestException("mfaEnabled is required");
         }
+    }
+
+    public void validateUpdateNameRequest(UpdateNameRequest request) {
+        if (request == null) {
+            throw new InvalidRequestException("name is required");
+        }
+        String trimmedName = request.name() == null ? null : request.name().trim();
+        validateName(trimmedName);
     }
 
     public void validateUpdatePasswordRequest(UpdatePasswordRequest request) {

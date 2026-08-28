@@ -123,4 +123,12 @@ public class UserCredentialRepository {
                 userId
         );
     }
+
+    public int setNameByUserGUID(Long userId, String name) {
+        return jdbcTemplate.update(
+                "UPDATE user_credential SET name = ? WHERE id = ?",
+                name,
+                userId
+        );
+    }
 }

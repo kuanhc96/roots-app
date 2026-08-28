@@ -14,6 +14,7 @@ import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
+import com.roots.account_management.dto.response.UpdateNameResponse;
 import com.roots.account_management.dto.response.UpdatePasswordResponse;
 import com.roots.account_management.enums.Role;
 import com.roots.account_management.exception.EmailAlreadyExistsException;
@@ -126,6 +127,15 @@ public class AccountService {
         String encodedPassword = passwordEncoder.encode(password);
         userCredentialRepository.setPasswordByUserGUID(userCredential.id(), encodedPassword);
         return UpdatePasswordResponse.builder().userGUID(userGUID).build();
+    }
+
+    @Transactional
+    public UpdateNameResponse updateNameByUserGUID(String userGUID, String name)
+            throws UserCredentialNotFoundException {
+        UserCredential userCredential = getUserCredentialByUserGUID(userGUID);
+        String trimmedName = name.trim();
+        userCredentialRepository.setNameByUserGUID(userCredential.id(), trimmedName);
+        return UpdateNameResponse.builder().userGUID(userGUID).name(trimmedName).build();
     }
 
     @Transactional
