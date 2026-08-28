@@ -17,6 +17,7 @@ import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
+import com.roots.account_management.dto.response.UpdatePasswordResponse;
 import com.roots.account_management.enums.Role;
 import com.roots.account_management.exception.EmailAlreadyExistsException;
 import com.roots.account_management.exception.UserCredentialNotFoundException;
@@ -277,5 +278,35 @@ class AccountServiceTest {
 
         verify(userCredentialRepository).findByUserGUID(userGUID);
         verify(userCredentialRepository, never()).setMfaEnabledByUserGUID(anyLong(), anyBoolean());
+    }
+
+    @Test
+    void updatePasswordByUserGUID_whenFound_updatesAndReturnsResponse() throws Exception {
+        String userGUID = "guid-123";
+        UserCredential existing = new UserCredential(
+                5L, userGUID, "jane@example.com", "Jane", "old-hash", true, true, false);
+        when(userCredentialRepository.findByUserGUID(userGUID)).thenReturn(Optional.of(existing));
+        when(passwordEncoder.encode("NewPassword123")).thenReturn("new-hash");
+        when(userCredentialRepository.setPasswordByUserGUID(5L, "new-hash")).thenReturn(1);
+
+        UpdatePasswordResponse result = accountService.updatePasswordByUserGUID(userGUID, "NewPassword123");
+
+        verify(userCredentialRepository).findByUserGUID(userGUID);
+        verify(passwordEncoder).encode("NewPassword123");
+        verify(userCredentialRepository).setPasswordByUserGUID(5L, "new-hash");
+        assertThat(result.userGUID()).isEqualTo(userGUID);
+    }
+
+    @Test
+    void updatePasswordByUserGUID_whenNotFound_throws() {
+        String userGUID = "missing-guid";
+        when(userCredentialRepository.findByUserGUID(userGUID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> accountService.updatePasswordByUserGUID(userGUID, "NewPassword123"))
+                .isInstanceOf(UserCredentialNotFoundException.class)
+                .hasMessage("No account found for userGUID " + userGUID);
+
+        verify(userCredentialRepository).findByUserGUID(userGUID);
+        verify(userCredentialRepository, never()).setPasswordByUserGUID(anyLong(), anyString());
     }
 }

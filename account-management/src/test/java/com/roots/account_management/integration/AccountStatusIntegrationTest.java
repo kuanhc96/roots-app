@@ -6,14 +6,20 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import java.net.http.HttpResponse;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -24,8 +30,9 @@ class AccountStatusIntegrationTest {
 
     private static final String TEST_NAME = "Integration Test User";
     private static final String TEST_PASSWORD = "Password123";
-    private static final String SCOPES = "INTEGRATION_TEST_CLIENT_WRITE INTEGRATION_TEST_CLIENT_DELETE";
+    private static final String SCOPES = "INTEGRATION_TEST_CLIENT_WRITE INTEGRATION_TEST_CLIENT_READ INTEGRATION_TEST_CLIENT_DELETE";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final PasswordEncoder PASSWORD_ENCODER = PasswordEncoderFactories.createDelegatingPasswordEncoder();
 
     @Autowired
     private OAuth2Client oAuth2Client;
@@ -85,5 +92,59 @@ class AccountStatusIntegrationTest {
 
         assertThat(response.statusCode()).isEqualTo(404);
         TestUtils.assertHasErrorField(response.body());
+    }
+
+    @Test
+    void updatePassword_updatesStoredPasswordAndReturnsUserGUID() throws Exception {
+        String newPassword = "NewPassword123";
+
+        HttpResponse<String> updateResponse = accountManagementClient.updatePasswordByUserGUID(userGUID, newPassword);
+        assertThat(updateResponse.statusCode()).isEqualTo(200);
+        JsonNode updateBody = OBJECT_MAPPER.readTree(updateResponse.body());
+        assertThat(updateBody.get("userGUID").asText()).isEqualTo(userGUID);
+
+        HttpResponse<String> readResponse = accountManagementClient.getTestAccountByUserGUID(accessToken, userGUID);
+        assertThat(readResponse.statusCode()).isEqualTo(200);
+        JsonNode readBody = OBJECT_MAPPER.readTree(readResponse.body());
+        String storedPassword = readBody.get("password").asText();
+        assertThat(PASSWORD_ENCODER.matches(newPassword, storedPassword)).isTrue();
+        assertThat(PASSWORD_ENCODER.matches(TEST_PASSWORD, storedPassword)).isFalse();
+    }
+
+    @Test
+    void updatePassword_withMissingPassword_returns400() throws Exception {
+        HttpResponse<String> response = accountManagementClient.updatePasswordByUserGUIDRaw(userGUID, "{}");
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidPasswords")
+    void updatePassword_withInvalidPassword_returns400(String invalidPassword) throws Exception {
+        HttpResponse<String> response = accountManagementClient.updatePasswordByUserGUID(userGUID, invalidPassword);
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
+    @Test
+    void updatePassword_withUnknownUserGUID_returns404() throws Exception {
+        HttpResponse<String> response =
+                accountManagementClient.updatePasswordByUserGUID(UUID.randomUUID().toString(), "NewPassword123");
+
+        assertThat(response.statusCode()).isEqualTo(404);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
+    private static Stream<Arguments> invalidPasswords() {
+        return Stream.of(
+                Arguments.of(""),
+                Arguments.of("   "),
+                Arguments.of("short1A"),
+                Arguments.of("password123"),
+                Arguments.of("PASSWORD123"),
+                Arguments.of("PasswordOnly")
+        );
     }
 }

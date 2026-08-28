@@ -16,10 +16,12 @@ import com.roots.account_management.controller.AccountController;
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.request.DeleteAccountsRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
+import com.roots.account_management.dto.request.UpdatePasswordRequest;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
+import com.roots.account_management.dto.response.UpdatePasswordResponse;
 import com.roots.account_management.enums.Role;
 import com.roots.account_management.exception.EmailAlreadyExistsException;
 import com.roots.account_management.exception.GlobalExceptionHandler;
@@ -307,5 +309,38 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$.error").value("mfaEnabled is required"));
 
         verify(accountService, never()).updateMfaEnabledByUserGUID(anyString(), anyBoolean());
+    }
+
+    @Test
+    void updatePassword_withValidRequest_returns200AndBody() throws Exception {
+        String userGUID = "test-guid";
+        UpdatePasswordRequest request = new UpdatePasswordRequest("NewPassword123");
+        when(accountService.updatePasswordByUserGUID(userGUID, "NewPassword123"))
+                .thenReturn(UpdatePasswordResponse.builder().userGUID(userGUID).build());
+
+        mockMvc.perform(put("/api/account/password/{userGUID}", userGUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userGUID").value(userGUID));
+
+        verify(validator).validateUserGUID(userGUID);
+        verify(validator).validateUpdatePasswordRequest(any(UpdatePasswordRequest.class));
+        verify(accountService).updatePasswordByUserGUID(userGUID, "NewPassword123");
+    }
+
+    @Test
+    void updatePassword_whenRequestValidationFails_returns400WithError() throws Exception {
+        String userGUID = "test-guid";
+        doThrow(new InvalidRequestException("Password must be at least 8 characters"))
+                .when(validator).validateUpdatePasswordRequest(any(UpdatePasswordRequest.class));
+
+        mockMvc.perform(put("/api/account/password/{userGUID}", userGUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdatePasswordRequest("short"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Password must be at least 8 characters"));
+
+        verify(accountService, never()).updatePasswordByUserGUID(anyString(), anyString());
     }
 }
