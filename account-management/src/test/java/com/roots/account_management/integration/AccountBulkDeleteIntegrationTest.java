@@ -11,7 +11,7 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
-import java.net.http.HttpResponse;
+import org.springframework.http.ResponseEntity;
 import java.util.List;
 import java.util.UUID;
 
@@ -45,64 +45,64 @@ class AccountBulkDeleteIntegrationTest {
         accessToken = TestUtils.getClientCredentialsToken(oAuth2Client, integrationTestClientSecret, SCOPES);
         email = TestUtils.getUniqueEmail();
 
-        HttpResponse<String> createResponse =
+        ResponseEntity<String> createResponse =
                 accountManagementClient.createTestAccount(accessToken, TEST_NAME, email, TEST_PASSWORD);
-        assertThat(createResponse.statusCode()).isEqualTo(201);
-        userGUID = accountManagementClient.extractUserGUID(createResponse.body());
+        assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
+        userGUID = accountManagementClient.extractUserGUID(createResponse.getBody());
         assertThat(userGUID).isNotBlank();
     }
 
     @AfterEach
     void tearDown() throws Exception {
         if (userGUID != null) {
-            HttpResponse<String> deleteResponse = accountManagementClient.deleteByUserGUID(accessToken, userGUID);
-            assertThat(deleteResponse.statusCode()).isIn(200, 204);
+            ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(accessToken, userGUID);
+            assertThat(deleteResponse.getStatusCode().value()).isIn(200, 204);
         }
     }
 
     @Test
     void deleteAccounts_withExistingMissingAndDuplicateUserGUIDs_returns204AndDeletesExisting() throws Exception {
-        HttpResponse<String> deleteResponse = accountManagementClient.deleteAccounts(
+        ResponseEntity<String> deleteResponse = accountManagementClient.deleteAccounts(
                 List.of(userGUID, " " + userGUID + " ", UUID.randomUUID().toString()));
 
-        assertThat(deleteResponse.statusCode()).isEqualTo(204);
+        assertThat(deleteResponse.getStatusCode().value()).isEqualTo(204);
 
-        HttpResponse<String> profileResponse = accountManagementClient.getAccountProfileByUserGUID(userGUID);
-        assertThat(profileResponse.statusCode()).isEqualTo(404);
+        ResponseEntity<String> profileResponse = accountManagementClient.getAccountProfileByUserGUID(userGUID);
+        assertThat(profileResponse.getStatusCode().value()).isEqualTo(404);
         userGUID = null;
     }
 
     @Test
     void deleteAccounts_withEmptyUserGUIDs_returns400() throws Exception {
-        HttpResponse<String> response = accountManagementClient.deleteAccounts(List.of());
+        ResponseEntity<String> response = accountManagementClient.deleteAccounts(List.of());
 
-        assertThat(response.statusCode()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.body());
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
     void deleteAccounts_withMissingUserGUIDsField_returns400() throws Exception {
-        HttpResponse<String> response = accountManagementClient.deleteAccountsRaw("{}");
+        ResponseEntity<String> response = accountManagementClient.deleteAccountsRaw("{}");
 
-        assertThat(response.statusCode()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.body());
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
     void deleteAccounts_withNullEntry_returns400() throws Exception {
         String body = OBJECT_MAPPER.writeValueAsString(new DeletePayload(List.of(userGUID, null)));
-        HttpResponse<String> response = accountManagementClient.deleteAccountsRaw(body);
+        ResponseEntity<String> response = accountManagementClient.deleteAccountsRaw(body);
 
-        assertThat(response.statusCode()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.body());
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
     void deleteAccounts_withBlankEntry_returns400() throws Exception {
-        HttpResponse<String> response = accountManagementClient.deleteAccounts(List.of(userGUID, "   "));
+        ResponseEntity<String> response = accountManagementClient.deleteAccounts(List.of(userGUID, "   "));
 
-        assertThat(response.statusCode()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.body());
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
@@ -120,10 +120,10 @@ class AccountBulkDeleteIntegrationTest {
                 UUID.randomUUID().toString(),
                 UUID.randomUUID().toString()
         );
-        HttpResponse<String> response = accountManagementClient.deleteAccounts(userGUIDs);
+        ResponseEntity<String> response = accountManagementClient.deleteAccounts(userGUIDs);
 
-        assertThat(response.statusCode()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.body());
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.getBody());
     }
 
     private record DeletePayload(List<String> userGUIDs) {

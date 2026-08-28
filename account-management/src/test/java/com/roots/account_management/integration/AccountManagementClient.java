@@ -1,15 +1,20 @@
 package com.roots.account_management.integration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import java.net.URI;
 import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.web.client.DefaultResponseErrorHandler;
+import org.springframework.web.client.RestTemplate;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Client for account-management integration tests.
@@ -17,194 +22,150 @@ import java.util.Map;
 public class AccountManagementClient {
 
     private final String baseUrl;
-    private final HttpClient httpClient;
+    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
     public AccountManagementClient(String baseUrl) {
         this.baseUrl = baseUrl;
-        this.httpClient = HttpClient.newBuilder()
-                .followRedirects(HttpClient.Redirect.NEVER)
-                .build();
+        this.restTemplate = new RestTemplate();
+        this.restTemplate.setErrorHandler(new DefaultResponseErrorHandler() {
+            @Override
+            public boolean hasError(ClientHttpResponse response) {
+                return false;
+            }
+        });
         this.objectMapper = new ObjectMapper();
     }
 
-    public HttpResponse<String> createTestAccount(String accessToken, String name, String email, String password) throws Exception {
-        String json = objectMapper.writeValueAsString(Map.of("name", name, "email", email, "password", password));
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/test"))
-                .header("Authorization", "Bearer " + accessToken)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(json))
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    public ResponseEntity<String> createTestAccount(String accessToken, String name, String email, String password) {
+        HttpHeaders headers = bearerJsonHeaders(accessToken);
+        HttpEntity<Map<String, String>> entity = new HttpEntity<>(
+                Map.of("name", name, "email", email, "password", password), headers);
+        return restTemplate.exchange(baseUrl + "/api/account/test", HttpMethod.POST, entity, String.class);
     }
 
-    public HttpResponse<String> getTestAccountByEmail(String accessToken, String email) throws Exception {
+    public ResponseEntity<String> getTestAccountByEmail(String accessToken, String email) {
         return getTestAccount(accessToken, "email=" + encode(email));
     }
 
-    public HttpResponse<String> getTestAccountByUserGUID(String accessToken, String userGUID) throws Exception {
+    public ResponseEntity<String> getTestAccountByUserGUID(String accessToken, String userGUID) {
         return getTestAccount(accessToken, "userGUID=" + encode(userGUID));
     }
 
-    public HttpResponse<String> deleteByEmail(String accessToken, String email) throws Exception {
+    public ResponseEntity<String> deleteByEmail(String accessToken, String email) {
         return deleteTestAccount(accessToken, "email=" + encode(email));
     }
 
-    public HttpResponse<String> deleteByUserGUID(String accessToken, String userGUID) throws Exception {
+    public ResponseEntity<String> deleteByUserGUID(String accessToken, String userGUID) {
         return deleteTestAccount(accessToken, "userGUID=" + encode(userGUID));
     }
 
-    public HttpResponse<String> deleteByEmailAndUserGUID(String accessToken, String email, String userGUID) throws Exception {
+    public ResponseEntity<String> deleteByEmailAndUserGUID(String accessToken, String email, String userGUID) {
         return deleteTestAccount(accessToken, "email=" + encode(email) + "&userGUID=" + encode(userGUID));
     }
 
-    public HttpResponse<String> deleteWithoutParams(String accessToken) throws Exception {
+    public ResponseEntity<String> deleteWithoutParams(String accessToken) {
         return deleteTestAccount(accessToken, "");
     }
 
-    public HttpResponse<String> deleteAccounts(List<String> userGUIDs) throws Exception {
-        String json = objectMapper.writeValueAsString(Map.of("userGUIDs", userGUIDs));
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account"))
-                .header("Content-Type", "application/json")
-                .method("DELETE", HttpRequest.BodyPublishers.ofString(json))
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    public ResponseEntity<String> deleteAccounts(List<String> userGUIDs) {
+        HttpHeaders headers = jsonHeaders();
+        HttpEntity<Map<String, List<String>>> entity = new HttpEntity<>(Map.of("userGUIDs", userGUIDs), headers);
+        return restTemplate.exchange(baseUrl + "/api/account", HttpMethod.DELETE, entity, String.class);
     }
 
-    public HttpResponse<String> deleteAccountsRaw(String jsonBody) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account"))
-                .header("Content-Type", "application/json")
-                .method("DELETE", HttpRequest.BodyPublishers.ofString(jsonBody))
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    public ResponseEntity<String> deleteAccountsRaw(String jsonBody) {
+        HttpHeaders headers = jsonHeaders();
+        HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
+        return restTemplate.exchange(baseUrl + "/api/account", HttpMethod.DELETE, entity, String.class);
     }
 
-    public String extractUserGUID(String createResponseBody) throws Exception {
-        return objectMapper.readTree(createResponseBody).get("userGUID").asText();
+    public String extractUserGUID(String body) throws Exception {
+        return objectMapper.readTree(body).get("userGUID").asText();
     }
 
-    public HttpResponse<String> updateMfaByUserGUID(String userGUID, Boolean mfaEnabled) throws Exception {
-        String json = objectMapper.writeValueAsString(Map.of("mfaEnabled", mfaEnabled));
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/mfa/" + encode(userGUID)))
-                .header("Content-Type", "application/json")
-                .PUT(HttpRequest.BodyPublishers.ofString(json))
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    public ResponseEntity<String> updateMfaByUserGUID(String userGUID, Boolean mfaEnabled) {
+        HttpHeaders headers = jsonHeaders();
+        HttpEntity<Map<String, Boolean>> entity = new HttpEntity<>(Map.of("mfaEnabled", mfaEnabled), headers);
+        return restTemplate.exchange(baseUrl + "/api/account/mfa/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
-    public HttpResponse<String> updateMfaByUserGUIDRaw(String userGUID, String jsonBody) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/mfa/" + encode(userGUID)))
-                .header("Content-Type", "application/json")
-                .PUT(HttpRequest.BodyPublishers.ofString(jsonBody))
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    public ResponseEntity<String> updateMfaByUserGUIDRaw(String userGUID, String jsonBody) {
+        HttpHeaders headers = jsonHeaders();
+        HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
+        return restTemplate.exchange(baseUrl + "/api/account/mfa/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
-    public HttpResponse<String> updatePasswordByUserGUID(String userGUID, String password) throws Exception {
-        String json = objectMapper.writeValueAsString(Map.of("password", password));
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/password/" + encode(userGUID)))
-                .header("Content-Type", "application/json")
-                .PUT(HttpRequest.BodyPublishers.ofString(json))
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    public ResponseEntity<String> updatePasswordByUserGUID(String userGUID, String password) {
+        HttpHeaders headers = jsonHeaders();
+        HttpEntity<Map<String, String>> entity = new HttpEntity<>(Map.of("password", password), headers);
+        return restTemplate.exchange(baseUrl + "/api/account/password/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
-    public HttpResponse<String> updatePasswordByUserGUIDRaw(String userGUID, String jsonBody) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/password/" + encode(userGUID)))
-                .header("Content-Type", "application/json")
-                .PUT(HttpRequest.BodyPublishers.ofString(jsonBody))
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    public ResponseEntity<String> updatePasswordByUserGUIDRaw(String userGUID, String jsonBody) {
+        HttpHeaders headers = jsonHeaders();
+        HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
+        return restTemplate.exchange(baseUrl + "/api/account/password/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
-    public HttpResponse<String> updateNameByUserGUID(String userGUID, String name) throws Exception {
-        String json = objectMapper.writeValueAsString(Map.of("name", name));
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/name/" + encode(userGUID)))
-                .header("Content-Type", "application/json")
-                .PUT(HttpRequest.BodyPublishers.ofString(json))
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    public ResponseEntity<String> updateNameByUserGUID(String userGUID, String name) {
+        HttpHeaders headers = jsonHeaders();
+        HttpEntity<Map<String, String>> entity = new HttpEntity<>(Map.of("name", name), headers);
+        return restTemplate.exchange(baseUrl + "/api/account/name/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
-    public HttpResponse<String> updateNameByUserGUIDRaw(String userGUID, String jsonBody) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/name/" + encode(userGUID)))
-                .header("Content-Type", "application/json")
-                .PUT(HttpRequest.BodyPublishers.ofString(jsonBody))
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    public ResponseEntity<String> updateNameByUserGUIDRaw(String userGUID, String jsonBody) {
+        HttpHeaders headers = jsonHeaders();
+        HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
+        return restTemplate.exchange(baseUrl + "/api/account/name/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
-    public HttpResponse<String> updateEmailByUserGUID(String userGUID, String email) throws Exception {
-        String json = objectMapper.writeValueAsString(Map.of("email", email));
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/email/" + encode(userGUID)))
-                .header("Content-Type", "application/json")
-                .PUT(HttpRequest.BodyPublishers.ofString(json))
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    public ResponseEntity<String> updateEmailByUserGUID(String userGUID, String email) {
+        HttpHeaders headers = jsonHeaders();
+        HttpEntity<Map<String, String>> entity = new HttpEntity<>(Map.of("email", email), headers);
+        return restTemplate.exchange(baseUrl + "/api/account/email/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
-    public HttpResponse<String> updateEmailByUserGUIDRaw(String userGUID, String jsonBody) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/email/" + encode(userGUID)))
-                .header("Content-Type", "application/json")
-                .PUT(HttpRequest.BodyPublishers.ofString(jsonBody))
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    public ResponseEntity<String> updateEmailByUserGUIDRaw(String userGUID, String jsonBody) {
+        HttpHeaders headers = jsonHeaders();
+        HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
+        return restTemplate.exchange(baseUrl + "/api/account/email/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
-    public HttpResponse<String> getAccountProfileByEmail(String email) throws Exception {
+    public ResponseEntity<String> addRoleByUserGUID(String userGUID, String role) {
+        HttpHeaders headers = jsonHeaders();
+        HttpEntity<Map<String, String>> entity = new HttpEntity<>(Map.of("role", role), headers);
+        return restTemplate.exchange(baseUrl + "/api/account/role/" + encode(userGUID), HttpMethod.POST, entity, String.class);
+    }
+
+    public ResponseEntity<String> addRoleByUserGUIDRaw(String userGUID, String jsonBody) {
+        HttpHeaders headers = jsonHeaders();
+        HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
+        return restTemplate.exchange(baseUrl + "/api/account/role/" + encode(userGUID), HttpMethod.POST, entity, String.class);
+    }
+
+    public ResponseEntity<String> getAccountProfileByEmail(String email) {
         return getAccountProfile("email=" + encode(email));
     }
 
-    public HttpResponse<String> getAccountProfileByUserGUID(String userGUID) throws Exception {
+    public ResponseEntity<String> getAccountProfileByUserGUID(String userGUID) {
         return getAccountProfile("userGUID=" + encode(userGUID));
     }
 
-    public HttpResponse<String> getAccountProfileWithQuery(String query) throws Exception {
+    public ResponseEntity<String> getAccountProfileWithQuery(String query) {
         return getAccountProfile(query);
     }
 
-    public HttpResponse<String> getAccountProfiles(int page, int size) throws Exception {
+    public ResponseEntity<String> getAccountProfiles(int page, int size) {
         return getAccountProfilesWithQuery("page=" + page + "&size=" + size);
     }
 
-    public HttpResponse<String> getAccountProfilesWithQuery(String query) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/profiles?" + query))
-                .GET()
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    public ResponseEntity<String> getAccountProfilesWithQuery(String query) {
+        String url = baseUrl + "/api/account/profiles" + (query.isBlank() ? "" : "?" + query);
+        return restTemplate.exchange(url, HttpMethod.GET, HttpEntity.EMPTY, String.class);
     }
 
-    public HttpResponse<String> searchAccountsByEmail(String email, boolean fullMatch, Integer maxCount) throws Exception {
+    public ResponseEntity<String> searchAccountsByEmail(String email, boolean fullMatch, Integer maxCount) {
         String query = "email=" + encode(email) + "&fullMatch=" + fullMatch;
         if (maxCount != null) {
             query = query + "&maxCount=" + maxCount;
@@ -212,7 +173,7 @@ public class AccountManagementClient {
         return searchAccountsWithQuery(query);
     }
 
-    public HttpResponse<String> searchAccountsByName(String name, boolean fullMatch, Integer maxCount) throws Exception {
+    public ResponseEntity<String> searchAccountsByName(String name, boolean fullMatch, Integer maxCount) {
         String query = "name=" + encode(name) + "&fullMatch=" + fullMatch;
         if (maxCount != null) {
             query = query + "&maxCount=" + maxCount;
@@ -220,67 +181,51 @@ public class AccountManagementClient {
         return searchAccountsWithQuery(query);
     }
 
-    public HttpResponse<String> searchAccountsWithQuery(String query) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/search?" + query))
-                .POST(HttpRequest.BodyPublishers.noBody())
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    public ResponseEntity<String> searchAccountsWithQuery(String query) {
+        String url = baseUrl + "/api/account/search" + (query.isBlank() ? "" : "?" + query);
+        return restTemplate.exchange(url, HttpMethod.POST, HttpEntity.EMPTY, String.class);
     }
 
-    public HttpResponse<String> addRoleByUserGUID(String userGUID, String role) throws Exception {
-        String json = objectMapper.writeValueAsString(Map.of("role", role));
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/role/" + encode(userGUID)))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(json))
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    private ResponseEntity<String> getAccountProfile(String query) {
+        String url = baseUrl + "/api/account/profile" + (query.isBlank() ? "" : "?" + query);
+        return restTemplate.exchange(url, HttpMethod.GET, HttpEntity.EMPTY, String.class);
     }
 
-    public HttpResponse<String> addRoleByUserGUIDRaw(String userGUID, String jsonBody) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/role/" + encode(userGUID)))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    private ResponseEntity<String> getTestAccount(String accessToken, String query) {
+        HttpHeaders headers = bearerHeaders(accessToken);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        String url = baseUrl + "/api/account/test" + (query.isBlank() ? "" : "?" + query);
+        return restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
     }
 
-    private HttpResponse<String> getAccountProfile(String query) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/profile?" + query))
-                .GET()
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    private ResponseEntity<String> deleteTestAccount(String accessToken, String query) {
+        HttpHeaders headers = bearerHeaders(accessToken);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        String url = baseUrl + "/api/account/test" + (query.isBlank() ? "" : "?" + query);
+        return restTemplate.exchange(url, HttpMethod.DELETE, entity, String.class);
     }
 
-    private HttpResponse<String> getTestAccount(String accessToken, String query) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/test?" + query))
-                .header("Authorization", "Bearer " + accessToken)
-                .GET()
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    private HttpHeaders jsonHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        return headers;
     }
 
-    private HttpResponse<String> deleteTestAccount(String accessToken, String query) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/account/test?" + query))
-                .header("Authorization", "Bearer " + accessToken)
-                .DELETE()
-                .build();
+    private HttpHeaders bearerHeaders(String accessToken) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+        return headers;
+    }
 
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    private HttpHeaders bearerJsonHeaders(String accessToken) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        return headers;
     }
 
     private static String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 }
+

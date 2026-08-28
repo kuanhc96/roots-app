@@ -9,7 +9,7 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
-import java.net.http.HttpResponse;
+import org.springframework.http.ResponseEntity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,26 +48,26 @@ class AccountLifecycleIntegrationTest {
     void createsThenDeletesTestAccountByEmail() throws Exception {
         String email = TestUtils.getUniqueEmail();
 
-        HttpResponse<String> createResponse =
+        ResponseEntity<String> createResponse =
                 accountManagementClient.createTestAccount(accessToken, TEST_NAME, email, TEST_PASSWORD);
-        assertThat(createResponse.statusCode()).isEqualTo(201);
+        assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
 
-        HttpResponse<String> deleteResponse = accountManagementClient.deleteByEmail(accessToken, email);
-        assertThat(deleteResponse.statusCode()).isEqualTo(204);
+        ResponseEntity<String> deleteResponse = accountManagementClient.deleteByEmail(accessToken, email);
+        assertThat(deleteResponse.getStatusCode().value()).isEqualTo(204);
     }
 
     @Test
     void createsThenDeletesTestAccountByUserGUID() throws Exception {
         String email = TestUtils.getUniqueEmail();
 
-        HttpResponse<String> createResponse =
+        ResponseEntity<String> createResponse =
                 accountManagementClient.createTestAccount(accessToken, TEST_NAME, email, TEST_PASSWORD);
-        assertThat(createResponse.statusCode()).isEqualTo(201);
+        assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
 
-        String userGUID = accountManagementClient.extractUserGUID(createResponse.body());
+        String userGUID = accountManagementClient.extractUserGUID(createResponse.getBody());
         assertThat(userGUID).isNotBlank();
 
-        HttpResponse<String> deleteResponse = accountManagementClient.deleteByUserGUID(accessToken, userGUID);
-        assertThat(deleteResponse.statusCode()).isEqualTo(204);
+        ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(accessToken, userGUID);
+        assertThat(deleteResponse.getStatusCode().value()).isEqualTo(204);
     }
 }
