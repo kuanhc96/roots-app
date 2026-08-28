@@ -47,6 +47,18 @@ public class Validator {
         }
     }
 
+    public void validatePagination(int page, int size, int maxSize) {
+        if (page < 0) {
+            throw new InvalidRequestException("page must be greater than or equal to 0");
+        }
+        if (size <= 0) {
+            throw new InvalidRequestException("size must be greater than 0");
+        }
+        if (size > maxSize) {
+            throw new InvalidRequestException("size must be less than or equal to " + maxSize);
+        }
+    }
+
     private void validateName(String name) {
         if (name == null || name.isBlank()) {
             throw new InvalidRequestException("Name is required");

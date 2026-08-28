@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
+import com.roots.account_management.dto.response.AccountProfileResponse;
+import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
 import com.roots.account_management.enums.Role;
@@ -81,6 +83,18 @@ public class AccountService {
         return userCredentialRepository.findByUserGUID(userGUID)
                 .orElseThrow(() -> new UserCredentialNotFoundException(
                         "No account found for userGUID " + userGUID));
+    }
+
+    @Transactional(readOnly = true)
+    public AccountProfilesResponse getAccountProfiles(int page, int size) {
+        int offset = page * size;
+        List<AccountProfileResponse> accounts = userCredentialRepository.findAllPaged(size, offset)
+                .stream()
+                .map(AccountProfileResponse::from)
+                .toList();
+        long totalElements = userCredentialRepository.countAll();
+
+        return new AccountProfilesResponse(page, size, totalElements, accounts);
     }
 
     @Transactional

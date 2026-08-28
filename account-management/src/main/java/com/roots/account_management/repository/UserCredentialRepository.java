@@ -2,6 +2,7 @@ package com.roots.account_management.repository;
 
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -46,6 +47,21 @@ public class UserCredentialRepository {
                 userGUID
         );
         return results.stream().findFirst();
+    }
+
+    public List<UserCredential> findAllPaged(int size, int offset) {
+        return jdbcTemplate.query(
+                "SELECT id, user_guid, email, name, password, is_mfa_enabled, is_email_verified, is_password_change_required "
+                        + "FROM user_credential ORDER BY id ASC LIMIT ? OFFSET ?",
+                ROW_MAPPER,
+                size,
+                offset
+        );
+    }
+
+    public long countAll() {
+        Long count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM user_credential", Long.class);
+        return count == null ? 0L : count;
     }
 
     public void deleteById(long id) {

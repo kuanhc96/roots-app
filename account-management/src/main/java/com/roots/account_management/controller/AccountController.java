@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
 import com.roots.account_management.dto.response.AccountProfileResponse;
+import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
 import com.roots.account_management.dto.response.UserCredentialResponse;
@@ -33,6 +34,10 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api/account")
 @RequiredArgsConstructor
 public class AccountController {
+
+    private static final int DEFAULT_PAGE = 0;
+    private static final int DEFAULT_SIZE = 20;
+    private static final int MAX_SIZE = 100;
 
     private final AccountService accountService;
     private final Validator validator;
@@ -113,6 +118,21 @@ public class AccountController {
             @Parameter(description = "GUID of the account to fetch; provide this or email, not both")
             @RequestParam(required = false) String userGUID) throws UserCredentialNotFoundException {
         return AccountProfileResponse.from(lookup(email, userGUID));
+    }
+
+    @Operation(
+            summary = "Get account profiles",
+            description = "Public endpoint: returns paginated account profile rows (userGUID, email, name)."
+    )
+    @GetMapping("/profiles")
+    public AccountProfilesResponse getAccountProfiles(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        int resolvedPage = page == null ? DEFAULT_PAGE : page;
+        int resolvedSize = size == null ? DEFAULT_SIZE : size;
+
+        validator.validatePagination(resolvedPage, resolvedSize, MAX_SIZE);
+        return accountService.getAccountProfiles(resolvedPage, resolvedSize);
     }
 
     @Operation(
