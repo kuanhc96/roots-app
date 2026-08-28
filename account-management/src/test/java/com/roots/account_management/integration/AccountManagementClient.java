@@ -8,12 +8,11 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 
 /**
- * Client for account-management's integration-test endpoints. Cookie-less (the API is
- * a stateless OAuth2 resource server); every call carries the client_credentials
- * access token obtained from the auth-server as a bearer token.
+ * Client for account-management integration tests.
  */
 public class AccountManagementClient {
 
@@ -30,8 +29,7 @@ public class AccountManagementClient {
     }
 
     public HttpResponse<String> createTestAccount(String accessToken, String name, String email, String password) throws Exception {
-        String json = objectMapper.writeValueAsString(
-                Map.of("name", name, "email", email, "password", password));
+        String json = objectMapper.writeValueAsString(Map.of("name", name, "email", email, "password", password));
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/account/test"))
@@ -52,19 +50,41 @@ public class AccountManagementClient {
     }
 
     public HttpResponse<String> deleteByEmail(String accessToken, String email) throws Exception {
-        return delete(accessToken, "email=" + encode(email));
+        return deleteTestAccount(accessToken, "email=" + encode(email));
     }
 
     public HttpResponse<String> deleteByUserGUID(String accessToken, String userGUID) throws Exception {
-        return delete(accessToken, "userGUID=" + encode(userGUID));
+        return deleteTestAccount(accessToken, "userGUID=" + encode(userGUID));
     }
 
     public HttpResponse<String> deleteByEmailAndUserGUID(String accessToken, String email, String userGUID) throws Exception {
-        return delete(accessToken, "email=" + encode(email) + "&userGUID=" + encode(userGUID));
+        return deleteTestAccount(accessToken, "email=" + encode(email) + "&userGUID=" + encode(userGUID));
     }
 
     public HttpResponse<String> deleteWithoutParams(String accessToken) throws Exception {
-        return delete(accessToken, "");
+        return deleteTestAccount(accessToken, "");
+    }
+
+    public HttpResponse<String> deleteAccounts(List<String> userGUIDs) throws Exception {
+        String json = objectMapper.writeValueAsString(Map.of("userGUIDs", userGUIDs));
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/account"))
+                .header("Content-Type", "application/json")
+                .method("DELETE", HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    public HttpResponse<String> deleteAccountsRaw(String jsonBody) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/account"))
+                .header("Content-Type", "application/json")
+                .method("DELETE", HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     public String extractUserGUID(String createResponseBody) throws Exception {
@@ -162,7 +182,7 @@ public class AccountManagementClient {
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    private HttpResponse<String> delete(String accessToken, String query) throws Exception {
+    private HttpResponse<String> deleteTestAccount(String accessToken, String query) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/account/test?" + query))
                 .header("Authorization", "Bearer " + accessToken)

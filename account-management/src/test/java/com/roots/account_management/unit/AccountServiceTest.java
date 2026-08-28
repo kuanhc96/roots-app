@@ -183,6 +183,28 @@ class AccountServiceTest {
     }
 
     @Test
+    void deleteAccountsByUserGUIDs_deduplicatesAndTrimsValues() {
+        UserCredential first = new UserCredential(
+                11L, "guid-1", "one@example.com", "One", "hash", true, true, false);
+        UserCredential second = new UserCredential(
+                12L, "guid-2", "two@example.com", "Two", "hash", true, true, false);
+
+        when(userCredentialRepository.findByUserGUID("guid-1")).thenReturn(Optional.of(first));
+        when(userCredentialRepository.findByUserGUID("guid-2")).thenReturn(Optional.of(second));
+        when(userCredentialRepository.findByUserGUID("missing-guid")).thenReturn(Optional.empty());
+
+        accountService.deleteAccountsByUserGUIDs(List.of("guid-1", " guid-1 ", "guid-2", "missing-guid"));
+
+        verify(userCredentialRepository).findByUserGUID("guid-1");
+        verify(userCredentialRepository).findByUserGUID("guid-2");
+        verify(userCredentialRepository).findByUserGUID("missing-guid");
+        verify(roleRepository).deleteByCredentialId(11L);
+        verify(roleRepository).deleteByCredentialId(12L);
+        verify(userCredentialRepository).deleteById(11L);
+        verify(userCredentialRepository).deleteById(12L);
+    }
+
+    @Test
     void getAccountProfiles_returnsPageResponseWithMappedAccounts() {
         UserCredential first = new UserCredential(1L, "guid-1", "one@example.com", "One", "hash", true, false, false);
         UserCredential second = new UserCredential(2L, "guid-2", "two@example.com", "Two", "hash", false, true, false);

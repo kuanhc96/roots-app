@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.roots.account_management.controller.AccountController;
 import com.roots.account_management.dto.request.CreateAccountRequest;
+import com.roots.account_management.dto.request.DeleteAccountsRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
@@ -41,9 +42,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/**
- * Unit test for {@link AccountController} using standalone MockMvc.
- */
 @ExtendWith(MockitoExtension.class)
 class AccountControllerTest {
 
@@ -157,6 +155,33 @@ class AccountControllerTest {
     }
 
     @Test
+    void deleteAccounts_withValidRequest_returns204AndDelegates() throws Exception {
+        DeleteAccountsRequest request = new DeleteAccountsRequest(List.of("guid-1", "guid-1", "guid-2"));
+
+        mockMvc.perform(delete("/api/account")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNoContent());
+
+        verify(validator).validateDeleteAccountsRequest(any(DeleteAccountsRequest.class), anyInt());
+        verify(accountService).deleteAccountsByUserGUIDs(request.userGUIDs());
+    }
+
+    @Test
+    void deleteAccounts_whenValidationFails_returns400WithError() throws Exception {
+        doThrow(new InvalidRequestException("userGUIDs must contain at least one value"))
+                .when(validator).validateDeleteAccountsRequest(any(DeleteAccountsRequest.class), anyInt());
+
+        mockMvc.perform(delete("/api/account")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userGUIDs\":[]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("userGUIDs must contain at least one value"));
+
+        verify(accountService, never()).deleteAccountsByUserGUIDs(any());
+    }
+
+    @Test
     void getAccountProfiles_withDefaults_returns200AndPagePayload() throws Exception {
         AccountProfilesResponse response = new AccountProfilesResponse(
                 0,
@@ -224,8 +249,7 @@ class AccountControllerTest {
 
     @Test
     void searchAccountProfiles_byName_withFullMatchAndMaxCount_delegatesToService() throws Exception {
-        when(accountService.searchAccountProfiles(null, "Jane", true, 5))
-                .thenReturn(List.of());
+        when(accountService.searchAccountProfiles(null, "Jane", true, 5)).thenReturn(List.of());
 
         mockMvc.perform(post("/api/account/search")
                         .param("name", "Jane")
@@ -256,10 +280,7 @@ class AccountControllerTest {
         String userGUID = "test-guid";
         UpdateMfaRequest request = new UpdateMfaRequest(false);
         when(accountService.updateMfaEnabledByUserGUID(userGUID, false))
-                .thenReturn(UpdateMfaResponse.builder()
-                        .userGUID(userGUID)
-                        .mfaEnabled(false)
-                        .build());
+                .thenReturn(UpdateMfaResponse.builder().userGUID(userGUID).mfaEnabled(false).build());
 
         mockMvc.perform(put("/api/account/mfa/{userGUID}", userGUID)
                         .contentType(MediaType.APPLICATION_JSON)
