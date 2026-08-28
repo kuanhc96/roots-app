@@ -229,6 +229,28 @@ public class AccountManagementClient {
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
+    public HttpResponse<String> addRoleByUserGUID(String userGUID, String role) throws Exception {
+        String json = objectMapper.writeValueAsString(Map.of("role", role));
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/account/role/" + encode(userGUID)))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    public HttpResponse<String> addRoleByUserGUIDRaw(String userGUID, String jsonBody) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/account/role/" + encode(userGUID)))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
     private HttpResponse<String> getAccountProfile(String query) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/account/profile?" + query))

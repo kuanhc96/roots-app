@@ -18,6 +18,8 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -237,6 +239,66 @@ class AccountStatusIntegrationTest {
     void updateEmail_withUnknownUserGUID_returns404() throws Exception {
         HttpResponse<String> response =
                 accountManagementClient.updateEmailByUserGUID(UUID.randomUUID().toString(), TestUtils.getUniqueEmail());
+
+        assertThat(response.statusCode()).isEqualTo(404);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
+    @Test
+    void addRole_withNewRole_returns201AndContainsAllRoles() throws Exception {
+        HttpResponse<String> response = accountManagementClient.addRoleByUserGUID(userGUID, "pastor");
+
+        assertThat(response.statusCode()).isEqualTo(201);
+        JsonNode body = OBJECT_MAPPER.readTree(response.body());
+        assertThat(body.get("userGUID").asText()).isEqualTo(userGUID);
+        JsonNode roles = body.get("roles");
+        assertThat(roles.isArray()).isTrue();
+        List<String> roleList = new ArrayList<>();
+        roles.forEach(r -> roleList.add(r.asText()));
+        assertThat(roleList).contains("member", "pastor");
+    }
+
+    @Test
+    void addRole_withAlreadyExistingRole_returns200() throws Exception {
+        HttpResponse<String> response = accountManagementClient.addRoleByUserGUID(userGUID, "member");
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode body = OBJECT_MAPPER.readTree(response.body());
+        assertThat(body.get("userGUID").asText()).isEqualTo(userGUID);
+        JsonNode roles = body.get("roles");
+        assertThat(roles.isArray()).isTrue();
+        List<String> roleList = new ArrayList<>();
+        roles.forEach(r -> roleList.add(r.asText()));
+        assertThat(roleList).containsExactly("member");
+    }
+
+    @Test
+    void addRole_withGuestRole_returns400() throws Exception {
+        HttpResponse<String> response = accountManagementClient.addRoleByUserGUID(userGUID, "guest");
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
+    @Test
+    void addRole_withInvalidRole_returns400() throws Exception {
+        HttpResponse<String> response = accountManagementClient.addRoleByUserGUID(userGUID, "not_a_real_role");
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
+    @Test
+    void addRole_withMissingRole_returns400() throws Exception {
+        HttpResponse<String> response = accountManagementClient.addRoleByUserGUIDRaw(userGUID, "{}");
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
+    @Test
+    void addRole_withUnknownUserGUID_returns404() throws Exception {
+        HttpResponse<String> response = accountManagementClient.addRoleByUserGUID(UUID.randomUUID().toString(), "pastor");
 
         assertThat(response.statusCode()).isEqualTo(404);
         TestUtils.assertHasErrorField(response.body());

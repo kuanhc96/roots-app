@@ -13,12 +13,14 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.roots.account_management.controller.AccountController;
+import com.roots.account_management.dto.request.AddRoleRequest;
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.request.DeleteAccountsRequest;
 import com.roots.account_management.dto.request.UpdateEmailRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
 import com.roots.account_management.dto.request.UpdateNameRequest;
 import com.roots.account_management.dto.request.UpdatePasswordRequest;
+import com.roots.account_management.dto.response.AddRoleResponse;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
@@ -32,6 +34,8 @@ import com.roots.account_management.exception.GlobalExceptionHandler;
 import com.roots.account_management.exception.InvalidRequestException;
 import com.roots.account_management.service.AccountService;
 import com.roots.account_management.validator.Validator;
+
+import com.roots.account_management.service.AccountService;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -414,5 +418,57 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$.error").value("Email must contain an \"@\""));
 
         verify(accountService, never()).updateEmailByUserGUID(anyString(), anyString());
+    }
+
+    @Test
+    void addRole_whenRoleIsNew_returns201AndBody() throws Exception {
+        String userGUID = "test-guid";
+        AddRoleRequest request = new AddRoleRequest("pastor");
+        AddRoleResponse serviceResponse = new AddRoleResponse(userGUID, List.of(Role.MEMBER, Role.PASTOR));
+        when(accountService.addRoleToAccount(userGUID, "pastor"))
+                .thenReturn(new AccountService.AddRoleServiceResult(true, serviceResponse));
+
+        mockMvc.perform(post("/api/account/role/{userGUID}", userGUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.userGUID").value(userGUID))
+                .andExpect(jsonPath("$.roles[0]").value("member"))
+                .andExpect(jsonPath("$.roles[1]").value("pastor"));
+
+        verify(validator).validateUserGUID(userGUID);
+        verify(validator).validateAddRoleRequest(any(AddRoleRequest.class));
+        verify(accountService).addRoleToAccount(userGUID, "pastor");
+    }
+
+    @Test
+    void addRole_whenRoleAlreadyPresent_returns200AndBody() throws Exception {
+        String userGUID = "test-guid";
+        AddRoleRequest request = new AddRoleRequest("member");
+        AddRoleResponse serviceResponse = new AddRoleResponse(userGUID, List.of(Role.MEMBER));
+        when(accountService.addRoleToAccount(userGUID, "member"))
+                .thenReturn(new AccountService.AddRoleServiceResult(false, serviceResponse));
+
+        mockMvc.perform(post("/api/account/role/{userGUID}", userGUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userGUID").value(userGUID))
+                .andExpect(jsonPath("$.roles[0]").value("member"));
+    }
+
+    @Test
+    void addRole_whenValidationFails_returns400WithError() throws Exception {
+        String userGUID = "test-guid";
+        doThrow(new InvalidRequestException("GUEST role cannot be added"))
+                .when(validator).validateAddRoleRequest(any(AddRoleRequest.class));
+
+        mockMvc.perform(post("/api/account/role/{userGUID}", userGUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AddRoleRequest("guest"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("GUEST role cannot be added"));
+
+        verify(accountService, never()).addRoleToAccount(anyString(), anyString());
     }
 }

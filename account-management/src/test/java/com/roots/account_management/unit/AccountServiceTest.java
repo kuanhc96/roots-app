@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
+import com.roots.account_management.dto.response.AddRoleResponse;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
@@ -402,5 +403,49 @@ class AccountServiceTest {
 
         verify(userCredentialRepository).findByUserGUID(userGUID);
         verify(userCredentialRepository, never()).setEmailByUserGUID(anyLong(), anyString());
+    }
+
+    @Test
+    void addRoleToAccount_whenRoleIsNew_insertsAndReturnsWasAdded() throws Exception {
+        String userGUID = "guid-123";
+        UserCredential existing = new UserCredential(
+                5L, userGUID, "jane@example.com", "Jane", "hash", true, true, false);
+        when(userCredentialRepository.findByUserGUID(userGUID)).thenReturn(Optional.of(existing));
+        when(roleRepository.findRoleNamesByCredentialId(5L)).thenReturn(List.of("member"));
+
+        AccountService.AddRoleServiceResult result = accountService.addRoleToAccount(userGUID, "pastor");
+
+        verify(roleRepository).insert(5L, "pastor");
+        assertThat(result.wasAdded()).isTrue();
+        assertThat(result.response().userGUID()).isEqualTo(userGUID);
+        assertThat(result.response().roles()).containsExactlyInAnyOrder(Role.MEMBER, Role.PASTOR);
+    }
+
+    @Test
+    void addRoleToAccount_whenRoleAlreadyPresent_skipsInsertAndReturnsNotAdded() throws Exception {
+        String userGUID = "guid-123";
+        UserCredential existing = new UserCredential(
+                5L, userGUID, "jane@example.com", "Jane", "hash", true, true, false);
+        when(userCredentialRepository.findByUserGUID(userGUID)).thenReturn(Optional.of(existing));
+        when(roleRepository.findRoleNamesByCredentialId(5L)).thenReturn(List.of("member"));
+
+        AccountService.AddRoleServiceResult result = accountService.addRoleToAccount(userGUID, "member");
+
+        verify(roleRepository, never()).insert(anyLong(), anyString());
+        assertThat(result.wasAdded()).isFalse();
+        assertThat(result.response().roles()).containsExactly(Role.MEMBER);
+    }
+
+    @Test
+    void addRoleToAccount_whenUserNotFound_throws() {
+        String userGUID = "missing-guid";
+        when(userCredentialRepository.findByUserGUID(userGUID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> accountService.addRoleToAccount(userGUID, "pastor"))
+                .isInstanceOf(UserCredentialNotFoundException.class)
+                .hasMessage("No account found for userGUID " + userGUID);
+
+        verify(roleRepository, never()).findRoleNamesByCredentialId(anyLong());
+        verify(roleRepository, never()).insert(anyLong(), anyString());
     }
 }
