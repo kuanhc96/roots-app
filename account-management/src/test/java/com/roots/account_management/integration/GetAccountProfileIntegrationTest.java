@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestPropertySource("classpath:/application.yml")
 class GetAccountProfileIntegrationTest {
 
-    private static final String TEST_NAME = "Integration Test User";
+    private static final String TEST_NAME_PREFIX = "Integration Test User ";
     private static final String TEST_PASSWORD = "Password123";
     private static final String SCOPES = "INTEGRATION_TEST_CLIENT_WRITE INTEGRATION_TEST_CLIENT_DELETE";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -41,14 +41,16 @@ class GetAccountProfileIntegrationTest {
     private String accessToken;
     private String userGUID;
     private String email;
+    private String name;
 
     @BeforeEach
     void setUp() throws Exception {
         accessToken = TestUtils.getClientCredentialsToken(oAuth2Client, integrationTestClientSecret, SCOPES);
         email = TestUtils.getUniqueEmail();
+        name = TEST_NAME_PREFIX + UUID.randomUUID();
 
         HttpResponse<String> createResponse =
-                accountManagementClient.createTestAccount(accessToken, TEST_NAME, email, TEST_PASSWORD);
+                accountManagementClient.createTestAccount(accessToken, name, email, TEST_PASSWORD);
         assertThat(createResponse.statusCode()).isEqualTo(201);
         userGUID = accountManagementClient.extractUserGUID(createResponse.body());
         assertThat(userGUID).isNotBlank();
@@ -70,7 +72,7 @@ class GetAccountProfileIntegrationTest {
         JsonNode body = OBJECT_MAPPER.readTree(response.body());
         assertThat(body.get("userGUID").asText()).isEqualTo(userGUID);
         assertThat(body.get("email").asText()).isEqualTo(email);
-        assertThat(body.get("name").asText()).isEqualTo(TEST_NAME);
+        assertThat(body.get("name").asText()).isEqualTo(name);
     }
 
     @Test
@@ -81,7 +83,7 @@ class GetAccountProfileIntegrationTest {
         JsonNode body = OBJECT_MAPPER.readTree(response.body());
         assertThat(body.get("userGUID").asText()).isEqualTo(userGUID);
         assertThat(body.get("email").asText()).isEqualTo(email);
-        assertThat(body.get("name").asText()).isEqualTo(TEST_NAME);
+        assertThat(body.get("name").asText()).isEqualTo(name);
     }
 
     @Test
@@ -116,12 +118,12 @@ class GetAccountProfileIntegrationTest {
         List<String> extraUserGUIDs = new ArrayList<>();
         try {
             HttpResponse<String> extra1 =
-                    accountManagementClient.createTestAccount(accessToken, TEST_NAME, TestUtils.getUniqueEmail(), TEST_PASSWORD);
+                    accountManagementClient.createTestAccount(accessToken, TEST_NAME_PREFIX + UUID.randomUUID(), TestUtils.getUniqueEmail(), TEST_PASSWORD);
             assertThat(extra1.statusCode()).isEqualTo(201);
             extraUserGUIDs.add(accountManagementClient.extractUserGUID(extra1.body()));
 
             HttpResponse<String> extra2 =
-                    accountManagementClient.createTestAccount(accessToken, TEST_NAME, TestUtils.getUniqueEmail(), TEST_PASSWORD);
+                    accountManagementClient.createTestAccount(accessToken, TEST_NAME_PREFIX + UUID.randomUUID(), TestUtils.getUniqueEmail(), TEST_PASSWORD);
             assertThat(extra2.statusCode()).isEqualTo(201);
             extraUserGUIDs.add(accountManagementClient.extractUserGUID(extra2.body()));
 
@@ -145,7 +147,7 @@ class GetAccountProfileIntegrationTest {
                 if (userGUID.equals(account.get("userGUID").asText())) {
                     found = true;
                     assertThat(account.get("email").asText()).isEqualTo(email);
-                    assertThat(account.get("name").asText()).isEqualTo(TEST_NAME);
+                    assertThat(account.get("name").asText()).isEqualTo(name);
                     break;
                 }
             }
@@ -202,5 +204,115 @@ class GetAccountProfileIntegrationTest {
 
         assertThat(response.statusCode()).isEqualTo(400);
         TestUtils.assertHasErrorField(response.body());
+    }
+
+    @Test
+    void searchAccounts_byEmail_fullMatchTrue_returnsCreatedAccount() throws Exception {
+        HttpResponse<String> response = accountManagementClient.searchAccountsByEmail(email, true, null);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode body = OBJECT_MAPPER.readTree(response.body());
+        assertThat(body.isArray()).isTrue();
+        boolean found = false;
+        for (JsonNode account : body) {
+            if (userGUID.equals(account.get("userGUID").asText())) {
+                found = true;
+                assertThat(account.get("email").asText()).isEqualTo(email);
+                assertThat(account.get("name").asText()).isEqualTo(name);
+                break;
+            }
+        }
+        assertThat(found).isTrue();
+    }
+
+    @Test
+    void searchAccounts_byEmail_fullMatchFalse_supportsFuzzyContains() throws Exception {
+        String localPart = email.substring(0, email.indexOf('@'));
+        String fragment = localPart.substring(0, Math.min(6, localPart.length()));
+
+        HttpResponse<String> response = accountManagementClient.searchAccountsByEmail(fragment, false, null);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode body = OBJECT_MAPPER.readTree(response.body());
+        assertThat(body.isArray()).isTrue();
+        boolean found = false;
+        for (JsonNode account : body) {
+            if (userGUID.equals(account.get("userGUID").asText())) {
+                found = true;
+                break;
+            }
+        }
+        assertThat(found).isTrue();
+    }
+
+    @Test
+    void searchAccounts_byName_fullMatchTrue_returnsCreatedAccount() throws Exception {
+        HttpResponse<String> response = accountManagementClient.searchAccountsByName(name, true, null);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode body = OBJECT_MAPPER.readTree(response.body());
+        assertThat(body.isArray()).isTrue();
+        boolean found = false;
+        for (JsonNode account : body) {
+            if (userGUID.equals(account.get("userGUID").asText())) {
+                found = true;
+                break;
+            }
+        }
+        assertThat(found).isTrue();
+    }
+
+    @Test
+    void searchAccounts_byName_fullMatchFalse_supportsFuzzyContains() throws Exception {
+        HttpResponse<String> response = accountManagementClient.searchAccountsByName("integration test", false, null);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode body = OBJECT_MAPPER.readTree(response.body());
+        assertThat(body.isArray()).isTrue();
+        boolean found = false;
+        for (JsonNode account : body) {
+            if (userGUID.equals(account.get("userGUID").asText())) {
+                found = true;
+                break;
+            }
+        }
+        assertThat(found).isTrue();
+    }
+
+    @Test
+    void searchAccounts_withBothEmailAndName_returns400() throws Exception {
+        HttpResponse<String> response = accountManagementClient.searchAccountsWithQuery(
+                "email=" + java.net.URLEncoder.encode(email, java.nio.charset.StandardCharsets.UTF_8)
+                        + "&name=" + java.net.URLEncoder.encode(name, java.nio.charset.StandardCharsets.UTF_8));
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
+    @Test
+    void searchAccounts_withNeitherEmailNorName_returns400() throws Exception {
+        HttpResponse<String> response = accountManagementClient.searchAccountsWithQuery("");
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
+    @Test
+    void searchAccounts_withNonPositiveMaxCount_returns400() throws Exception {
+        HttpResponse<String> response = accountManagementClient.searchAccountsWithQuery(
+                "email=" + java.net.URLEncoder.encode(email, java.nio.charset.StandardCharsets.UTF_8) + "&maxCount=0");
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
+    @Test
+    void searchAccounts_respectsMaxCountLimit() throws Exception {
+        HttpResponse<String> response = accountManagementClient.searchAccountsByName(name, true, 1);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode body = OBJECT_MAPPER.readTree(response.body());
+        assertThat(body.isArray()).isTrue();
+        assertThat(body.size()).isLessThanOrEqualTo(1);
     }
 }

@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
+import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
@@ -64,7 +65,6 @@ class AccountServiceTest {
 
         CreateTestAccountResponse response = accountService.createTestAccount(request);
 
-        // Credential is inserted with the hashed password, the request flags, and a generated guid.
         ArgumentCaptor<UserCredential> captor = ArgumentCaptor.forClass(UserCredential.class);
         verify(userCredentialRepository).insert(captor.capture());
         UserCredential inserted = captor.getValue();
@@ -77,11 +77,9 @@ class AccountServiceTest {
         assertThat(inserted.passwordChangeRequired()).isTrue();
         assertThat(inserted.userGUID()).isNotBlank();
 
-        // MEMBER floor first, then the requested PASTOR.
         verify(roleRepository).insert(CREDENTIAL_ID, "member");
         verify(roleRepository).insert(CREDENTIAL_ID, "pastor");
 
-        // Response mirrors the request and carries the same generated guid that was persisted.
         assertThat(response.name()).isEqualTo("Jane");
         assertThat(response.email()).isEqualTo("jane@example.com");
         assertThat(response.userGUID()).isEqualTo(inserted.userGUID());
@@ -93,8 +91,6 @@ class AccountServiceTest {
 
     @Test
     void createTestAccount_withNullRoles_assignsOnlyMember_andDefaultsFlags() {
-        // mfaEnabled/emailVerified/passwordChangeRequired null -> the record's compact
-        // constructor applies defaults (true/false/false).
         CreateAccountRequest request = new CreateAccountRequest(
                 "Jane", "jane@example.com", "Password123", null, null, null, null);
         when(userCredentialRepository.findByEmail(any())).thenReturn(Optional.empty());
@@ -122,7 +118,6 @@ class AccountServiceTest {
 
         CreateTestAccountResponse response = accountService.createTestAccount(request);
 
-        // MEMBER (floor) is added first, then DEACON; the duplicate DEACON is dropped.
         assertThat(response.roles()).containsExactly(Role.MEMBER, Role.DEACON);
     }
 
@@ -149,7 +144,6 @@ class AccountServiceTest {
 
         accountService.deleteTestAccountByEmail("jane@example.com");
 
-        // Role rows must be removed before the credential (the role FK has no ON DELETE CASCADE).
         InOrder inOrder = inOrder(roleRepository, userCredentialRepository);
         inOrder.verify(roleRepository).deleteByCredentialId(7L);
         inOrder.verify(userCredentialRepository).deleteById(7L);
@@ -206,6 +200,32 @@ class AccountServiceTest {
         assertThat(response.accounts().get(0).userGUID()).isEqualTo("guid-1");
         assertThat(response.accounts().get(0).email()).isEqualTo("one@example.com");
         assertThat(response.accounts().get(0).name()).isEqualTo("One");
+    }
+
+    @Test
+    void searchAccountProfiles_byEmail_usesRepositoryAndMapsResult() {
+        UserCredential result = new UserCredential(1L, "guid-1", "jane@example.com", "Jane", "hash", true, false, false);
+        when(userCredentialRepository.searchByEmail("jane@example.com", false, 100)).thenReturn(List.of(result));
+
+        List<AccountProfileResponse> response = accountService.searchAccountProfiles("jane@example.com", null, false, 100);
+
+        verify(userCredentialRepository).searchByEmail("jane@example.com", false, 100);
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).userGUID()).isEqualTo("guid-1");
+        assertThat(response.get(0).email()).isEqualTo("jane@example.com");
+        assertThat(response.get(0).name()).isEqualTo("Jane");
+    }
+
+    @Test
+    void searchAccountProfiles_byName_usesRepositoryAndMapsResult() {
+        UserCredential result = new UserCredential(2L, "guid-2", "john@example.com", "John", "hash", true, false, false);
+        when(userCredentialRepository.searchByName("John", true, 5)).thenReturn(List.of(result));
+
+        List<AccountProfileResponse> response = accountService.searchAccountProfiles(null, "John", true, 5);
+
+        verify(userCredentialRepository).searchByName("John", true, 5);
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).userGUID()).isEqualTo("guid-2");
     }
 
     @Test

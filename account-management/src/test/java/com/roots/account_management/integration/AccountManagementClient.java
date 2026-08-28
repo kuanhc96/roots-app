@@ -29,10 +29,6 @@ public class AccountManagementClient {
         this.objectMapper = new ObjectMapper();
     }
 
-    /**
-     * Creates a test account via POST /api/account/test. Returns the raw response so the
-     * test can assert on the status (201) and read the userGUID from the body.
-     */
     public HttpResponse<String> createTestAccount(String accessToken, String name, String email, String password) throws Exception {
         String json = objectMapper.writeValueAsString(
                 Map.of("name", name, "email", email, "password", password));
@@ -47,65 +43,34 @@ public class AccountManagementClient {
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    /**
-     * Reads all fields of a test account by email via the protected
-     * GET /api/account/test?email=... (requires the INTEGRATION_TEST_CLIENT_READ scope).
-     * Returns the raw response (200 body is UserCredentialTestingResponse JSON, incl. password).
-     */
     public HttpResponse<String> getTestAccountByEmail(String accessToken, String email) throws Exception {
         return getTestAccount(accessToken, "email=" + encode(email));
     }
 
-    /**
-     * Reads all fields of a test account by userGUID via the protected
-     * GET /api/account/test?userGUID=... (requires the INTEGRATION_TEST_CLIENT_READ scope).
-     * Returns the raw response (200 body is UserCredentialTestingResponse JSON, incl. password).
-     */
     public HttpResponse<String> getTestAccountByUserGUID(String accessToken, String userGUID) throws Exception {
         return getTestAccount(accessToken, "userGUID=" + encode(userGUID));
     }
 
-    /**
-     * Deletes a test account by email via DELETE /api/account/test?email=...
-     * Returns the raw response (204 on success).
-     */
     public HttpResponse<String> deleteByEmail(String accessToken, String email) throws Exception {
         return delete(accessToken, "email=" + encode(email));
     }
 
-    /**
-     * Deletes a test account by userGUID via DELETE /api/account/test?userGUID=...
-     * Returns the raw response (204 on success).
-     */
     public HttpResponse<String> deleteByUserGUID(String accessToken, String userGUID) throws Exception {
         return delete(accessToken, "userGUID=" + encode(userGUID));
     }
 
-    /**
-     * Deletes with both email and userGUID present (invalid combination; validator returns 400).
-     */
     public HttpResponse<String> deleteByEmailAndUserGUID(String accessToken, String email, String userGUID) throws Exception {
         return delete(accessToken, "email=" + encode(email) + "&userGUID=" + encode(userGUID));
     }
 
-    /**
-     * Deletes with neither email nor userGUID (invalid combination; validator returns 400).
-     */
     public HttpResponse<String> deleteWithoutParams(String accessToken) throws Exception {
         return delete(accessToken, "");
     }
 
-    /**
-     * Extracts the userGUID field from a create-account 201 response body.
-     */
     public String extractUserGUID(String createResponseBody) throws Exception {
         return objectMapper.readTree(createResponseBody).get("userGUID").asText();
     }
 
-    /**
-     * Public endpoint call: updates mfaEnabled via
-     * PUT /api/account/mfa/{userGUID} with body {"mfaEnabled": ...}.
-     */
     public HttpResponse<String> updateMfaByUserGUID(String userGUID, Boolean mfaEnabled) throws Exception {
         String json = objectMapper.writeValueAsString(Map.of("mfaEnabled", mfaEnabled));
 
@@ -118,9 +83,6 @@ public class AccountManagementClient {
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    /**
-     * Public endpoint call for negative tests: caller supplies raw JSON body.
-     */
     public HttpResponse<String> updateMfaByUserGUIDRaw(String userGUID, String jsonBody) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/account/mfa/" + encode(userGUID)))
@@ -131,43 +93,51 @@ public class AccountManagementClient {
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    /**
-     * Public endpoint call: reads a profile subset by email via
-     * GET /api/account/profile?email=...
-     */
     public HttpResponse<String> getAccountProfileByEmail(String email) throws Exception {
         return getAccountProfile("email=" + encode(email));
     }
 
-    /**
-     * Public endpoint call: reads a profile subset by userGUID via
-     * GET /api/account/profile?userGUID=...
-     */
     public HttpResponse<String> getAccountProfileByUserGUID(String userGUID) throws Exception {
         return getAccountProfile("userGUID=" + encode(userGUID));
     }
 
-    /**
-     * Public endpoint call for validation tests with arbitrary query string.
-     */
     public HttpResponse<String> getAccountProfileWithQuery(String query) throws Exception {
         return getAccountProfile(query);
     }
 
-    /**
-     * Public endpoint call: gets paginated profile rows.
-     */
     public HttpResponse<String> getAccountProfiles(int page, int size) throws Exception {
         return getAccountProfilesWithQuery("page=" + page + "&size=" + size);
     }
 
-    /**
-     * Public endpoint call for pagination validation tests with arbitrary query string.
-     */
     public HttpResponse<String> getAccountProfilesWithQuery(String query) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/account/profiles?" + query))
                 .GET()
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    public HttpResponse<String> searchAccountsByEmail(String email, boolean fullMatch, Integer maxCount) throws Exception {
+        String query = "email=" + encode(email) + "&fullMatch=" + fullMatch;
+        if (maxCount != null) {
+            query = query + "&maxCount=" + maxCount;
+        }
+        return searchAccountsWithQuery(query);
+    }
+
+    public HttpResponse<String> searchAccountsByName(String name, boolean fullMatch, Integer maxCount) throws Exception {
+        String query = "name=" + encode(name) + "&fullMatch=" + fullMatch;
+        if (maxCount != null) {
+            query = query + "&maxCount=" + maxCount;
+        }
+        return searchAccountsWithQuery(query);
+    }
+
+    public HttpResponse<String> searchAccountsWithQuery(String query) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/account/search?" + query))
+                .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
 
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());

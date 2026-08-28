@@ -42,11 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Unit test for {@link AccountController} using standalone MockMvc: the controller is
- * exercised in isolation with the service and validator mocked, and the real
- * {@link GlobalExceptionHandler} wired in so exception-to-status mapping is covered.
- * No Spring context or security filter chain is loaded ¡X @PreAuthorize is not enforced
- * here (that is covered by the integration tests' bearer-token flows).
+ * Unit test for {@link AccountController} using standalone MockMvc.
  */
 @ExtendWith(MockitoExtension.class)
 class AccountControllerTest {
@@ -209,6 +205,50 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$.error").value("size must be less than or equal to 100"));
 
         verify(accountService, never()).getAccountProfiles(anyInt(), anyInt());
+    }
+
+    @Test
+    void searchAccountProfiles_byEmail_usesDefaultParams() throws Exception {
+        when(accountService.searchAccountProfiles("jane@example.com", null, false, 100))
+                .thenReturn(List.of(new AccountProfileResponse("guid-1", "jane@example.com", "Jane")));
+
+        mockMvc.perform(post("/api/account/search").param("email", "jane@example.com"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].userGUID").value("guid-1"))
+                .andExpect(jsonPath("$[0].email").value("jane@example.com"))
+                .andExpect(jsonPath("$[0].name").value("Jane"));
+
+        verify(validator).validateSearchInput("jane@example.com", null, 100);
+        verify(accountService).searchAccountProfiles("jane@example.com", null, false, 100);
+    }
+
+    @Test
+    void searchAccountProfiles_byName_withFullMatchAndMaxCount_delegatesToService() throws Exception {
+        when(accountService.searchAccountProfiles(null, "Jane", true, 5))
+                .thenReturn(List.of());
+
+        mockMvc.perform(post("/api/account/search")
+                        .param("name", "Jane")
+                        .param("fullMatch", "true")
+                        .param("maxCount", "5"))
+                .andExpect(status().isOk());
+
+        verify(validator).validateSearchInput(null, "Jane", 5);
+        verify(accountService).searchAccountProfiles(null, "Jane", true, 5);
+    }
+
+    @Test
+    void searchAccountProfiles_whenValidationFails_returns400WithError() throws Exception {
+        doThrow(new InvalidRequestException("Provide either email or name, not both"))
+                .when(validator).validateSearchInput(anyString(), anyString(), anyInt());
+
+        mockMvc.perform(post("/api/account/search")
+                        .param("email", "a@example.com")
+                        .param("name", "Jane"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Provide either email or name, not both"));
+
+        verify(accountService, never()).searchAccountProfiles(anyString(), anyString(), anyBoolean(), anyInt());
     }
 
     @Test
