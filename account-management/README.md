@@ -6,14 +6,21 @@ It reads and writes the **shared auth-server database** (`user_credential` and `
 
 ## Endpoints
 
-Both endpoints live under `/api/account` (`controller/AccountController`) and are **integration-test-only**: each is guarded by `@PreAuthorize` and callable only with an `INTEGRATION_TEST_CLIENT` `client_credentials` access token obtained from `auth-server`. They let tests create and tear down accounts directly in the shared DB without driving the full signup/email-verification flow.
+Endpoints live under `/api/account` (`controller/AccountController`). Integration-test helpers are guarded by `@PreAuthorize` and callable only with an `INTEGRATION_TEST_CLIENT` `client_credentials` token; public endpoints are currently open.
 
 | Endpoint | Required authority | Behaviour |
 |---|---|---|
 | `POST /api/account/test` | `INTEGRATION_TEST_CLIENT_WRITE` | Creates an account from `CreateAccountRequest(name, email, password, mfaEnabled?, emailVerified?, roles?)`. `mfaEnabled` defaults to `true`, `emailVerified` to `false`; the `MEMBER` role is always added plus any requested roles (de-duplicated). Password is bcrypt-hashed; a `user_guid` UUID is generated. Returns **201** `CreateAccountResponse(name, email, userGUID, mfaEnabled, emailVerified, roles)`. |
+| `GET /api/account/test?email=…` *or* `?userGUID=…` | `INTEGRATION_TEST_CLIENT_READ` | Reads all account fields (including hashed password) by **exactly one** of `email`/`userGUID`. Returns **200** or **404**. |
 | `DELETE /api/account/test?email=…` *or* `?userGUID=…` | `INTEGRATION_TEST_CLIENT_DELETE` | Deletes by **exactly one** of `email`/`userGUID`. Returns **204**. Idempotent — no match is a no-op, so teardown can run repeatedly. |
+| `GET /api/account?email=…` *or* `?userGUID=…` | none (public) | Returns restricted account fields (`email`, `userGUID`, `mfaEnabled`) by **exactly one** of `email`/`userGUID`. |
+| `GET /api/account/profile?email=…` *or* `?userGUID=…` | none (public) | Returns account profile (`userGUID`, `email`, `name`) by **exactly one** of `email`/`userGUID`. |
+| `GET /api/account/profiles?page=0&size=20` | none (public) | Returns paginated profiles: `{page,size,totalElements,accounts[]}` where each account is `userGUID/email/name`. Defaults `page=0,size=20`; `size` max is `100`. |
+| `POST /api/account/search?email=…` *or* `?name=…` | none (public) | Searches profiles by **exactly one** of `email`/`name`. `fullMatch` defaults to `false` (fuzzy contains, case-insensitive); `maxCount` defaults to `100`. |
+| `PUT /api/account/mfa/{userGUID}` | none (public) | Updates `is_mfa_enabled` from body `{ "mfaEnabled": true|false }` and returns `{ "userGUID", "mfaEnabled" }`. |
+| `DELETE /api/account` | none (public) | Bulk delete by body `{ "userGUIDs": [...] }`. Missing IDs are treated as already deleted. Returns **204** on success; returns **400** when list is missing/null/empty, contains blanks, or exceeds 10 items. |
 
-**Validation** (`validator/Validator`, server-side): name required and ≤ 255 chars; email required and contains `@`; password required, ≥ 8 chars with at least one uppercase, lowercase, and digit. Failures throw `InvalidRequestException` → **400**. A duplicate email throws `EmailAlreadyExistsException` → **409**. The delete endpoint requires exactly one of email/userGUID (not both, not neither) → **400**. `GlobalExceptionHandler` (`@RestControllerAdvice`) maps these to `{"error": "<message>"}`.
+**Validation** (`validator/Validator`, server-side): name required and ≤ 255 chars; email required and contains `@`; password required, ≥ 8 chars with at least one uppercase, lowercase, and digit. Failures throw `InvalidRequestException` → **400**. A duplicate email throws `EmailAlreadyExistsException` → **409**. Lookup endpoints require exactly one identifier (email/userGUID, or email/name for search). Bulk delete requires a non-empty `userGUIDs` list (max 10) with no null/blank entries. `GlobalExceptionHandler` (`@RestControllerAdvice`) maps errors to `{"error": "<message>"}`.
 
 **Roles** (`enums/Role`): `pastor`, `deacon`, `small_group_leader`, `vice_small_group_leader`, `member`, `guest` (serialized as the lowercase value, case-insensitive on input).
 
