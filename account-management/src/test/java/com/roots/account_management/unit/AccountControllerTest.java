@@ -15,12 +15,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.roots.account_management.controller.AccountController;
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.request.DeleteAccountsRequest;
+import com.roots.account_management.dto.request.UpdateEmailRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
 import com.roots.account_management.dto.request.UpdateNameRequest;
 import com.roots.account_management.dto.request.UpdatePasswordRequest;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
+import com.roots.account_management.dto.response.UpdateEmailResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
 import com.roots.account_management.dto.response.UpdateNameResponse;
 import com.roots.account_management.dto.response.UpdatePasswordResponse;
@@ -378,5 +380,39 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$.error").value("Name is required"));
 
         verify(accountService, never()).updateNameByUserGUID(anyString(), anyString());
+    }
+
+    @Test
+    void updateEmail_withValidRequest_returns200AndBody() throws Exception {
+        String userGUID = "test-guid";
+        UpdateEmailRequest request = new UpdateEmailRequest("  updated@example.com  ");
+        when(accountService.updateEmailByUserGUID(userGUID, "  updated@example.com  "))
+                .thenReturn(UpdateEmailResponse.builder().userGUID(userGUID).email("updated@example.com").build());
+
+        mockMvc.perform(put("/api/account/email/{userGUID}", userGUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userGUID").value(userGUID))
+                .andExpect(jsonPath("$.email").value("updated@example.com"));
+
+        verify(validator).validateUserGUID(userGUID);
+        verify(validator).validateUpdateEmailRequest(any(UpdateEmailRequest.class));
+        verify(accountService).updateEmailByUserGUID(userGUID, "  updated@example.com  ");
+    }
+
+    @Test
+    void updateEmail_whenRequestValidationFails_returns400WithError() throws Exception {
+        String userGUID = "test-guid";
+        doThrow(new InvalidRequestException("Email must contain an \"@\""))
+                .when(validator).validateUpdateEmailRequest(any(UpdateEmailRequest.class));
+
+        mockMvc.perform(put("/api/account/email/{userGUID}", userGUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateEmailRequest("invalid-email"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Email must contain an \"@\""));
+
+        verify(accountService, never()).updateEmailByUserGUID(anyString(), anyString());
     }
 }

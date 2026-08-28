@@ -16,6 +16,7 @@ import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
+import com.roots.account_management.dto.response.UpdateEmailResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
 import com.roots.account_management.dto.response.UpdateNameResponse;
 import com.roots.account_management.dto.response.UpdatePasswordResponse;
@@ -338,5 +339,68 @@ class AccountServiceTest {
 
         verify(userCredentialRepository).findByUserGUID(userGUID);
         verify(userCredentialRepository, never()).setNameByUserGUID(anyLong(), anyString());
+    }
+
+    @Test
+    void updateEmailByUserGUID_whenFound_trimsUpdatesAndReturnsResponse() throws Exception {
+        String userGUID = "guid-123";
+        UserCredential existing = new UserCredential(
+                5L, userGUID, "jane@example.com", "Jane", "hash", true, true, false);
+        when(userCredentialRepository.findByUserGUID(userGUID)).thenReturn(Optional.of(existing));
+        when(userCredentialRepository.findByEmail("updated@example.com")).thenReturn(Optional.empty());
+        when(userCredentialRepository.setEmailByUserGUID(5L, "updated@example.com")).thenReturn(1);
+
+        UpdateEmailResponse result = accountService.updateEmailByUserGUID(userGUID, "  updated@example.com  ");
+
+        verify(userCredentialRepository).findByUserGUID(userGUID);
+        verify(userCredentialRepository).findByEmail("updated@example.com");
+        verify(userCredentialRepository).setEmailByUserGUID(5L, "updated@example.com");
+        assertThat(result.userGUID()).isEqualTo(userGUID);
+        assertThat(result.email()).isEqualTo("updated@example.com");
+    }
+
+    @Test
+    void updateEmailByUserGUID_whenEmailUsedByAnotherAccount_throwsConflict() {
+        String userGUID = "guid-123";
+        UserCredential current = new UserCredential(
+                5L, userGUID, "jane@example.com", "Jane", "hash", true, true, false);
+        UserCredential other = new UserCredential(
+                9L, "guid-999", "updated@example.com", "Other", "hash", true, true, false);
+        when(userCredentialRepository.findByUserGUID(userGUID)).thenReturn(Optional.of(current));
+        when(userCredentialRepository.findByEmail("updated@example.com")).thenReturn(Optional.of(other));
+
+        assertThatThrownBy(() -> accountService.updateEmailByUserGUID(userGUID, "updated@example.com"))
+                .isInstanceOf(EmailAlreadyExistsException.class)
+                .hasMessage("An account with this email already exists");
+
+        verify(userCredentialRepository, never()).setEmailByUserGUID(anyLong(), anyString());
+    }
+
+    @Test
+    void updateEmailByUserGUID_whenEmailBelongsToSameAccount_allowsUpdate() throws Exception {
+        String userGUID = "guid-123";
+        UserCredential current = new UserCredential(
+                5L, userGUID, "jane@example.com", "Jane", "hash", true, true, false);
+        when(userCredentialRepository.findByUserGUID(userGUID)).thenReturn(Optional.of(current));
+        when(userCredentialRepository.findByEmail("jane@example.com")).thenReturn(Optional.of(current));
+        when(userCredentialRepository.setEmailByUserGUID(5L, "jane@example.com")).thenReturn(1);
+
+        UpdateEmailResponse result = accountService.updateEmailByUserGUID(userGUID, "jane@example.com");
+
+        verify(userCredentialRepository).setEmailByUserGUID(5L, "jane@example.com");
+        assertThat(result.email()).isEqualTo("jane@example.com");
+    }
+
+    @Test
+    void updateEmailByUserGUID_whenNotFound_throws() {
+        String userGUID = "missing-guid";
+        when(userCredentialRepository.findByUserGUID(userGUID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> accountService.updateEmailByUserGUID(userGUID, "updated@example.com"))
+                .isInstanceOf(UserCredentialNotFoundException.class)
+                .hasMessage("No account found for userGUID " + userGUID);
+
+        verify(userCredentialRepository).findByUserGUID(userGUID);
+        verify(userCredentialRepository, never()).setEmailByUserGUID(anyLong(), anyString());
     }
 }

@@ -46,6 +46,7 @@ class AccountStatusIntegrationTest {
     private String accessToken;
     private String userGUID;
     private String email;
+    private String duplicateEmailUserGUID;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -61,6 +62,10 @@ class AccountStatusIntegrationTest {
 
     @AfterEach
     void tearDown() throws Exception {
+        if (duplicateEmailUserGUID != null) {
+            HttpResponse<String> deleteResponse = accountManagementClient.deleteByUserGUID(accessToken, duplicateEmailUserGUID);
+            assertThat(deleteResponse.statusCode()).isIn(200, 204);
+        }
         if (userGUID != null) {
             HttpResponse<String> deleteResponse = accountManagementClient.deleteByUserGUID(accessToken, userGUID);
             assertThat(deleteResponse.statusCode()).isIn(200, 204);
@@ -179,6 +184,64 @@ class AccountStatusIntegrationTest {
         TestUtils.assertHasErrorField(response.body());
     }
 
+    @Test
+    void updateEmail_trimsWhitespacePersistsAndReturnsTrimmedEmail() throws Exception {
+        String newEmail = "  updated." + UUID.randomUUID() + "@example.com  ";
+        String trimmedEmail = newEmail.trim();
+
+        HttpResponse<String> updateResponse = accountManagementClient.updateEmailByUserGUID(userGUID, newEmail);
+        assertThat(updateResponse.statusCode()).isEqualTo(200);
+        JsonNode updateBody = OBJECT_MAPPER.readTree(updateResponse.body());
+        assertThat(updateBody.get("userGUID").asText()).isEqualTo(userGUID);
+        assertThat(updateBody.get("email").asText()).isEqualTo(trimmedEmail);
+
+        HttpResponse<String> accountResponse = accountManagementClient.getAccountProfileByUserGUID(userGUID);
+        assertThat(accountResponse.statusCode()).isEqualTo(200);
+        JsonNode accountBody = OBJECT_MAPPER.readTree(accountResponse.body());
+        assertThat(accountBody.get("email").asText()).isEqualTo(trimmedEmail);
+    }
+
+    @Test
+    void updateEmail_withMissingEmailField_returns400() throws Exception {
+        HttpResponse<String> response = accountManagementClient.updateEmailByUserGUIDRaw(userGUID, "{}");
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidEmails")
+    void updateEmail_withInvalidEmail_returns400(String invalidEmail) throws Exception {
+        HttpResponse<String> response = accountManagementClient.updateEmailByUserGUID(userGUID, invalidEmail);
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
+    @Test
+    void updateEmail_withDuplicateEmail_returns409() throws Exception {
+        String duplicateEmail = TestUtils.getUniqueEmail();
+        HttpResponse<String> createResponse =
+                accountManagementClient.createTestAccount(accessToken, TEST_NAME, duplicateEmail, TEST_PASSWORD);
+        assertThat(createResponse.statusCode()).isEqualTo(201);
+        duplicateEmailUserGUID = accountManagementClient.extractUserGUID(createResponse.body());
+        assertThat(duplicateEmailUserGUID).isNotBlank();
+
+        HttpResponse<String> response = accountManagementClient.updateEmailByUserGUID(userGUID, duplicateEmail);
+
+        assertThat(response.statusCode()).isEqualTo(409);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
+    @Test
+    void updateEmail_withUnknownUserGUID_returns404() throws Exception {
+        HttpResponse<String> response =
+                accountManagementClient.updateEmailByUserGUID(UUID.randomUUID().toString(), TestUtils.getUniqueEmail());
+
+        assertThat(response.statusCode()).isEqualTo(404);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
     private static Stream<Arguments> invalidPasswords() {
         return Stream.of(
                 Arguments.of(""),
@@ -195,6 +258,14 @@ class AccountStatusIntegrationTest {
                 Arguments.of(""),
                 Arguments.of("   "),
                 Arguments.of("a".repeat(256))
+        );
+    }
+
+    private static Stream<Arguments> invalidEmails() {
+        return Stream.of(
+                Arguments.of(""),
+                Arguments.of("   "),
+                Arguments.of("not-an-email")
         );
     }
 }
