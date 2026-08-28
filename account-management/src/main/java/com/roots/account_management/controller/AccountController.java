@@ -1,5 +1,7 @@
 package com.roots.account_management.controller;
 
+import java.util.List;
+
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -38,6 +40,7 @@ public class AccountController {
     private static final int DEFAULT_PAGE = 0;
     private static final int DEFAULT_SIZE = 20;
     private static final int MAX_SIZE = 100;
+    private static final int DEFAULT_SEARCH_MAX_COUNT = 100;
 
     private final AccountService accountService;
     private final Validator validator;
@@ -136,6 +139,22 @@ public class AccountController {
     }
 
     @Operation(
+            summary = "Search account profiles",
+            description = "Public endpoint: searches accounts by either email or name (not both). "
+                    + "When fullMatch is true, performs exact case-insensitive matching; otherwise fuzzy case-insensitive contains matching."
+    )
+    @PostMapping("/search")
+    public List<AccountProfileResponse> searchAccountProfiles(
+            @RequestParam(required = false) String email,
+            @RequestParam(required = false) String name,
+            @RequestParam(defaultValue = "false") boolean fullMatch,
+            @RequestParam(defaultValue = "" + DEFAULT_SEARCH_MAX_COUNT) int maxCount) {
+
+        validator.validateSearchInput(email, name, maxCount);
+        return accountService.searchAccountProfiles(email, name, fullMatch, maxCount);
+    }
+
+    @Operation(
             summary = "Update MFA enabled status",
             description = "Public endpoint: updates is_mfa_enabled by userGUID and returns the updated "
                     + "restricted account view."
@@ -150,8 +169,6 @@ public class AccountController {
         return accountService.updateMfaEnabledByUserGUID(userGUID, updateMfaRequest.mfaEnabled());
     }
 
-    // Validates that exactly one identifier is present, then reads the credential by
-    // whichever was supplied. Shared by both GET endpoints.
     private UserCredential lookup(String email, String userGUID) throws UserCredentialNotFoundException {
         validator.validateAccountLookup(email, userGUID);
         return StringUtils.isNotBlank(email)

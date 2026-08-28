@@ -35,6 +35,21 @@ public class Validator {
         }
     }
 
+    public void validateSearchInput(String email, String name, int maxCount) {
+        boolean hasEmail = email != null && !email.isBlank();
+        boolean hasName = name != null && !name.isBlank();
+
+        if (hasEmail && hasName) {
+            throw new InvalidRequestException("Provide either email or name, not both");
+        }
+        if (!hasEmail && !hasName) {
+            throw new InvalidRequestException("Provide either email or name");
+        }
+        if (maxCount <= 0) {
+            throw new InvalidRequestException("maxCount must be greater than 0");
+        }
+    }
+
     public void validateUserGUID(String userGUID) {
         if (userGUID == null || userGUID.isBlank()) {
             throw new InvalidRequestException("userGUID is required");

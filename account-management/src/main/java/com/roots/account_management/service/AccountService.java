@@ -69,16 +69,12 @@ public class AccountService {
         );
     }
 
-    // Returns every field of the user's credential, looked up by email; throws when no
-    // account matches.
     public UserCredential getUserCredentialByEmail(String email) throws UserCredentialNotFoundException {
         return userCredentialRepository.findByEmail(email)
                 .orElseThrow(() -> new UserCredentialNotFoundException(
                         "No account found for email " + email));
     }
 
-    // Returns every field of the user's credential, looked up by userGUID; throws when no
-    // account matches.
     public UserCredential getUserCredentialByUserGUID(String userGUID) throws UserCredentialNotFoundException {
         return userCredentialRepository.findByUserGUID(userGUID)
                 .orElseThrow(() -> new UserCredentialNotFoundException(
@@ -97,6 +93,15 @@ public class AccountService {
         return new AccountProfilesResponse(page, size, totalElements, accounts);
     }
 
+    @Transactional(readOnly = true)
+    public List<AccountProfileResponse> searchAccountProfiles(String email, String name, boolean fullMatch, int maxCount) {
+        List<UserCredential> credentials = (email != null && !email.isBlank())
+                ? userCredentialRepository.searchByEmail(email, fullMatch, maxCount)
+                : userCredentialRepository.searchByName(name, fullMatch, maxCount);
+
+        return credentials.stream().map(AccountProfileResponse::from).toList();
+    }
+
     @Transactional
     public UpdateMfaResponse updateMfaEnabledByUserGUID(String userGUID, boolean mfaEnabled)
             throws UserCredentialNotFoundException {
@@ -105,28 +110,22 @@ public class AccountService {
         return UpdateMfaResponse.builder().userGUID(userGUID).mfaEnabled(mfaEnabled).build();
     }
 
-    // Idempotent: no match is a no-op so test teardown can run safely more than once.
     @Transactional
     public void deleteTestAccountByEmail(String email) {
         userCredentialRepository.findByEmail(email).ifPresent(this::deleteAccount);
     }
 
-    // Idempotent: no match is a no-op so test teardown can run safely more than once.
     @Transactional
     public void deleteTestAccountByUserGUID(String userGUID) {
         userCredentialRepository.findByUserGUID(userGUID).ifPresent(this::deleteAccount);
     }
 
-    // Role rows are removed before the credential because the role FK has no
-    // ON DELETE CASCADE.
     private void deleteAccount(UserCredential credential) {
         long credentialId = credential.id();
         roleRepository.deleteByCredentialId(credentialId);
         userCredentialRepository.deleteById(credentialId);
     }
 
-    // MEMBER is always present (the floor), then any caller-requested roles, de-duplicated
-    // while preserving insertion order.
     private List<Role> resolveRoles(List<Role> requested) {
         Set<Role> roles = new LinkedHashSet<>();
         roles.add(DEFAULT_ROLE);

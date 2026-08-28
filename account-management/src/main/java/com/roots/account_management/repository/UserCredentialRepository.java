@@ -59,6 +59,26 @@ public class UserCredentialRepository {
         );
     }
 
+    public List<UserCredential> searchByEmail(String email, boolean fullMatch, int maxCount) {
+        String query = fullMatch
+                ? "SELECT id, user_guid, email, name, password, is_mfa_enabled, is_email_verified, is_password_change_required "
+                    + "FROM user_credential WHERE LOWER(email) = LOWER(?) ORDER BY LOWER(email) ASC LIMIT ?"
+                : "SELECT id, user_guid, email, name, password, is_mfa_enabled, is_email_verified, is_password_change_required "
+                    + "FROM user_credential WHERE LOWER(email) LIKE CONCAT('%', LOWER(?), '%') ORDER BY LOWER(email) ASC LIMIT ?";
+
+        return jdbcTemplate.query(query, ROW_MAPPER, email, maxCount);
+    }
+
+    public List<UserCredential> searchByName(String name, boolean fullMatch, int maxCount) {
+        String query = fullMatch
+                ? "SELECT id, user_guid, email, name, password, is_mfa_enabled, is_email_verified, is_password_change_required "
+                    + "FROM user_credential WHERE LOWER(name) = LOWER(?) ORDER BY LOWER(name) ASC LIMIT ?"
+                : "SELECT id, user_guid, email, name, password, is_mfa_enabled, is_email_verified, is_password_change_required "
+                    + "FROM user_credential WHERE LOWER(name) LIKE CONCAT('%', LOWER(?), '%') ORDER BY LOWER(name) ASC LIMIT ?";
+
+        return jdbcTemplate.query(query, ROW_MAPPER, name, maxCount);
+    }
+
     public long countAll() {
         Long count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM user_credential", Long.class);
         return count == null ? 0L : count;
