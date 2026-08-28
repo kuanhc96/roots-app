@@ -13,7 +13,7 @@ import java.util.Map;
 /**
  * Client for account-management's integration-test endpoints. Cookie-less (the API is
  * a stateless OAuth2 resource server); every call carries the client_credentials
- * access token obtained from the auth-server as a Bearer header.
+ * access token obtained from the auth-server as a bearer token.
  */
 public class AccountManagementClient {
 
@@ -82,16 +82,14 @@ public class AccountManagementClient {
     }
 
     /**
-     * Deletes with both email and userGUID present — an invalid combination the
-     * validator rejects with 400.
+     * Deletes with both email and userGUID present (invalid combination; validator returns 400).
      */
     public HttpResponse<String> deleteByEmailAndUserGUID(String accessToken, String email, String userGUID) throws Exception {
         return delete(accessToken, "email=" + encode(email) + "&userGUID=" + encode(userGUID));
     }
 
     /**
-     * Deletes with neither email nor userGUID — an invalid combination the validator
-     * rejects with 400.
+     * Deletes with neither email nor userGUID (invalid combination; validator returns 400).
      */
     public HttpResponse<String> deleteWithoutParams(String accessToken) throws Exception {
         return delete(accessToken, "");
@@ -128,6 +126,38 @@ public class AccountManagementClient {
                 .uri(URI.create(baseUrl + "/api/account/mfa/" + encode(userGUID)))
                 .header("Content-Type", "application/json")
                 .PUT(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Public endpoint call: reads a profile subset by email via
+     * GET /api/account/profile?email=...
+     */
+    public HttpResponse<String> getAccountProfileByEmail(String email) throws Exception {
+        return getAccountProfile("email=" + encode(email));
+    }
+
+    /**
+     * Public endpoint call: reads a profile subset by userGUID via
+     * GET /api/account/profile?userGUID=...
+     */
+    public HttpResponse<String> getAccountProfileByUserGUID(String userGUID) throws Exception {
+        return getAccountProfile("userGUID=" + encode(userGUID));
+    }
+
+    /**
+     * Public endpoint call for validation tests with arbitrary query string.
+     */
+    public HttpResponse<String> getAccountProfileWithQuery(String query) throws Exception {
+        return getAccountProfile(query);
+    }
+
+    private HttpResponse<String> getAccountProfile(String query) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/account/profile?" + query))
+                .GET()
                 .build();
 
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
