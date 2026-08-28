@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
+import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
 import com.roots.account_management.dto.response.UserCredentialResponse;
@@ -98,6 +99,20 @@ public class AccountController {
             @Parameter(description = "GUID of the account to fetch; provide this or email, not both")
             @RequestParam(required = false) String userGUID) throws UserCredentialNotFoundException {
         return UserCredentialResponse.from(lookup(email, userGUID));
+    }
+
+    @Operation(
+            summary = "Get account profile",
+            description = "Public endpoint: returns userGUID, email, and name for an account, by exactly "
+                    + "one of email or userGUID."
+    )
+    @GetMapping("/profile")
+    public AccountProfileResponse getAccountProfile(
+            @Parameter(description = "Email of the account to fetch; provide this or userGUID, not both")
+            @RequestParam(required = false) String email,
+            @Parameter(description = "GUID of the account to fetch; provide this or email, not both")
+            @RequestParam(required = false) String userGUID) throws UserCredentialNotFoundException {
+        return AccountProfileResponse.from(lookup(email, userGUID));
     }
 
     @Operation(
