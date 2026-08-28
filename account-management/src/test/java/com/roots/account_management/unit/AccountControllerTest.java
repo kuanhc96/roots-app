@@ -15,6 +15,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.roots.account_management.controller.AccountController;
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
+import com.roots.account_management.dto.response.AccountProfileResponse;
+import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
 import com.roots.account_management.enums.Role;
@@ -26,12 +28,14 @@ import com.roots.account_management.validator.Validator;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -41,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Unit test for {@link AccountController} using standalone MockMvc: the controller is
  * exercised in isolation with the service and validator mocked, and the real
  * {@link GlobalExceptionHandler} wired in so exception-to-status mapping is covered.
- * No Spring context or security filter chain is loaded â€” @PreAuthorize is not enforced
+ * No Spring context or security filter chain is loaded ¡X @PreAuthorize is not enforced
  * here (that is covered by the integration tests' bearer-token flows).
  */
 @ExtendWith(MockitoExtension.class)
@@ -154,6 +158,57 @@ class AccountControllerTest {
 
         verify(accountService, never()).deleteTestAccountByEmail(anyString());
         verify(accountService, never()).deleteTestAccountByUserGUID(anyString());
+    }
+
+    @Test
+    void getAccountProfiles_withDefaults_returns200AndPagePayload() throws Exception {
+        AccountProfilesResponse response = new AccountProfilesResponse(
+                0,
+                20,
+                1,
+                List.of(new AccountProfileResponse("guid-1", "jane@example.com", "Jane"))
+        );
+        when(accountService.getAccountProfiles(0, 20)).thenReturn(response);
+
+        mockMvc.perform(get("/api/account/profiles"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.accounts[0].userGUID").value("guid-1"))
+                .andExpect(jsonPath("$.accounts[0].email").value("jane@example.com"))
+                .andExpect(jsonPath("$.accounts[0].name").value("Jane"));
+
+        verify(validator).validatePagination(0, 20, 100);
+        verify(accountService).getAccountProfiles(0, 20);
+    }
+
+    @Test
+    void getAccountProfiles_withCustomPageAndSize_delegatesToService() throws Exception {
+        AccountProfilesResponse response = new AccountProfilesResponse(2, 10, 30, List.of());
+        when(accountService.getAccountProfiles(2, 10)).thenReturn(response);
+
+        mockMvc.perform(get("/api/account/profiles")
+                        .param("page", "2")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page").value(2))
+                .andExpect(jsonPath("$.size").value(10));
+
+        verify(validator).validatePagination(2, 10, 100);
+        verify(accountService).getAccountProfiles(2, 10);
+    }
+
+    @Test
+    void getAccountProfiles_whenValidationFails_returns400WithError() throws Exception {
+        doThrow(new InvalidRequestException("size must be less than or equal to 100"))
+                .when(validator).validatePagination(anyInt(), anyInt(), anyInt());
+
+        mockMvc.perform(get("/api/account/profiles").param("size", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("size must be less than or equal to 100"));
+
+        verify(accountService, never()).getAccountProfiles(anyInt(), anyInt());
     }
 
     @Test

@@ -154,6 +154,25 @@ public class AccountManagementClient {
         return getAccountProfile(query);
     }
 
+    /**
+     * Public endpoint call: gets paginated profile rows.
+     */
+    public HttpResponse<String> getAccountProfiles(int page, int size) throws Exception {
+        return getAccountProfilesWithQuery("page=" + page + "&size=" + size);
+    }
+
+    /**
+     * Public endpoint call for pagination validation tests with arbitrary query string.
+     */
+    public HttpResponse<String> getAccountProfilesWithQuery(String query) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/account/profiles?" + query))
+                .GET()
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
     private HttpResponse<String> getAccountProfile(String query) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/account/profile?" + query))

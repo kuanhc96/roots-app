@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
+import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
 import com.roots.account_management.enums.Role;
@@ -26,6 +27,7 @@ import com.roots.account_management.service.AccountService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.inOrder;
@@ -184,6 +186,26 @@ class AccountServiceTest {
 
         verify(roleRepository, never()).deleteByCredentialId(anyLong());
         verify(userCredentialRepository, never()).deleteById(anyLong());
+    }
+
+    @Test
+    void getAccountProfiles_returnsPageResponseWithMappedAccounts() {
+        UserCredential first = new UserCredential(1L, "guid-1", "one@example.com", "One", "hash", true, false, false);
+        UserCredential second = new UserCredential(2L, "guid-2", "two@example.com", "Two", "hash", false, true, false);
+        when(userCredentialRepository.findAllPaged(20, 40)).thenReturn(List.of(first, second));
+        when(userCredentialRepository.countAll()).thenReturn(55L);
+
+        AccountProfilesResponse response = accountService.getAccountProfiles(2, 20);
+
+        verify(userCredentialRepository).findAllPaged(20, 40);
+        verify(userCredentialRepository).countAll();
+        assertThat(response.page()).isEqualTo(2);
+        assertThat(response.size()).isEqualTo(20);
+        assertThat(response.totalElements()).isEqualTo(55L);
+        assertThat(response.accounts()).hasSize(2);
+        assertThat(response.accounts().get(0).userGUID()).isEqualTo("guid-1");
+        assertThat(response.accounts().get(0).email()).isEqualTo("one@example.com");
+        assertThat(response.accounts().get(0).name()).isEqualTo("One");
     }
 
     @Test

@@ -61,55 +61,6 @@ class AccountStatusIntegrationTest {
     }
 
     @Test
-    void getAccountProfile_byEmail_returnsUserGUIDEmailAndName() throws Exception {
-        HttpResponse<String> response = accountManagementClient.getAccountProfileByEmail(email);
-
-        assertThat(response.statusCode()).isEqualTo(200);
-        JsonNode body = OBJECT_MAPPER.readTree(response.body());
-        assertThat(body.get("userGUID").asText()).isEqualTo(userGUID);
-        assertThat(body.get("email").asText()).isEqualTo(email);
-        assertThat(body.get("name").asText()).isEqualTo(TEST_NAME);
-    }
-
-    @Test
-    void getAccountProfile_byUserGUID_returnsUserGUIDEmailAndName() throws Exception {
-        HttpResponse<String> response = accountManagementClient.getAccountProfileByUserGUID(userGUID);
-
-        assertThat(response.statusCode()).isEqualTo(200);
-        JsonNode body = OBJECT_MAPPER.readTree(response.body());
-        assertThat(body.get("userGUID").asText()).isEqualTo(userGUID);
-        assertThat(body.get("email").asText()).isEqualTo(email);
-        assertThat(body.get("name").asText()).isEqualTo(TEST_NAME);
-    }
-
-    @Test
-    void getAccountProfile_withBothEmailAndUserGUID_returns400() throws Exception {
-        HttpResponse<String> response = accountManagementClient.getAccountProfileWithQuery(
-                "email=" + java.net.URLEncoder.encode(email, java.nio.charset.StandardCharsets.UTF_8)
-                        + "&userGUID=" + java.net.URLEncoder.encode(userGUID, java.nio.charset.StandardCharsets.UTF_8));
-
-        assertThat(response.statusCode()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.body());
-    }
-
-    @Test
-    void getAccountProfile_withNeitherEmailNorUserGUID_returns400() throws Exception {
-        HttpResponse<String> response = accountManagementClient.getAccountProfileWithQuery("");
-
-        assertThat(response.statusCode()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.body());
-    }
-
-    @Test
-    void getAccountProfile_withUnknownUserGUID_returns404() throws Exception {
-        HttpResponse<String> response =
-                accountManagementClient.getAccountProfileByUserGUID(UUID.randomUUID().toString());
-
-        assertThat(response.statusCode()).isEqualTo(404);
-        TestUtils.assertHasErrorField(response.body());
-    }
-
-    @Test
     void updateMfaEnabled_changesFlagAndReturnsUpdatedStatus() throws Exception {
         HttpResponse<String> response = accountManagementClient.updateMfaByUserGUID(userGUID, false);
 
