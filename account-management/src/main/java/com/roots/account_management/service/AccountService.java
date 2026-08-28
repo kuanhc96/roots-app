@@ -1,5 +1,6 @@
 package com.roots.account_management.service;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
+import com.roots.account_management.dto.response.AddRoleResponse;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
@@ -103,6 +105,27 @@ public class AccountService {
                 : userCredentialRepository.searchByName(name, fullMatch, maxCount);
 
         return credentials.stream().map(AccountProfileResponse::from).toList();
+    }
+
+    @Transactional
+    public AddRoleServiceResult addRoleToAccount(String userGUID, String roleName)
+            throws UserCredentialNotFoundException {
+        UserCredential credential = getUserCredentialByUserGUID(userGUID);
+        Role role = Role.getValue(roleName);
+
+        List<String> roleNames = new ArrayList<>(roleRepository.findRoleNamesByCredentialId(credential.id()));
+        boolean alreadyHasRole = roleNames.contains(role.getValue());
+
+        if (!alreadyHasRole) {
+            roleRepository.insert(credential.id(), role.getValue());
+            roleNames.add(role.getValue());
+        }
+
+        List<Role> roles = roleNames.stream().map(Role::getValue).toList();
+        return new AddRoleServiceResult(!alreadyHasRole, new AddRoleResponse(userGUID, roles));
+    }
+
+    public record AddRoleServiceResult(boolean wasAdded, AddRoleResponse response) {
     }
 
     @Transactional

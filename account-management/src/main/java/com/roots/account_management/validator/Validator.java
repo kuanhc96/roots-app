@@ -6,12 +6,14 @@ import java.util.regex.Pattern;
 import org.apache.commons.lang3.ObjectUtils;
 import org.springframework.stereotype.Component;
 
+import com.roots.account_management.dto.request.AddRoleRequest;
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.request.DeleteAccountsRequest;
 import com.roots.account_management.dto.request.UpdateEmailRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
 import com.roots.account_management.dto.request.UpdateNameRequest;
 import com.roots.account_management.dto.request.UpdatePasswordRequest;
+import com.roots.account_management.enums.Role;
 import com.roots.account_management.exception.InvalidRequestException;
 
 @Component
@@ -69,6 +71,21 @@ public class Validator {
         boolean hasBlank = userGUIDs.stream().anyMatch(guid -> guid == null || guid.isBlank());
         if (hasBlank) {
             throw new InvalidRequestException("userGUIDs must not contain blank values");
+        }
+    }
+
+    public void validateAddRoleRequest(AddRoleRequest request) {
+        if (request == null || request.role() == null || request.role().isBlank()) {
+            throw new InvalidRequestException("role is required");
+        }
+        Role role;
+        try {
+            role = Role.getValue(request.role());
+        } catch (IllegalArgumentException e) {
+            throw new InvalidRequestException(e.getMessage());
+        }
+        if (role == Role.GUEST) {
+            throw new InvalidRequestException("GUEST role cannot be added");
         }
     }
 

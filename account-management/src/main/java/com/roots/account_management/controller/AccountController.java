@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,12 +17,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.roots.account_management.dto.request.AddRoleRequest;
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.request.DeleteAccountsRequest;
 import com.roots.account_management.dto.request.UpdateEmailRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
 import com.roots.account_management.dto.request.UpdateNameRequest;
 import com.roots.account_management.dto.request.UpdatePasswordRequest;
+import com.roots.account_management.dto.response.AddRoleResponse;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
@@ -34,6 +37,7 @@ import com.roots.account_management.dto.response.UserCredentialTestingResponse;
 import com.roots.account_management.exception.UserCredentialNotFoundException;
 import com.roots.account_management.model.UserCredential;
 import com.roots.account_management.service.AccountService;
+import com.roots.account_management.service.AccountService.AddRoleServiceResult;
 import com.roots.account_management.validator.Validator;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -228,6 +232,24 @@ public class AccountController {
         validator.validateUserGUID(userGUID);
         validator.validateUpdateEmailRequest(updateEmailRequest);
         return accountService.updateEmailByUserGUID(userGUID, updateEmailRequest.email());
+    }
+
+    @Operation(
+            summary = "Add a role to an account",
+            description = "Public endpoint: adds a role to the account identified by userGUID. "
+                    + "Returns 201 if the role was added, 200 if the account already had the role. "
+                    + "GUEST cannot be added."
+    )
+    @PostMapping("/role/{userGUID}")
+    public ResponseEntity<AddRoleResponse> addRole(
+            @Parameter(description = "GUID of the account to update")
+            @PathVariable String userGUID,
+            @RequestBody AddRoleRequest addRoleRequest) throws UserCredentialNotFoundException {
+        validator.validateUserGUID(userGUID);
+        validator.validateAddRoleRequest(addRoleRequest);
+        AddRoleServiceResult result = accountService.addRoleToAccount(userGUID, addRoleRequest.role());
+        HttpStatus status = result.wasAdded() ? HttpStatus.CREATED : HttpStatus.OK;
+        return ResponseEntity.status(status).body(result.response());
     }
 
     private UserCredential lookup(String email, String userGUID) throws UserCredentialNotFoundException {
