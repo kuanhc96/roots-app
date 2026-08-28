@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.request.DeleteAccountsRequest;
+import com.roots.account_management.dto.request.UpdateEmailRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
 import com.roots.account_management.dto.request.UpdateNameRequest;
 import com.roots.account_management.dto.request.UpdatePasswordRequest;
@@ -83,6 +84,14 @@ public class Validator {
         }
     }
 
+    public void validateUpdateEmailRequest(UpdateEmailRequest request) {
+        if (request == null) {
+            throw new InvalidRequestException("email is required");
+        }
+        String trimmedEmail = request.email() == null ? null : request.email().trim();
+        validateEmail(trimmedEmail);
+    }
+
     public void validateUpdateNameRequest(UpdateNameRequest request) {
         if (request == null) {
             throw new InvalidRequestException("name is required");
@@ -119,7 +128,7 @@ public class Validator {
         }
     }
 
-    private void validateEmail(String email) {
+    public void validateEmail(String email) {
         if (email == null || email.isBlank()) {
             throw new InvalidRequestException("Email is required");
         }

@@ -131,4 +131,12 @@ public class UserCredentialRepository {
                 userId
         );
     }
+
+    public int setEmailByUserGUID(Long userId, String email) {
+        return jdbcTemplate.update(
+                "UPDATE user_credential SET email = ? WHERE id = ?",
+                email,
+                userId
+        );
+    }
 }

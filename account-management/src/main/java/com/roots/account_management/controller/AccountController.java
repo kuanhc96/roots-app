@@ -18,12 +18,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.request.DeleteAccountsRequest;
+import com.roots.account_management.dto.request.UpdateEmailRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
 import com.roots.account_management.dto.request.UpdateNameRequest;
 import com.roots.account_management.dto.request.UpdatePasswordRequest;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
+import com.roots.account_management.dto.response.UpdateEmailResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
 import com.roots.account_management.dto.response.UpdateNameResponse;
 import com.roots.account_management.dto.response.UpdatePasswordResponse;
@@ -212,6 +214,20 @@ public class AccountController {
         validator.validateUserGUID(userGUID);
         validator.validateUpdateNameRequest(updateNameRequest);
         return accountService.updateNameByUserGUID(userGUID, updateNameRequest.name());
+    }
+
+    @Operation(
+            summary = "Update account email",
+            description = "Public endpoint: updates email by userGUID. Email is trimmed and validated."
+    )
+    @PutMapping("/email/{userGUID}")
+    public UpdateEmailResponse updateEmail(
+            @Parameter(description = "GUID of the account to update")
+            @PathVariable String userGUID,
+            @RequestBody UpdateEmailRequest updateEmailRequest) throws UserCredentialNotFoundException {
+        validator.validateUserGUID(userGUID);
+        validator.validateUpdateEmailRequest(updateEmailRequest);
+        return accountService.updateEmailByUserGUID(userGUID, updateEmailRequest.email());
     }
 
     private UserCredential lookup(String email, String userGUID) throws UserCredentialNotFoundException {

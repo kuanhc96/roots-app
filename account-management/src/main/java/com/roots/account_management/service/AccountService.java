@@ -13,6 +13,7 @@ import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
+import com.roots.account_management.dto.response.UpdateEmailResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
 import com.roots.account_management.dto.response.UpdateNameResponse;
 import com.roots.account_management.dto.response.UpdatePasswordResponse;
@@ -136,6 +137,22 @@ public class AccountService {
         String trimmedName = name.trim();
         userCredentialRepository.setNameByUserGUID(userCredential.id(), trimmedName);
         return UpdateNameResponse.builder().userGUID(userGUID).name(trimmedName).build();
+    }
+
+    @Transactional
+    public UpdateEmailResponse updateEmailByUserGUID(String userGUID, String email)
+            throws UserCredentialNotFoundException {
+        UserCredential userCredential = getUserCredentialByUserGUID(userGUID);
+        String trimmedEmail = email.trim();
+
+        userCredentialRepository.findByEmail(trimmedEmail)
+                .filter(existing -> !existing.id().equals(userCredential.id()))
+                .ifPresent(existing -> {
+                    throw new EmailAlreadyExistsException("An account with this email already exists");
+                });
+
+        userCredentialRepository.setEmailByUserGUID(userCredential.id(), trimmedEmail);
+        return UpdateEmailResponse.builder().userGUID(userGUID).email(trimmedEmail).build();
     }
 
     @Transactional
