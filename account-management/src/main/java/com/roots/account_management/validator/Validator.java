@@ -1,10 +1,13 @@
 package com.roots.account_management.validator;
 
+import java.util.List;
 import java.util.regex.Pattern;
 
+import org.apache.commons.lang3.ObjectUtils;
 import org.springframework.stereotype.Component;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
+import com.roots.account_management.dto.request.DeleteAccountsRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
 import com.roots.account_management.exception.InvalidRequestException;
 
@@ -47,6 +50,22 @@ public class Validator {
         }
         if (maxCount <= 0) {
             throw new InvalidRequestException("maxCount must be greater than 0");
+        }
+    }
+
+    public void validateDeleteAccountsRequest(DeleteAccountsRequest request, int maxDeleteCount) {
+        if (request == null || ObjectUtils.isEmpty(request.userGUIDs())) {
+            throw new InvalidRequestException("userGUIDs must contain at least one value");
+        }
+
+        List<String> userGUIDs = request.userGUIDs();
+        if (userGUIDs.size() > maxDeleteCount) {
+            throw new InvalidRequestException("userGUIDs must contain at most " + maxDeleteCount + " values");
+        }
+
+        boolean hasBlank = userGUIDs.stream().anyMatch(guid -> guid == null || guid.isBlank());
+        if (hasBlank) {
+            throw new InvalidRequestException("userGUIDs must not contain blank values");
         }
     }
 

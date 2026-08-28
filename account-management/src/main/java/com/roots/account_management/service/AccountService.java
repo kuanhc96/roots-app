@@ -103,6 +103,14 @@ public class AccountService {
     }
 
     @Transactional
+    public void deleteAccountsByUserGUIDs(List<String> userGUIDs) {
+        userGUIDs.stream()
+                .map(String::trim)
+                .distinct()
+                .forEach(this::deleteTestAccountByUserGUID);
+    }
+
+    @Transactional
     public UpdateMfaResponse updateMfaEnabledByUserGUID(String userGUID, boolean mfaEnabled)
             throws UserCredentialNotFoundException {
         UserCredential userCredential = getUserCredentialByUserGUID(userGUID);

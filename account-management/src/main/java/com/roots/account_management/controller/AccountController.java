@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.roots.account_management.dto.request.CreateAccountRequest;
+import com.roots.account_management.dto.request.DeleteAccountsRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
@@ -41,6 +42,7 @@ public class AccountController {
     private static final int DEFAULT_SIZE = 20;
     private static final int MAX_SIZE = 100;
     private static final int DEFAULT_SEARCH_MAX_COUNT = 100;
+    private static final int MAX_DELETE_ACCOUNT_COUNT = 10;
 
     private final AccountService accountService;
     private final Validator validator;
@@ -77,6 +79,17 @@ public class AccountController {
         } else {
             accountService.deleteTestAccountByUserGUID(userGUID);
         }
+    }
+
+    @Operation(
+            summary = "Delete accounts",
+            description = "Public endpoint: deletes accounts by a list of userGUID values. Missing userGUIDs are treated as already deleted."
+    )
+    @DeleteMapping
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteAccounts(@RequestBody DeleteAccountsRequest deleteAccountsRequest) {
+        validator.validateDeleteAccountsRequest(deleteAccountsRequest, MAX_DELETE_ACCOUNT_COUNT);
+        accountService.deleteAccountsByUserGUIDs(deleteAccountsRequest.userGUIDs());
     }
 
     @Operation(
