@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.request.DeleteAccountsRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
+import com.roots.account_management.dto.request.UpdatePasswordRequest;
 import com.roots.account_management.exception.InvalidRequestException;
 
 @Component
@@ -81,6 +82,13 @@ public class Validator {
         }
     }
 
+    public void validateUpdatePasswordRequest(UpdatePasswordRequest request) {
+        if (request == null) {
+            throw new InvalidRequestException("password is required");
+        }
+        validatePassword(request.password());
+    }
+
     public void validatePagination(int page, int size, int maxSize) {
         if (page < 0) {
             throw new InvalidRequestException("page must be greater than or equal to 0");
@@ -111,7 +119,7 @@ public class Validator {
         }
     }
 
-    private void validatePassword(String password) {
+    public void validatePassword(String password) {
         if (password == null || password.isBlank()) {
             throw new InvalidRequestException("Password is required");
         }

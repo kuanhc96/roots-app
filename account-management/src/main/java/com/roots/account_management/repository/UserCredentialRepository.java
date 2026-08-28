@@ -115,4 +115,12 @@ public class UserCredentialRepository {
                 userId
         );
     }
+
+    public int setPasswordByUserGUID(Long userId, String encodedPassword) {
+        return jdbcTemplate.update(
+                "UPDATE user_credential SET password = ? WHERE id = ?",
+                encodedPassword,
+                userId
+        );
+    }
 }

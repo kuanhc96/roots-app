@@ -19,10 +19,12 @@ import org.springframework.web.bind.annotation.RestController;
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.request.DeleteAccountsRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
+import com.roots.account_management.dto.request.UpdatePasswordRequest;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
+import com.roots.account_management.dto.response.UpdatePasswordResponse;
 import com.roots.account_management.dto.response.UserCredentialResponse;
 import com.roots.account_management.dto.response.UserCredentialTestingResponse;
 import com.roots.account_management.exception.UserCredentialNotFoundException;
@@ -180,6 +182,20 @@ public class AccountController {
         validator.validateUserGUID(userGUID);
         validator.validateUpdateMfaRequest(updateMfaRequest);
         return accountService.updateMfaEnabledByUserGUID(userGUID, updateMfaRequest.mfaEnabled());
+    }
+
+    @Operation(
+            summary = "Update account password",
+            description = "Public endpoint: updates password by userGUID using auth-server password policy."
+    )
+    @PutMapping("/password/{userGUID}")
+    public UpdatePasswordResponse updatePassword(
+            @Parameter(description = "GUID of the account to update")
+            @PathVariable String userGUID,
+            @RequestBody UpdatePasswordRequest updatePasswordRequest) throws UserCredentialNotFoundException {
+        validator.validateUserGUID(userGUID);
+        validator.validateUpdatePasswordRequest(updatePasswordRequest);
+        return accountService.updatePasswordByUserGUID(userGUID, updatePasswordRequest.password());
     }
 
     private UserCredential lookup(String email, String userGUID) throws UserCredentialNotFoundException {
