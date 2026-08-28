@@ -137,6 +137,48 @@ class AccountStatusIntegrationTest {
         TestUtils.assertHasErrorField(response.body());
     }
 
+    @Test
+    void updateName_trimsWhitespacePersistsAndReturnsTrimmedName() throws Exception {
+        String newName = "  Updated Integration Name  ";
+
+        HttpResponse<String> updateResponse = accountManagementClient.updateNameByUserGUID(userGUID, newName);
+        assertThat(updateResponse.statusCode()).isEqualTo(200);
+        JsonNode updateBody = OBJECT_MAPPER.readTree(updateResponse.body());
+        assertThat(updateBody.get("userGUID").asText()).isEqualTo(userGUID);
+        assertThat(updateBody.get("name").asText()).isEqualTo("Updated Integration Name");
+
+        HttpResponse<String> profileResponse = accountManagementClient.getAccountProfileByUserGUID(userGUID);
+        assertThat(profileResponse.statusCode()).isEqualTo(200);
+        JsonNode profileBody = OBJECT_MAPPER.readTree(profileResponse.body());
+        assertThat(profileBody.get("name").asText()).isEqualTo("Updated Integration Name");
+    }
+
+    @Test
+    void updateName_withMissingNameField_returns400() throws Exception {
+        HttpResponse<String> response = accountManagementClient.updateNameByUserGUIDRaw(userGUID, "{}");
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidNames")
+    void updateName_withInvalidName_returns400(String invalidName) throws Exception {
+        HttpResponse<String> response = accountManagementClient.updateNameByUserGUID(userGUID, invalidName);
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
+    @Test
+    void updateName_withUnknownUserGUID_returns404() throws Exception {
+        HttpResponse<String> response =
+                accountManagementClient.updateNameByUserGUID(UUID.randomUUID().toString(), "Updated Name");
+
+        assertThat(response.statusCode()).isEqualTo(404);
+        TestUtils.assertHasErrorField(response.body());
+    }
+
     private static Stream<Arguments> invalidPasswords() {
         return Stream.of(
                 Arguments.of(""),
@@ -145,6 +187,14 @@ class AccountStatusIntegrationTest {
                 Arguments.of("password123"),
                 Arguments.of("PASSWORD123"),
                 Arguments.of("PasswordOnly")
+        );
+    }
+
+    private static Stream<Arguments> invalidNames() {
+        return Stream.of(
+                Arguments.of(""),
+                Arguments.of("   "),
+                Arguments.of("a".repeat(256))
         );
     }
 }

@@ -16,11 +16,13 @@ import com.roots.account_management.controller.AccountController;
 import com.roots.account_management.dto.request.CreateAccountRequest;
 import com.roots.account_management.dto.request.DeleteAccountsRequest;
 import com.roots.account_management.dto.request.UpdateMfaRequest;
+import com.roots.account_management.dto.request.UpdateNameRequest;
 import com.roots.account_management.dto.request.UpdatePasswordRequest;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
+import com.roots.account_management.dto.response.UpdateNameResponse;
 import com.roots.account_management.dto.response.UpdatePasswordResponse;
 import com.roots.account_management.enums.Role;
 import com.roots.account_management.exception.EmailAlreadyExistsException;
@@ -342,5 +344,39 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$.error").value("Password must be at least 8 characters"));
 
         verify(accountService, never()).updatePasswordByUserGUID(anyString(), anyString());
+    }
+
+    @Test
+    void updateName_withValidRequest_returns200AndBody() throws Exception {
+        String userGUID = "test-guid";
+        UpdateNameRequest request = new UpdateNameRequest("  Jane Doe  ");
+        when(accountService.updateNameByUserGUID(userGUID, "  Jane Doe  "))
+                .thenReturn(UpdateNameResponse.builder().userGUID(userGUID).name("Jane Doe").build());
+
+        mockMvc.perform(put("/api/account/name/{userGUID}", userGUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userGUID").value(userGUID))
+                .andExpect(jsonPath("$.name").value("Jane Doe"));
+
+        verify(validator).validateUserGUID(userGUID);
+        verify(validator).validateUpdateNameRequest(any(UpdateNameRequest.class));
+        verify(accountService).updateNameByUserGUID(userGUID, "  Jane Doe  ");
+    }
+
+    @Test
+    void updateName_whenRequestValidationFails_returns400WithError() throws Exception {
+        String userGUID = "test-guid";
+        doThrow(new InvalidRequestException("Name is required"))
+                .when(validator).validateUpdateNameRequest(any(UpdateNameRequest.class));
+
+        mockMvc.perform(put("/api/account/name/{userGUID}", userGUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateNameRequest("  "))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Name is required"));
+
+        verify(accountService, never()).updateNameByUserGUID(anyString(), anyString());
     }
 }

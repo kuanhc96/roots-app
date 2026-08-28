@@ -17,6 +17,7 @@ import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
+import com.roots.account_management.dto.response.UpdateNameResponse;
 import com.roots.account_management.dto.response.UpdatePasswordResponse;
 import com.roots.account_management.enums.Role;
 import com.roots.account_management.exception.EmailAlreadyExistsException;
@@ -308,5 +309,34 @@ class AccountServiceTest {
 
         verify(userCredentialRepository).findByUserGUID(userGUID);
         verify(userCredentialRepository, never()).setPasswordByUserGUID(anyLong(), anyString());
+    }
+
+    @Test
+    void updateNameByUserGUID_whenFound_trimsUpdatesAndReturnsResponse() throws Exception {
+        String userGUID = "guid-123";
+        UserCredential existing = new UserCredential(
+                5L, userGUID, "jane@example.com", "Jane", "hash", true, true, false);
+        when(userCredentialRepository.findByUserGUID(userGUID)).thenReturn(Optional.of(existing));
+        when(userCredentialRepository.setNameByUserGUID(5L, "Jane Doe")).thenReturn(1);
+
+        UpdateNameResponse result = accountService.updateNameByUserGUID(userGUID, "  Jane Doe  ");
+
+        verify(userCredentialRepository).findByUserGUID(userGUID);
+        verify(userCredentialRepository).setNameByUserGUID(5L, "Jane Doe");
+        assertThat(result.userGUID()).isEqualTo(userGUID);
+        assertThat(result.name()).isEqualTo("Jane Doe");
+    }
+
+    @Test
+    void updateNameByUserGUID_whenNotFound_throws() {
+        String userGUID = "missing-guid";
+        when(userCredentialRepository.findByUserGUID(userGUID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> accountService.updateNameByUserGUID(userGUID, "Jane Doe"))
+                .isInstanceOf(UserCredentialNotFoundException.class)
+                .hasMessage("No account found for userGUID " + userGUID);
+
+        verify(userCredentialRepository).findByUserGUID(userGUID);
+        verify(userCredentialRepository, never()).setNameByUserGUID(anyLong(), anyString());
     }
 }

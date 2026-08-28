@@ -135,6 +135,28 @@ public class AccountManagementClient {
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
+    public HttpResponse<String> updateNameByUserGUID(String userGUID, String name) throws Exception {
+        String json = objectMapper.writeValueAsString(Map.of("name", name));
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/account/name/" + encode(userGUID)))
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    public HttpResponse<String> updateNameByUserGUIDRaw(String userGUID, String jsonBody) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/account/name/" + encode(userGUID)))
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
     public HttpResponse<String> getAccountProfileByEmail(String email) throws Exception {
         return getAccountProfile("email=" + encode(email));
     }
