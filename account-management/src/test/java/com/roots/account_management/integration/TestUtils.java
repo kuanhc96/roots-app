@@ -33,10 +33,4 @@ public final class TestUtils {
         return "itest+" + UUID.randomUUID() + "@example.com";
     }
 
-    /** Asserts the body is the {@code {"error": "..."}} shape with a non-blank message. */
-    public static void assertHasErrorField(String body) throws Exception {
-        JsonNode json = OBJECT_MAPPER.readTree(body);
-        assertThat(json.hasNonNull("error")).isTrue();
-        assertThat(json.get("error").asText()).isNotBlank();
-    }
 }

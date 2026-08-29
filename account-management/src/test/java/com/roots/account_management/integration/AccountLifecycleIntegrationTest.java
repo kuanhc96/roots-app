@@ -31,7 +31,7 @@ class AccountLifecycleIntegrationTest {
     private AccountManagementClient accountManagementClient;
 
     @Test
-    void createsThenDeletesTestAccountByEmail() throws Exception {
+    void createsThenDeletesTestAccountByEmail() {
         String email = TestUtils.getUniqueEmail();
 
         ResponseEntity<String> createResponse =

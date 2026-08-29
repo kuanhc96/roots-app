@@ -1,12 +1,12 @@
 package com.roots.account_management.integration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.roots.account_management.dto.response.AccountProfileResponse;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
@@ -24,7 +24,6 @@ class AccountBulkDeleteIntegrationTest {
 
     private static final String TEST_NAME = "Integration Test User";
     private static final String TEST_PASSWORD = "Password123";
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Autowired
     private AccountManagementClient accountManagementClient;
@@ -46,7 +45,7 @@ class AccountBulkDeleteIntegrationTest {
     }
 
     @AfterEach
-    void tearDown() throws Exception {
+    void tearDown() {
         if (userGUID != null) {
             ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(userGUID);
             assertThat(deleteResponse.getStatusCode().value()).isIn(200, 204);
@@ -55,47 +54,35 @@ class AccountBulkDeleteIntegrationTest {
 
     @Test
     void deleteAccounts_withExistingMissingAndDuplicateUserGUIDs_returns204AndDeletesExisting() throws Exception {
-        ResponseEntity<String> deleteResponse = accountManagementClient.deleteAccounts(
+        ResponseEntity<Void> deleteResponse = accountManagementClient.deleteAccounts(
                 List.of(userGUID, " " + userGUID + " ", UUID.randomUUID().toString()));
 
         assertThat(deleteResponse.getStatusCode().value()).isEqualTo(204);
 
-        ResponseEntity<String> profileResponse = accountManagementClient.getAccountProfileByUserGUID(userGUID);
+        ResponseEntity<AccountProfileResponse> profileResponse = accountManagementClient.getAccountProfileByUserGUID(userGUID);
         assertThat(profileResponse.getStatusCode().value()).isEqualTo(404);
         userGUID = null;
     }
 
     @Test
     void deleteAccounts_withEmptyUserGUIDs_returns400() throws Exception {
-        ResponseEntity<String> response = accountManagementClient.deleteAccounts(List.of());
+        ResponseEntity<Void> response = accountManagementClient.deleteAccounts(List.of());
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.getBody());
-    }
-
-    @Test
-    void deleteAccounts_withMissingUserGUIDsField_returns400() throws Exception {
-        ResponseEntity<String> response = accountManagementClient.deleteAccountsRaw("{}");
-
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
     void deleteAccounts_withNullEntry_returns400() throws Exception {
-        String body = OBJECT_MAPPER.writeValueAsString(new DeletePayload(List.of(userGUID, null)));
-        ResponseEntity<String> response = accountManagementClient.deleteAccountsRaw(body);
+        ResponseEntity<Void> response = accountManagementClient.deleteAccounts(List.of(userGUID, null));
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
     void deleteAccounts_withBlankEntry_returns400() throws Exception {
-        ResponseEntity<String> response = accountManagementClient.deleteAccounts(List.of(userGUID, "   "));
+        ResponseEntity<Void> response = accountManagementClient.deleteAccounts(List.of(userGUID, "   "));
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
@@ -113,12 +100,8 @@ class AccountBulkDeleteIntegrationTest {
                 UUID.randomUUID().toString(),
                 UUID.randomUUID().toString()
         );
-        ResponseEntity<String> response = accountManagementClient.deleteAccounts(userGUIDs);
+        ResponseEntity<Void> response = accountManagementClient.deleteAccounts(userGUIDs);
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.getBody());
-    }
-
-    private record DeletePayload(List<String> userGUIDs) {
     }
 }

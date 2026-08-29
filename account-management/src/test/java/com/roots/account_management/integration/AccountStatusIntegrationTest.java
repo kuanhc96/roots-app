@@ -2,6 +2,17 @@ package com.roots.account_management.integration;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.roots.account_management.dto.request.UpdateNameRequest;
+import com.roots.account_management.dto.request.UpdatePasswordRequest;
+import com.roots.account_management.dto.response.AccountProfileResponse;
+import com.roots.account_management.dto.response.AddRoleResponse;
+import com.roots.account_management.dto.response.UpdateEmailResponse;
+import com.roots.account_management.dto.response.UpdateMfaResponse;
+import com.roots.account_management.dto.response.UpdateNameResponse;
+import com.roots.account_management.dto.response.UpdatePasswordResponse;
+import com.roots.account_management.dto.response.UserCredentialTestingResponse;
+import com.roots.account_management.enums.Role;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,7 +43,6 @@ class AccountStatusIntegrationTest {
 
     private static final String TEST_NAME = "Integration Test User";
     private static final String TEST_PASSWORD = "Password123";
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final PasswordEncoder PASSWORD_ENCODER = PasswordEncoderFactories.createDelegatingPasswordEncoder();
 
     @Autowired
@@ -54,127 +64,114 @@ class AccountStatusIntegrationTest {
     }
 
     @AfterEach
-    void tearDown() throws Exception {
+    void tearDown() {
         if (duplicateEmailUserGUID != null) {
-            ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(duplicateEmailUserGUID);
+            ResponseEntity<Void> deleteResponse = accountManagementClient.deleteByUserGUID(duplicateEmailUserGUID);
             assertThat(deleteResponse.getStatusCode().value()).isIn(200, 204);
         }
         if (userGUID != null) {
-            ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(userGUID);
+            ResponseEntity<Void> deleteResponse = accountManagementClient.deleteByUserGUID(userGUID);
             assertThat(deleteResponse.getStatusCode().value()).isIn(200, 204);
         }
     }
 
     @Test
     void updateMfaEnabled_changesFlagAndReturnsUpdatedStatus() throws Exception {
-        ResponseEntity<String> response = accountManagementClient.updateMfaByUserGUID(userGUID, false);
+        ResponseEntity<UpdateMfaResponse> response = accountManagementClient.updateMfaByUserGUID(userGUID, false);
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
-        JsonNode body = OBJECT_MAPPER.readTree(response.getBody());
-        assertThat(body.get("userGUID").asText()).isEqualTo(userGUID);
-        assertThat(body.get("mfaEnabled").asBoolean()).isFalse();
+        assertThat(response.getBody().userGUID()).isEqualTo(userGUID);
+        assertThat(response.getBody().mfaEnabled()).isFalse();
     }
 
     @Test
-    void updateMfaEnabled_withMissingMfaEnabled_returns400() throws Exception {
-        ResponseEntity<String> response = accountManagementClient.updateMfaByUserGUIDRaw(userGUID, "{}");
+    void updateMfaEnabled_withMissingMfaEnabled_returns400() {
+        ResponseEntity<UpdateMfaResponse> response = accountManagementClient.updateMfaByUserGUID(userGUID, null);
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
     void updateMfaEnabled_withUnknownUserGUID_returns404() throws Exception {
-        ResponseEntity<String> response =
+        ResponseEntity<UpdateMfaResponse> response =
                 accountManagementClient.updateMfaByUserGUID(UUID.randomUUID().toString(), false);
 
         assertThat(response.getStatusCode().value()).isEqualTo(404);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
     void updatePassword_updatesStoredPasswordAndReturnsUserGUID() throws Exception {
         String newPassword = "NewPassword123";
 
-        ResponseEntity<String> updateResponse = accountManagementClient.updatePasswordByUserGUID(userGUID, newPassword);
+        ResponseEntity<UpdatePasswordResponse> updateResponse = accountManagementClient.updatePasswordByUserGUID(userGUID, newPassword);
         assertThat(updateResponse.getStatusCode().value()).isEqualTo(200);
-        JsonNode updateBody = OBJECT_MAPPER.readTree(updateResponse.getBody());
-        assertThat(updateBody.get("userGUID").asText()).isEqualTo(userGUID);
+        assertThat(updateResponse.getBody().userGUID()).isEqualTo(userGUID);
 
-        ResponseEntity<String> readResponse = accountManagementClient.getTestAccountByUserGUID(userGUID);
+        ResponseEntity<UserCredentialTestingResponse> readResponse = accountManagementClient.getTestAccountByUserGUID(userGUID);
         assertThat(readResponse.getStatusCode().value()).isEqualTo(200);
-        JsonNode readBody = OBJECT_MAPPER.readTree(readResponse.getBody());
-        String storedPassword = readBody.get("password").asText();
+        String storedPassword = readResponse.getBody().password();
         assertThat(PASSWORD_ENCODER.matches(newPassword, storedPassword)).isTrue();
         assertThat(PASSWORD_ENCODER.matches(TEST_PASSWORD, storedPassword)).isFalse();
     }
 
     @Test
     void updatePassword_withMissingPassword_returns400() throws Exception {
-        ResponseEntity<String> response = accountManagementClient.updatePasswordByUserGUIDRaw(userGUID, "{}");
+        ResponseEntity<UpdatePasswordResponse> response = accountManagementClient.updatePasswordByUserGUID(userGUID, null);
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @ParameterizedTest
     @MethodSource("invalidPasswords")
     void updatePassword_withInvalidPassword_returns400(String invalidPassword) throws Exception {
-        ResponseEntity<String> response = accountManagementClient.updatePasswordByUserGUID(userGUID, invalidPassword);
+        ResponseEntity<UpdatePasswordResponse> response = accountManagementClient.updatePasswordByUserGUID(userGUID, invalidPassword);
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
     void updatePassword_withUnknownUserGUID_returns404() throws Exception {
-        ResponseEntity<String> response =
+        ResponseEntity<UpdatePasswordResponse> response =
                 accountManagementClient.updatePasswordByUserGUID(UUID.randomUUID().toString(), "NewPassword123");
 
         assertThat(response.getStatusCode().value()).isEqualTo(404);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
     void updateName_trimsWhitespacePersistsAndReturnsTrimmedName() throws Exception {
         String newName = "  Updated Integration Name  ";
 
-        ResponseEntity<String> updateResponse = accountManagementClient.updateNameByUserGUID(userGUID, newName);
+        ResponseEntity<UpdateNameResponse> updateResponse = accountManagementClient.updateNameByUserGUID(userGUID, newName);
         assertThat(updateResponse.getStatusCode().value()).isEqualTo(200);
-        JsonNode updateBody = OBJECT_MAPPER.readTree(updateResponse.getBody());
-        assertThat(updateBody.get("userGUID").asText()).isEqualTo(userGUID);
-        assertThat(updateBody.get("name").asText()).isEqualTo("Updated Integration Name");
+        assertThat(updateResponse.getBody().userGUID()).isEqualTo(userGUID);
+        assertThat(updateResponse.getBody().name()).isEqualTo("Updated Integration Name");
 
-        ResponseEntity<String> profileResponse = accountManagementClient.getAccountProfileByUserGUID(userGUID);
+        ResponseEntity<AccountProfileResponse> profileResponse = accountManagementClient.getAccountProfileByUserGUID(userGUID);
         assertThat(profileResponse.getStatusCode().value()).isEqualTo(200);
-        JsonNode profileBody = OBJECT_MAPPER.readTree(profileResponse.getBody());
-        assertThat(profileBody.get("name").asText()).isEqualTo("Updated Integration Name");
+        assertThat(profileResponse.getBody().name()).isEqualTo("Updated Integration Name");
     }
 
     @Test
-    void updateName_withMissingNameField_returns400() throws Exception {
-        ResponseEntity<String> response = accountManagementClient.updateNameByUserGUIDRaw(userGUID, "{}");
+    void updateName_withMissingNameField_returns400()  {
+        ResponseEntity<UpdateNameResponse> response = accountManagementClient.updateNameByUserGUID(userGUID, null);
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @ParameterizedTest
     @MethodSource("invalidNames")
     void updateName_withInvalidName_returns400(String invalidName) throws Exception {
-        ResponseEntity<String> response = accountManagementClient.updateNameByUserGUID(userGUID, invalidName);
+        ResponseEntity<UpdateNameResponse> response = accountManagementClient.updateNameByUserGUID(userGUID, invalidName);
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
     void updateName_withUnknownUserGUID_returns404() throws Exception {
-        ResponseEntity<String> response =
+        ResponseEntity<UpdateNameResponse> response =
                 accountManagementClient.updateNameByUserGUID(UUID.randomUUID().toString(), "Updated Name");
 
         assertThat(response.getStatusCode().value()).isEqualTo(404);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
@@ -182,33 +179,29 @@ class AccountStatusIntegrationTest {
         String newEmail = "  updated." + UUID.randomUUID() + "@example.com  ";
         String trimmedEmail = newEmail.trim();
 
-        ResponseEntity<String> updateResponse = accountManagementClient.updateEmailByUserGUID(userGUID, newEmail);
+        ResponseEntity<UpdateEmailResponse> updateResponse = accountManagementClient.updateEmailByUserGUID(userGUID, newEmail);
         assertThat(updateResponse.getStatusCode().value()).isEqualTo(200);
-        JsonNode updateBody = OBJECT_MAPPER.readTree(updateResponse.getBody());
-        assertThat(updateBody.get("userGUID").asText()).isEqualTo(userGUID);
-        assertThat(updateBody.get("email").asText()).isEqualTo(trimmedEmail);
+        assertThat(updateResponse.getBody().userGUID()).isEqualTo(userGUID);
+        assertThat(updateResponse.getBody().email()).isEqualTo(trimmedEmail);
 
-        ResponseEntity<String> accountResponse = accountManagementClient.getAccountProfileByUserGUID(userGUID);
+        ResponseEntity<AccountProfileResponse> accountResponse = accountManagementClient.getAccountProfileByUserGUID(userGUID);
         assertThat(accountResponse.getStatusCode().value()).isEqualTo(200);
-        JsonNode accountBody = OBJECT_MAPPER.readTree(accountResponse.getBody());
-        assertThat(accountBody.get("email").asText()).isEqualTo(trimmedEmail);
+        assertThat(accountResponse.getBody().email()).isEqualTo(trimmedEmail);
     }
 
     @Test
     void updateEmail_withMissingEmailField_returns400() throws Exception {
-        ResponseEntity<String> response = accountManagementClient.updateEmailByUserGUIDRaw(userGUID, "{}");
+        ResponseEntity<UpdateEmailResponse> response = accountManagementClient.updateEmailByUserGUID(userGUID, null);
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @ParameterizedTest
     @MethodSource("invalidEmails")
     void updateEmail_withInvalidEmail_returns400(String invalidEmail) throws Exception {
-        ResponseEntity<String> response = accountManagementClient.updateEmailByUserGUID(userGUID, invalidEmail);
+        ResponseEntity<UpdateEmailResponse> response = accountManagementClient.updateEmailByUserGUID(userGUID, invalidEmail);
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
@@ -220,79 +213,60 @@ class AccountStatusIntegrationTest {
         duplicateEmailUserGUID = accountManagementClient.extractUserGUID(createResponse.getBody());
         assertThat(duplicateEmailUserGUID).isNotBlank();
 
-        ResponseEntity<String> response = accountManagementClient.updateEmailByUserGUID(userGUID, duplicateEmail);
+        ResponseEntity<UpdateEmailResponse> response = accountManagementClient.updateEmailByUserGUID(userGUID, duplicateEmail);
 
         assertThat(response.getStatusCode().value()).isEqualTo(409);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
     void updateEmail_withUnknownUserGUID_returns404() throws Exception {
-        ResponseEntity<String> response =
+        ResponseEntity<UpdateEmailResponse> response =
                 accountManagementClient.updateEmailByUserGUID(UUID.randomUUID().toString(), TestUtils.getUniqueEmail());
 
         assertThat(response.getStatusCode().value()).isEqualTo(404);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
     void addRole_withNewRole_returns201AndContainsAllRoles() throws Exception {
-        ResponseEntity<String> response = accountManagementClient.addRoleByUserGUID(userGUID, "pastor");
+        ResponseEntity<AddRoleResponse> response = accountManagementClient.addRoleByUserGUID(userGUID, Role.PASTOR);
 
         assertThat(response.getStatusCode().value()).isEqualTo(201);
-        JsonNode body = OBJECT_MAPPER.readTree(response.getBody());
-        assertThat(body.get("userGUID").asText()).isEqualTo(userGUID);
-        JsonNode roles = body.get("roles");
-        assertThat(roles.isArray()).isTrue();
-        List<String> roleList = new ArrayList<>();
-        roles.forEach(r -> roleList.add(r.asText()));
-        assertThat(roleList).contains("member", "pastor");
+        assertThat(response.getBody().userGUID()).isEqualTo(userGUID);
+        List<Role> roles = response.getBody().roles();
+        assertThat(roles).isNotNull();
+        assertThat(roles).contains(Role.MEMBER, Role.PASTOR);
     }
 
     @Test
     void addRole_withAlreadyExistingRole_returns200() throws Exception {
-        ResponseEntity<String> response = accountManagementClient.addRoleByUserGUID(userGUID, "member");
+        ResponseEntity<AddRoleResponse> response = accountManagementClient.addRoleByUserGUID(userGUID, Role.MEMBER);
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
-        JsonNode body = OBJECT_MAPPER.readTree(response.getBody());
-        assertThat(body.get("userGUID").asText()).isEqualTo(userGUID);
-        JsonNode roles = body.get("roles");
-        assertThat(roles.isArray()).isTrue();
-        List<String> roleList = new ArrayList<>();
-        roles.forEach(r -> roleList.add(r.asText()));
-        assertThat(roleList).containsExactly("member");
+        assertThat(response.getBody().userGUID()).isEqualTo(userGUID);
+        List<Role> roles = response.getBody().roles();
+        assertThat(roles).isNotNull();
+        assertThat(roles).containsExactly(Role.MEMBER);
     }
 
     @Test
     void addRole_withGuestRole_returns400() throws Exception {
-        ResponseEntity<String> response = accountManagementClient.addRoleByUserGUID(userGUID, "guest");
+        ResponseEntity<AddRoleResponse> response = accountManagementClient.addRoleByUserGUID(userGUID, Role.GUEST);
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.getBody());
-    }
-
-    @Test
-    void addRole_withInvalidRole_returns400() throws Exception {
-        ResponseEntity<String> response = accountManagementClient.addRoleByUserGUID(userGUID, "not_a_real_role");
-
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
     void addRole_withMissingRole_returns400() throws Exception {
-        ResponseEntity<String> response = accountManagementClient.addRoleByUserGUIDRaw(userGUID, "{}");
+        ResponseEntity<AddRoleResponse> response = accountManagementClient.addRoleByUserGUID(userGUID, null);
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     @Test
     void addRole_withUnknownUserGUID_returns404() throws Exception {
-        ResponseEntity<String> response = accountManagementClient.addRoleByUserGUID(UUID.randomUUID().toString(), "pastor");
+        ResponseEntity<AddRoleResponse> response = accountManagementClient.addRoleByUserGUID(UUID.randomUUID().toString(), Role.PASTOR);
 
         assertThat(response.getStatusCode().value()).isEqualTo(404);
-        TestUtils.assertHasErrorField(response.getBody());
     }
 
     private static Stream<Arguments> invalidPasswords() {

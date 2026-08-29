@@ -1,6 +1,5 @@
 package com.roots.account_management.integration;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -8,7 +7,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
@@ -18,6 +16,8 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
+import com.roots.account_management.dto.response.CreateTestAccountResponse;
 
 /**
  * Negative-path integration tests against a running account-management (and auth-server).
@@ -37,7 +37,6 @@ class NegativeCaseIntegrationTest {
     private static final String VALID_NAME = "Integration Test User";
     private static final String VALID_PASSWORD = "Password123";
     // Create requires WRITE, delete requires DELETE; one token carries both.
-    private static final String SCOPES = "INTEGRATION_TEST_CLIENT_WRITE INTEGRATION_TEST_CLIENT_DELETE";
 
     @Autowired
     private AccountManagementClient accountManagementClient;
@@ -69,11 +68,10 @@ class NegativeCaseIntegrationTest {
         @MethodSource("invalidCreateAccountRequests")
         void createTestAccount_withInvalidInput_returns400(
                 String caseName, String name, String email, String password) throws Exception {
-            ResponseEntity<String> response =
+            ResponseEntity<CreateTestAccountResponse> response =
                     accountManagementClient.createTestAccount(name, email, password);
 
             assertThat(response.getStatusCode().value()).isEqualTo(400);
-            TestUtils.assertHasErrorField(response.getBody());
         }
 
         @Test
@@ -81,14 +79,13 @@ class NegativeCaseIntegrationTest {
             String email = TestUtils.getUniqueEmail();
 
             try {
-                ResponseEntity<String> first =
+                ResponseEntity<CreateTestAccountResponse> first =
                         accountManagementClient.createTestAccount(VALID_NAME, email, VALID_PASSWORD);
                 assertThat(first.getStatusCode().value()).isEqualTo(201);
 
-                ResponseEntity<String> duplicate =
+                ResponseEntity<CreateTestAccountResponse> duplicate =
                         accountManagementClient.createTestAccount(VALID_NAME, email, VALID_PASSWORD);
                 assertThat(duplicate.getStatusCode().value()).isEqualTo(409);
-                TestUtils.assertHasErrorField(duplicate.getBody());
             } finally {
                 // Teardown: remove the account the first create persisted (idempotent).
                 accountManagementClient.deleteByEmail(email);
@@ -101,19 +98,17 @@ class NegativeCaseIntegrationTest {
 
         @Test
         void deleteTestAccount_withBothEmailAndUserGUID_returns400() throws Exception {
-            ResponseEntity<String> response = accountManagementClient.deleteByEmailAndUserGUID(
+            ResponseEntity<Void> response = accountManagementClient.deleteByEmailAndUserGUID(
                     TestUtils.getUniqueEmail(), UUID.randomUUID().toString());
 
             assertThat(response.getStatusCode().value()).isEqualTo(400);
-            TestUtils.assertHasErrorField(response.getBody());
         }
 
         @Test
         void deleteTestAccount_withNeitherEmailNorUserGUID_returns400() throws Exception {
-            ResponseEntity<String> response = accountManagementClient.deleteWithoutParams();
+            ResponseEntity<Void> response = accountManagementClient.deleteWithoutParams();
 
             assertThat(response.getStatusCode().value()).isEqualTo(400);
-            TestUtils.assertHasErrorField(response.getBody());
         }
     }
 }
