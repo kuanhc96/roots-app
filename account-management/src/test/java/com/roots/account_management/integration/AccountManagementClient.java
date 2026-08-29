@@ -47,12 +47,6 @@ public class AccountManagementClient {
         this.baseUrl = baseUrl;
         headers = bearerJsonHeaders(accessToken);
         this.restTemplate = new RestTemplate();
-        this.restTemplate.setErrorHandler(new DefaultResponseErrorHandler() {
-            @Override
-            public boolean hasError(ClientHttpResponse response) {
-                return false;
-            }
-        });
     }
 
     public ResponseEntity<CreateTestAccountResponse> createTestAccount(String name, String email, String password) {
