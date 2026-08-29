@@ -1,6 +1,7 @@
 package com.roots.account_management.integration;
 
 import com.roots.account_management.dto.response.AccountProfileResponse;
+import com.roots.account_management.dto.response.CreateTestAccountResponse;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,17 +38,17 @@ class AccountBulkDeleteIntegrationTest {
     void setUp() throws Exception {
         email = TestUtils.getUniqueEmail();
 
-        ResponseEntity<String> createResponse =
+        ResponseEntity<CreateTestAccountResponse> createResponse =
                 accountManagementClient.createTestAccount(TEST_NAME, email, TEST_PASSWORD);
         assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
-        userGUID = accountManagementClient.extractUserGUID(createResponse.getBody());
+        userGUID = createResponse.getBody().userGUID();
         assertThat(userGUID).isNotBlank();
     }
 
     @AfterEach
     void tearDown() {
         if (userGUID != null) {
-            ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(userGUID);
+            ResponseEntity<Void> deleteResponse = accountManagementClient.deleteByUserGUID(userGUID);
             assertThat(deleteResponse.getStatusCode().value()).isIn(200, 204);
         }
     }

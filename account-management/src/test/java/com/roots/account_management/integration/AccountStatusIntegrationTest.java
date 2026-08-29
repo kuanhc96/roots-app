@@ -6,6 +6,7 @@ import com.roots.account_management.dto.request.UpdateNameRequest;
 import com.roots.account_management.dto.request.UpdatePasswordRequest;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AddRoleResponse;
+import com.roots.account_management.dto.response.CreateTestAccountResponse;
 import com.roots.account_management.dto.response.UpdateEmailResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
 import com.roots.account_management.dto.response.UpdateNameResponse;
@@ -56,10 +57,10 @@ class AccountStatusIntegrationTest {
     void setUp() throws Exception {
         email = TestUtils.getUniqueEmail();
 
-        ResponseEntity<String> createResponse =
+        ResponseEntity<CreateTestAccountResponse> createResponse =
                 accountManagementClient.createTestAccount(TEST_NAME, email, TEST_PASSWORD);
         assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
-        userGUID = accountManagementClient.extractUserGUID(createResponse.getBody());
+        userGUID = createResponse.getBody().userGUID();
         assertThat(userGUID).isNotBlank();
     }
 
@@ -207,10 +208,10 @@ class AccountStatusIntegrationTest {
     @Test
     void updateEmail_withDuplicateEmail_returns409() throws Exception {
         String duplicateEmail = TestUtils.getUniqueEmail();
-        ResponseEntity<String> createResponse =
+        ResponseEntity<CreateTestAccountResponse> createResponse =
                 accountManagementClient.createTestAccount(TEST_NAME, duplicateEmail, TEST_PASSWORD);
         assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
-        duplicateEmailUserGUID = accountManagementClient.extractUserGUID(createResponse.getBody());
+        duplicateEmailUserGUID = createResponse.getBody().userGUID();
         assertThat(duplicateEmailUserGUID).isNotBlank();
 
         ResponseEntity<UpdateEmailResponse> response = accountManagementClient.updateEmailByUserGUID(userGUID, duplicateEmail);

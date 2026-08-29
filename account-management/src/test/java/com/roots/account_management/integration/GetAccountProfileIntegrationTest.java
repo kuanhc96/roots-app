@@ -1,6 +1,5 @@
 package com.roots.account_management.integration;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
