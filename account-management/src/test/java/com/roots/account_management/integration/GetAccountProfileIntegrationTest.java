@@ -30,27 +30,19 @@ class GetAccountProfileIntegrationTest {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Autowired
-    private OAuth2Client oAuth2Client;
-
-    @Autowired
     private AccountManagementClient accountManagementClient;
 
-    @Value("${integration-test-client-secret}")
-    private String integrationTestClientSecret;
-
-    private String accessToken;
     private String userGUID;
     private String email;
     private String name;
 
     @BeforeEach
     void setUp() throws Exception {
-        accessToken = TestUtils.getClientCredentialsToken(oAuth2Client, integrationTestClientSecret, SCOPES);
         email = TestUtils.getUniqueEmail();
         name = TEST_NAME_PREFIX + UUID.randomUUID();
 
         ResponseEntity<String> createResponse =
-                accountManagementClient.createTestAccount(accessToken, name, email, TEST_PASSWORD);
+                accountManagementClient.createTestAccount(name, email, TEST_PASSWORD);
         assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
         userGUID = accountManagementClient.extractUserGUID(createResponse.getBody());
         assertThat(userGUID).isNotBlank();
@@ -59,7 +51,7 @@ class GetAccountProfileIntegrationTest {
     @AfterEach
     void tearDown() throws Exception {
         if (userGUID != null) {
-            ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(accessToken, userGUID);
+            ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(userGUID);
             assertThat(deleteResponse.getStatusCode().value()).isIn(200, 204);
         }
     }
@@ -118,12 +110,12 @@ class GetAccountProfileIntegrationTest {
         List<String> extraUserGUIDs = new ArrayList<>();
         try {
             ResponseEntity<String> extra1 =
-                    accountManagementClient.createTestAccount(accessToken, TEST_NAME_PREFIX + UUID.randomUUID(), TestUtils.getUniqueEmail(), TEST_PASSWORD);
+                    accountManagementClient.createTestAccount(TEST_NAME_PREFIX + UUID.randomUUID(), TestUtils.getUniqueEmail(), TEST_PASSWORD);
             assertThat(extra1.getStatusCode().value()).isEqualTo(201);
             extraUserGUIDs.add(accountManagementClient.extractUserGUID(extra1.getBody()));
 
             ResponseEntity<String> extra2 =
-                    accountManagementClient.createTestAccount(accessToken, TEST_NAME_PREFIX + UUID.randomUUID(), TestUtils.getUniqueEmail(), TEST_PASSWORD);
+                    accountManagementClient.createTestAccount(TEST_NAME_PREFIX + UUID.randomUUID(), TestUtils.getUniqueEmail(), TEST_PASSWORD);
             assertThat(extra2.getStatusCode().value()).isEqualTo(201);
             extraUserGUIDs.add(accountManagementClient.extractUserGUID(extra2.getBody()));
 
@@ -154,7 +146,7 @@ class GetAccountProfileIntegrationTest {
             assertThat(found).isTrue();
         } finally {
             for (String guid : extraUserGUIDs) {
-                accountManagementClient.deleteByUserGUID(accessToken, guid);
+                accountManagementClient.deleteByUserGUID(guid);
             }
         }
     }

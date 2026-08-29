@@ -32,31 +32,22 @@ class AccountStatusIntegrationTest {
 
     private static final String TEST_NAME = "Integration Test User";
     private static final String TEST_PASSWORD = "Password123";
-    private static final String SCOPES = "INTEGRATION_TEST_CLIENT_WRITE INTEGRATION_TEST_CLIENT_READ INTEGRATION_TEST_CLIENT_DELETE";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final PasswordEncoder PASSWORD_ENCODER = PasswordEncoderFactories.createDelegatingPasswordEncoder();
 
     @Autowired
-    private OAuth2Client oAuth2Client;
-
-    @Autowired
     private AccountManagementClient accountManagementClient;
 
-    @Value("${integration-test-client-secret}")
-    private String integrationTestClientSecret;
-
-    private String accessToken;
     private String userGUID;
     private String email;
     private String duplicateEmailUserGUID;
 
     @BeforeEach
     void setUp() throws Exception {
-        accessToken = TestUtils.getClientCredentialsToken(oAuth2Client, integrationTestClientSecret, SCOPES);
         email = TestUtils.getUniqueEmail();
 
         ResponseEntity<String> createResponse =
-                accountManagementClient.createTestAccount(accessToken, TEST_NAME, email, TEST_PASSWORD);
+                accountManagementClient.createTestAccount(TEST_NAME, email, TEST_PASSWORD);
         assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
         userGUID = accountManagementClient.extractUserGUID(createResponse.getBody());
         assertThat(userGUID).isNotBlank();
@@ -65,11 +56,11 @@ class AccountStatusIntegrationTest {
     @AfterEach
     void tearDown() throws Exception {
         if (duplicateEmailUserGUID != null) {
-            ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(accessToken, duplicateEmailUserGUID);
+            ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(duplicateEmailUserGUID);
             assertThat(deleteResponse.getStatusCode().value()).isIn(200, 204);
         }
         if (userGUID != null) {
-            ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(accessToken, userGUID);
+            ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(userGUID);
             assertThat(deleteResponse.getStatusCode().value()).isIn(200, 204);
         }
     }
@@ -110,7 +101,7 @@ class AccountStatusIntegrationTest {
         JsonNode updateBody = OBJECT_MAPPER.readTree(updateResponse.getBody());
         assertThat(updateBody.get("userGUID").asText()).isEqualTo(userGUID);
 
-        ResponseEntity<String> readResponse = accountManagementClient.getTestAccountByUserGUID(accessToken, userGUID);
+        ResponseEntity<String> readResponse = accountManagementClient.getTestAccountByUserGUID(userGUID);
         assertThat(readResponse.getStatusCode().value()).isEqualTo(200);
         JsonNode readBody = OBJECT_MAPPER.readTree(readResponse.getBody());
         String storedPassword = readBody.get("password").asText();
@@ -224,7 +215,7 @@ class AccountStatusIntegrationTest {
     void updateEmail_withDuplicateEmail_returns409() throws Exception {
         String duplicateEmail = TestUtils.getUniqueEmail();
         ResponseEntity<String> createResponse =
-                accountManagementClient.createTestAccount(accessToken, TEST_NAME, duplicateEmail, TEST_PASSWORD);
+                accountManagementClient.createTestAccount(TEST_NAME, duplicateEmail, TEST_PASSWORD);
         assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
         duplicateEmailUserGUID = accountManagementClient.extractUserGUID(createResponse.getBody());
         assertThat(duplicateEmailUserGUID).isNotBlank();

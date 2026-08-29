@@ -26,33 +26,19 @@ class AccountLifecycleIntegrationTest {
     private static final String TEST_NAME = "Integration Test User";
     private static final String TEST_PASSWORD = "Password123";
     // Create requires WRITE, delete requires DELETE; one token carries both.
-    private static final String SCOPES = "INTEGRATION_TEST_CLIENT_WRITE INTEGRATION_TEST_CLIENT_DELETE";
-
-    @Autowired
-    private OAuth2Client oAuth2Client;
 
     @Autowired
     private AccountManagementClient accountManagementClient;
-
-    @Value("${integration-test-client-secret}")
-    private String integrationTestClientSecret;
-
-    private String accessToken;
-
-    @BeforeEach
-    void setUp() throws Exception {
-        accessToken = TestUtils.getClientCredentialsToken(oAuth2Client, integrationTestClientSecret, SCOPES);
-    }
 
     @Test
     void createsThenDeletesTestAccountByEmail() throws Exception {
         String email = TestUtils.getUniqueEmail();
 
         ResponseEntity<String> createResponse =
-                accountManagementClient.createTestAccount(accessToken, TEST_NAME, email, TEST_PASSWORD);
+                accountManagementClient.createTestAccount(TEST_NAME, email, TEST_PASSWORD);
         assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
 
-        ResponseEntity<String> deleteResponse = accountManagementClient.deleteByEmail(accessToken, email);
+        ResponseEntity<String> deleteResponse = accountManagementClient.deleteByEmail(email);
         assertThat(deleteResponse.getStatusCode().value()).isEqualTo(204);
     }
 
@@ -61,13 +47,13 @@ class AccountLifecycleIntegrationTest {
         String email = TestUtils.getUniqueEmail();
 
         ResponseEntity<String> createResponse =
-                accountManagementClient.createTestAccount(accessToken, TEST_NAME, email, TEST_PASSWORD);
+                accountManagementClient.createTestAccount(TEST_NAME, email, TEST_PASSWORD);
         assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
 
         String userGUID = accountManagementClient.extractUserGUID(createResponse.getBody());
         assertThat(userGUID).isNotBlank();
 
-        ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(accessToken, userGUID);
+        ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(userGUID);
         assertThat(deleteResponse.getStatusCode().value()).isEqualTo(204);
     }
 }

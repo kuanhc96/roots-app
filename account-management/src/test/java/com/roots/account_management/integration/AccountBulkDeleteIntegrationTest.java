@@ -24,29 +24,22 @@ class AccountBulkDeleteIntegrationTest {
 
     private static final String TEST_NAME = "Integration Test User";
     private static final String TEST_PASSWORD = "Password123";
-    private static final String SCOPES = "INTEGRATION_TEST_CLIENT_WRITE INTEGRATION_TEST_CLIENT_DELETE";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
-    @Autowired
-    private OAuth2Client oAuth2Client;
 
     @Autowired
     private AccountManagementClient accountManagementClient;
 
-    @Value("${integration-test-client-secret}")
-    private String integrationTestClientSecret;
-
-    private String accessToken;
     private String userGUID;
     private String email;
 
+
+
     @BeforeEach
     void setUp() throws Exception {
-        accessToken = TestUtils.getClientCredentialsToken(oAuth2Client, integrationTestClientSecret, SCOPES);
         email = TestUtils.getUniqueEmail();
 
         ResponseEntity<String> createResponse =
-                accountManagementClient.createTestAccount(accessToken, TEST_NAME, email, TEST_PASSWORD);
+                accountManagementClient.createTestAccount(TEST_NAME, email, TEST_PASSWORD);
         assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
         userGUID = accountManagementClient.extractUserGUID(createResponse.getBody());
         assertThat(userGUID).isNotBlank();
@@ -55,7 +48,7 @@ class AccountBulkDeleteIntegrationTest {
     @AfterEach
     void tearDown() throws Exception {
         if (userGUID != null) {
-            ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(accessToken, userGUID);
+            ResponseEntity<String> deleteResponse = accountManagementClient.deleteByUserGUID(userGUID);
             assertThat(deleteResponse.getStatusCode().value()).isIn(200, 204);
         }
     }

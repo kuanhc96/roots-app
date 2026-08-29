@@ -24,9 +24,11 @@ public class AccountManagementClient {
     private final String baseUrl;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final HttpHeaders headers;
 
-    public AccountManagementClient(String baseUrl) {
+    public AccountManagementClient(String baseUrl, String accessToken) {
         this.baseUrl = baseUrl;
+        headers = bearerJsonHeaders(accessToken);
         this.restTemplate = new RestTemplate();
         this.restTemplate.setErrorHandler(new DefaultResponseErrorHandler() {
             @Override
@@ -37,35 +39,34 @@ public class AccountManagementClient {
         this.objectMapper = new ObjectMapper();
     }
 
-    public ResponseEntity<String> createTestAccount(String accessToken, String name, String email, String password) {
-        HttpHeaders headers = bearerJsonHeaders(accessToken);
+    public ResponseEntity<String> createTestAccount(String name, String email, String password) {
         HttpEntity<Map<String, String>> entity = new HttpEntity<>(
                 Map.of("name", name, "email", email, "password", password), headers);
         return restTemplate.exchange(baseUrl + "/api/account/test", HttpMethod.POST, entity, String.class);
     }
 
-    public ResponseEntity<String> getTestAccountByEmail(String accessToken, String email) {
-        return getTestAccount(accessToken, "email=" + encode(email));
+    public ResponseEntity<String> getTestAccountByEmail(String email) {
+        return getTestAccount("email=" + encode(email));
     }
 
-    public ResponseEntity<String> getTestAccountByUserGUID(String accessToken, String userGUID) {
-        return getTestAccount(accessToken, "userGUID=" + encode(userGUID));
+    public ResponseEntity<String> getTestAccountByUserGUID(String userGUID) {
+        return getTestAccount("userGUID=" + encode(userGUID));
     }
 
-    public ResponseEntity<String> deleteByEmail(String accessToken, String email) {
-        return deleteTestAccount(accessToken, "email=" + encode(email));
+    public ResponseEntity<String> deleteByEmail(String email) {
+        return deleteTestAccount("email=" + encode(email));
     }
 
-    public ResponseEntity<String> deleteByUserGUID(String accessToken, String userGUID) {
-        return deleteTestAccount(accessToken, "userGUID=" + encode(userGUID));
+    public ResponseEntity<String> deleteByUserGUID(String userGUID) {
+        return deleteTestAccount("userGUID=" + encode(userGUID));
     }
 
-    public ResponseEntity<String> deleteByEmailAndUserGUID(String accessToken, String email, String userGUID) {
-        return deleteTestAccount(accessToken, "email=" + encode(email) + "&userGUID=" + encode(userGUID));
+    public ResponseEntity<String> deleteByEmailAndUserGUID(String email, String userGUID) {
+        return deleteTestAccount("email=" + encode(email) + "&userGUID=" + encode(userGUID));
     }
 
-    public ResponseEntity<String> deleteWithoutParams(String accessToken) {
-        return deleteTestAccount(accessToken, "");
+    public ResponseEntity<String> deleteWithoutParams() {
+        return deleteTestAccount("");
     }
 
     public ResponseEntity<String> deleteAccounts(List<String> userGUIDs) {
@@ -191,15 +192,13 @@ public class AccountManagementClient {
         return restTemplate.exchange(url, HttpMethod.GET, HttpEntity.EMPTY, String.class);
     }
 
-    private ResponseEntity<String> getTestAccount(String accessToken, String query) {
-        HttpHeaders headers = bearerHeaders(accessToken);
+    private ResponseEntity<String> getTestAccount(String query) {
         HttpEntity<Void> entity = new HttpEntity<>(headers);
         String url = baseUrl + "/api/account/test" + (query.isBlank() ? "" : "?" + query);
         return restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
     }
 
-    private ResponseEntity<String> deleteTestAccount(String accessToken, String query) {
-        HttpHeaders headers = bearerHeaders(accessToken);
+    private ResponseEntity<String> deleteTestAccount(String query) {
         HttpEntity<Void> entity = new HttpEntity<>(headers);
         String url = baseUrl + "/api/account/test" + (query.isBlank() ? "" : "?" + query);
         return restTemplate.exchange(url, HttpMethod.DELETE, entity, String.class);
@@ -208,12 +207,6 @@ public class AccountManagementClient {
     private HttpHeaders jsonHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        return headers;
-    }
-
-    private HttpHeaders bearerHeaders(String accessToken) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(accessToken);
         return headers;
     }
 
