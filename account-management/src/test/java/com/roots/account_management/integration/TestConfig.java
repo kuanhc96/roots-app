@@ -24,6 +24,6 @@ public class TestConfig {
     @Bean
     public AccountManagementClient accountManagementClient(OAuth2Client oAuth2Client) throws Exception {
         String accessToken = TestUtils.getClientCredentialsToken(oAuth2Client, integrationTestClientSecret, "INTEGRATION_TEST_CLIENT_WRITE INTEGRATION_TEST_CLIENT_DELETE");
-        return new AccountManagementClient(accessToken, accountManagementLocation);
+        return new AccountManagementClient(accountManagementLocation, accessToken);
     }
 }

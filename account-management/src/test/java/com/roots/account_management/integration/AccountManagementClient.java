@@ -41,7 +41,6 @@ public class AccountManagementClient {
 
     private final String baseUrl;
     private final RestTemplate restTemplate;
-    private final ObjectMapper objectMapper;
     private final HttpHeaders headers;
 
     public AccountManagementClient(String baseUrl, String accessToken) {
@@ -54,7 +53,6 @@ public class AccountManagementClient {
                 return false;
             }
         });
-        this.objectMapper = new ObjectMapper();
     }
 
     public ResponseEntity<CreateTestAccountResponse> createTestAccount(String name, String email, String password) {
@@ -106,7 +104,7 @@ public class AccountManagementClient {
     }
 
     public ResponseEntity<UpdateNameResponse> updateNameByUserGUID(String userGUID, String name) {
-        HttpEntity<UpdateNameRequest> entity = new HttpEntity<>(UpdateNameRequest.builder().name(name).name(name).build(), headers);
+        HttpEntity<UpdateNameRequest> entity = new HttpEntity<>(UpdateNameRequest.builder().name(name).build(), headers);
         return restTemplate.exchange(baseUrl + "/api/account/name/" + encode(userGUID), HttpMethod.PUT, entity, UpdateNameResponse.class);
     }
 
