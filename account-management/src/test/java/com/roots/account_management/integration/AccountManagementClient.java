@@ -70,13 +70,11 @@ public class AccountManagementClient {
     }
 
     public ResponseEntity<String> deleteAccounts(List<String> userGUIDs) {
-        HttpHeaders headers = jsonHeaders();
         HttpEntity<Map<String, List<String>>> entity = new HttpEntity<>(Map.of("userGUIDs", userGUIDs), headers);
         return restTemplate.exchange(baseUrl + "/api/account", HttpMethod.DELETE, entity, String.class);
     }
 
     public ResponseEntity<String> deleteAccountsRaw(String jsonBody) {
-        HttpHeaders headers = jsonHeaders();
         HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
         return restTemplate.exchange(baseUrl + "/api/account", HttpMethod.DELETE, entity, String.class);
     }
@@ -86,61 +84,51 @@ public class AccountManagementClient {
     }
 
     public ResponseEntity<String> updateMfaByUserGUID(String userGUID, Boolean mfaEnabled) {
-        HttpHeaders headers = jsonHeaders();
         HttpEntity<Map<String, Boolean>> entity = new HttpEntity<>(Map.of("mfaEnabled", mfaEnabled), headers);
         return restTemplate.exchange(baseUrl + "/api/account/mfa/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
     public ResponseEntity<String> updateMfaByUserGUIDRaw(String userGUID, String jsonBody) {
-        HttpHeaders headers = jsonHeaders();
         HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
         return restTemplate.exchange(baseUrl + "/api/account/mfa/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
     public ResponseEntity<String> updatePasswordByUserGUID(String userGUID, String password) {
-        HttpHeaders headers = jsonHeaders();
         HttpEntity<Map<String, String>> entity = new HttpEntity<>(Map.of("password", password), headers);
         return restTemplate.exchange(baseUrl + "/api/account/password/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
     public ResponseEntity<String> updatePasswordByUserGUIDRaw(String userGUID, String jsonBody) {
-        HttpHeaders headers = jsonHeaders();
         HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
         return restTemplate.exchange(baseUrl + "/api/account/password/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
     public ResponseEntity<String> updateNameByUserGUID(String userGUID, String name) {
-        HttpHeaders headers = jsonHeaders();
         HttpEntity<Map<String, String>> entity = new HttpEntity<>(Map.of("name", name), headers);
         return restTemplate.exchange(baseUrl + "/api/account/name/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
     public ResponseEntity<String> updateNameByUserGUIDRaw(String userGUID, String jsonBody) {
-        HttpHeaders headers = jsonHeaders();
         HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
         return restTemplate.exchange(baseUrl + "/api/account/name/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
     public ResponseEntity<String> updateEmailByUserGUID(String userGUID, String email) {
-        HttpHeaders headers = jsonHeaders();
         HttpEntity<Map<String, String>> entity = new HttpEntity<>(Map.of("email", email), headers);
         return restTemplate.exchange(baseUrl + "/api/account/email/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
     public ResponseEntity<String> updateEmailByUserGUIDRaw(String userGUID, String jsonBody) {
-        HttpHeaders headers = jsonHeaders();
         HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
         return restTemplate.exchange(baseUrl + "/api/account/email/" + encode(userGUID), HttpMethod.PUT, entity, String.class);
     }
 
     public ResponseEntity<String> addRoleByUserGUID(String userGUID, String role) {
-        HttpHeaders headers = jsonHeaders();
         HttpEntity<Map<String, String>> entity = new HttpEntity<>(Map.of("role", role), headers);
         return restTemplate.exchange(baseUrl + "/api/account/role/" + encode(userGUID), HttpMethod.POST, entity, String.class);
     }
 
     public ResponseEntity<String> addRoleByUserGUIDRaw(String userGUID, String jsonBody) {
-        HttpHeaders headers = jsonHeaders();
         HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
         return restTemplate.exchange(baseUrl + "/api/account/role/" + encode(userGUID), HttpMethod.POST, entity, String.class);
     }
@@ -202,12 +190,6 @@ public class AccountManagementClient {
         HttpEntity<Void> entity = new HttpEntity<>(headers);
         String url = baseUrl + "/api/account/test" + (query.isBlank() ? "" : "?" + query);
         return restTemplate.exchange(url, HttpMethod.DELETE, entity, String.class);
-    }
-
-    private HttpHeaders jsonHeaders() {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        return headers;
     }
 
     private HttpHeaders bearerJsonHeaders(String accessToken) {
