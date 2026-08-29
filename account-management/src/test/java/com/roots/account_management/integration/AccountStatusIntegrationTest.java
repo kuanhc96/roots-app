@@ -30,12 +30,15 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.HttpClientErrorException;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @ExtendWith({SpringExtension.class})
 @ContextConfiguration(classes = TestConfig.class)
@@ -87,17 +90,16 @@ class AccountStatusIntegrationTest {
 
     @Test
     void updateMfaEnabled_withMissingMfaEnabled_returns400() {
-        ResponseEntity<UpdateMfaResponse> response = accountManagementClient.updateMfaByUserGUID(userGUID, null);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updateMfaByUserGUID(userGUID, null));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
     void updateMfaEnabled_withUnknownUserGUID_returns404() throws Exception {
-        ResponseEntity<UpdateMfaResponse> response =
-                accountManagementClient.updateMfaByUserGUID(UUID.randomUUID().toString(), false);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updateMfaByUserGUID(UUID.randomUUID().toString(), false));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(404);
+        assertThat(exception.getStatusCode().value()).isEqualTo(404);
     }
 
     @Test
@@ -117,25 +119,24 @@ class AccountStatusIntegrationTest {
 
     @Test
     void updatePassword_withMissingPassword_returns400() throws Exception {
-        ResponseEntity<UpdatePasswordResponse> response = accountManagementClient.updatePasswordByUserGUID(userGUID, null);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updatePasswordByUserGUID(userGUID, null));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @ParameterizedTest
     @MethodSource("invalidPasswords")
     void updatePassword_withInvalidPassword_returns400(String invalidPassword) throws Exception {
-        ResponseEntity<UpdatePasswordResponse> response = accountManagementClient.updatePasswordByUserGUID(userGUID, invalidPassword);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updatePasswordByUserGUID(userGUID, invalidPassword));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
     void updatePassword_withUnknownUserGUID_returns404() throws Exception {
-        ResponseEntity<UpdatePasswordResponse> response =
-                accountManagementClient.updatePasswordByUserGUID(UUID.randomUUID().toString(), "NewPassword123");
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updatePasswordByUserGUID(UUID.randomUUID().toString(), "NewPassword123"));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(404);
+        assertThat(exception.getStatusCode().value()).isEqualTo(404);
     }
 
     @Test
@@ -154,25 +155,24 @@ class AccountStatusIntegrationTest {
 
     @Test
     void updateName_withMissingNameField_returns400()  {
-        ResponseEntity<UpdateNameResponse> response = accountManagementClient.updateNameByUserGUID(userGUID, null);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updateNameByUserGUID(userGUID, null));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @ParameterizedTest
     @MethodSource("invalidNames")
     void updateName_withInvalidName_returns400(String invalidName) throws Exception {
-        ResponseEntity<UpdateNameResponse> response = accountManagementClient.updateNameByUserGUID(userGUID, invalidName);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updateNameByUserGUID(userGUID, invalidName));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
     void updateName_withUnknownUserGUID_returns404() throws Exception {
-        ResponseEntity<UpdateNameResponse> response =
-                accountManagementClient.updateNameByUserGUID(UUID.randomUUID().toString(), "Updated Name");
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updateNameByUserGUID(UUID.randomUUID().toString(), "Updated Name"));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(404);
+        assertThat(exception.getStatusCode().value()).isEqualTo(404);
     }
 
     @Test
@@ -192,17 +192,17 @@ class AccountStatusIntegrationTest {
 
     @Test
     void updateEmail_withMissingEmailField_returns400() throws Exception {
-        ResponseEntity<UpdateEmailResponse> response = accountManagementClient.updateEmailByUserGUID(userGUID, null);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updateEmailByUserGUID(userGUID, null));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @ParameterizedTest
     @MethodSource("invalidEmails")
     void updateEmail_withInvalidEmail_returns400(String invalidEmail) throws Exception {
-        ResponseEntity<UpdateEmailResponse> response = accountManagementClient.updateEmailByUserGUID(userGUID, invalidEmail);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updateEmailByUserGUID(userGUID, invalidEmail));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
@@ -214,17 +214,16 @@ class AccountStatusIntegrationTest {
         duplicateEmailUserGUID = createResponse.getBody().userGUID();
         assertThat(duplicateEmailUserGUID).isNotBlank();
 
-        ResponseEntity<UpdateEmailResponse> response = accountManagementClient.updateEmailByUserGUID(userGUID, duplicateEmail);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updateEmailByUserGUID(userGUID, duplicateEmail));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(409);
+        assertThat(exception.getStatusCode().value()).isEqualTo(409);
     }
 
     @Test
     void updateEmail_withUnknownUserGUID_returns404() throws Exception {
-        ResponseEntity<UpdateEmailResponse> response =
-                accountManagementClient.updateEmailByUserGUID(UUID.randomUUID().toString(), TestUtils.getUniqueEmail());
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updateEmailByUserGUID(UUID.randomUUID().toString(), TestUtils.getUniqueEmail()));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(404);
+        assertThat(exception.getStatusCode().value()).isEqualTo(404);
     }
 
     @Test
@@ -251,23 +250,23 @@ class AccountStatusIntegrationTest {
 
     @Test
     void addRole_withGuestRole_returns400() throws Exception {
-        ResponseEntity<AddRoleResponse> response = accountManagementClient.addRoleByUserGUID(userGUID, Role.GUEST);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.addRoleByUserGUID(userGUID, Role.GUEST));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
     void addRole_withMissingRole_returns400() throws Exception {
-        ResponseEntity<AddRoleResponse> response = accountManagementClient.addRoleByUserGUID(userGUID, null);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.addRoleByUserGUID(userGUID, null));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
     void addRole_withUnknownUserGUID_returns404() throws Exception {
-        ResponseEntity<AddRoleResponse> response = accountManagementClient.addRoleByUserGUID(UUID.randomUUID().toString(), Role.PASTOR);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.addRoleByUserGUID(UUID.randomUUID().toString(), Role.PASTOR));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(404);
+        assertThat(exception.getStatusCode().value()).isEqualTo(404);
     }
 
     private static Stream<Arguments> invalidPasswords() {

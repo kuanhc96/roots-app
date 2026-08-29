@@ -12,10 +12,13 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.HttpClientErrorException;
+
 import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
 
@@ -68,10 +71,10 @@ class NegativeCaseIntegrationTest {
         @MethodSource("invalidCreateAccountRequests")
         void createTestAccount_withInvalidInput_returns400(
                 String caseName, String name, String email, String password) throws Exception {
-            ResponseEntity<CreateTestAccountResponse> response =
-                    accountManagementClient.createTestAccount(name, email, password);
+            HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () ->
+                    accountManagementClient.createTestAccount(name, email, password));
 
-            assertThat(response.getStatusCode().value()).isEqualTo(400);
+            assertThat(exception.getStatusCode().value()).isEqualTo(400);
         }
 
         @Test
@@ -83,9 +86,9 @@ class NegativeCaseIntegrationTest {
                         accountManagementClient.createTestAccount(VALID_NAME, email, VALID_PASSWORD);
                 assertThat(first.getStatusCode().value()).isEqualTo(201);
 
-                ResponseEntity<CreateTestAccountResponse> duplicate =
-                        accountManagementClient.createTestAccount(VALID_NAME, email, VALID_PASSWORD);
-                assertThat(duplicate.getStatusCode().value()).isEqualTo(409);
+                HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () ->
+                        accountManagementClient.createTestAccount(VALID_NAME, email, VALID_PASSWORD));
+                assertThat(exception.getStatusCode().value()).isEqualTo(409);
             } finally {
                 // Teardown: remove the account the first create persisted (idempotent).
                 accountManagementClient.deleteByEmail(email);
@@ -98,17 +101,19 @@ class NegativeCaseIntegrationTest {
 
         @Test
         void deleteTestAccount_withBothEmailAndUserGUID_returns400() throws Exception {
-            ResponseEntity<Void> response = accountManagementClient.deleteByEmailAndUserGUID(
-                    TestUtils.getUniqueEmail(), UUID.randomUUID().toString());
+            HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () ->
+                    accountManagementClient.deleteByEmailAndUserGUID(
+                            TestUtils.getUniqueEmail(), UUID.randomUUID().toString()));
 
-            assertThat(response.getStatusCode().value()).isEqualTo(400);
+            assertThat(exception.getStatusCode().value()).isEqualTo(400);
         }
 
         @Test
         void deleteTestAccount_withNeitherEmailNorUserGUID_returns400() throws Exception {
-            ResponseEntity<Void> response = accountManagementClient.deleteWithoutParams();
+            HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () ->
+                    accountManagementClient.deleteWithoutParams());
 
-            assertThat(response.getStatusCode().value()).isEqualTo(400);
+            assertThat(exception.getStatusCode().value()).isEqualTo(400);
         }
     }
 }

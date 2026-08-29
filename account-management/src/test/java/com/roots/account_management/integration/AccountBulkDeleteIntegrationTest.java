@@ -13,10 +13,13 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.HttpClientErrorException;
+
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @ExtendWith({SpringExtension.class})
 @ContextConfiguration(classes = TestConfig.class)
@@ -60,16 +63,16 @@ class AccountBulkDeleteIntegrationTest {
 
         assertThat(deleteResponse.getStatusCode().value()).isEqualTo(204);
 
-        ResponseEntity<AccountProfileResponse> profileResponse = accountManagementClient.getAccountProfileByUserGUID(userGUID);
-        assertThat(profileResponse.getStatusCode().value()).isEqualTo(404);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.getAccountProfileByUserGUID(userGUID));
+        assertThat(exception.getStatusCode().value()).isEqualTo(404);
         userGUID = null;
     }
 
     @Test
     void deleteAccounts_withEmptyUserGUIDs_returns400() throws Exception {
-        ResponseEntity<Void> response = accountManagementClient.deleteAccounts(List.of());
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.deleteAccounts(List.of()));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
@@ -81,9 +84,9 @@ class AccountBulkDeleteIntegrationTest {
 
     @Test
     void deleteAccounts_withBlankEntry_returns400() throws Exception {
-        ResponseEntity<Void> response = accountManagementClient.deleteAccounts(List.of(userGUID, "   "));
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.deleteAccounts(List.of(userGUID, "   ")));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
@@ -101,8 +104,8 @@ class AccountBulkDeleteIntegrationTest {
                 UUID.randomUUID().toString(),
                 UUID.randomUUID().toString()
         );
-        ResponseEntity<Void> response = accountManagementClient.deleteAccounts(userGUIDs);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.deleteAccounts(userGUIDs));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 }

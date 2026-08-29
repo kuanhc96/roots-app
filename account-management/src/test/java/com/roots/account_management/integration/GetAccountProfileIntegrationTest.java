@@ -14,11 +14,14 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.HttpClientErrorException;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @ExtendWith({SpringExtension.class})
 @ContextConfiguration(classes = TestConfig.class)
@@ -77,26 +80,25 @@ class GetAccountProfileIntegrationTest {
 
     @Test
     void getAccountProfile_withBothEmailAndUserGUID_returns400() throws Exception {
-        ResponseEntity<AccountProfileResponse> response = accountManagementClient.getAccountProfileWithQuery(
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.getAccountProfileWithQuery(
                 "email=" + java.net.URLEncoder.encode(email, java.nio.charset.StandardCharsets.UTF_8)
-                        + "&userGUID=" + java.net.URLEncoder.encode(userGUID, java.nio.charset.StandardCharsets.UTF_8));
+                        + "&userGUID=" + java.net.URLEncoder.encode(userGUID, java.nio.charset.StandardCharsets.UTF_8)));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
     void getAccountProfile_withNeitherEmailNorUserGUID_returns400() throws Exception {
-        ResponseEntity<AccountProfileResponse> response = accountManagementClient.getAccountProfileWithQuery("");
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.getAccountProfileWithQuery(""));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
     void getAccountProfile_withUnknownUserGUID_returns404() throws Exception {
-        ResponseEntity<AccountProfileResponse> response =
-                accountManagementClient.getAccountProfileByUserGUID(UUID.randomUUID().toString());
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.getAccountProfileByUserGUID(UUID.randomUUID().toString()));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(404);
+        assertThat(exception.getStatusCode().value()).isEqualTo(404);
     }
 
     @Test
@@ -166,23 +168,23 @@ class GetAccountProfileIntegrationTest {
 
     @Test
     void getAccountProfiles_withNegativePage_returns400() throws Exception {
-        ResponseEntity<AccountProfilesResponse> response = accountManagementClient.getAccountProfiles(-1, 20);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.getAccountProfiles(-1, 20));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
     void getAccountProfiles_withSizeZero_returns400() throws Exception {
-        ResponseEntity<AccountProfilesResponse> response = accountManagementClient.getAccountProfiles(0, 0);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.getAccountProfiles(0, 0));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
     void getAccountProfiles_withSizeOverMax_returns400() throws Exception {
-        ResponseEntity<AccountProfilesResponse> response = accountManagementClient.getAccountProfiles(0, 101);
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.getAccountProfiles(0, 101));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
@@ -256,26 +258,26 @@ class GetAccountProfileIntegrationTest {
 
     @Test
     void searchAccounts_withBothEmailAndName_returns400() throws Exception {
-        ResponseEntity<List<AccountProfileResponse>> response = accountManagementClient.searchAccountsWithQuery(
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.searchAccountsWithQuery(
                 "email=" + java.net.URLEncoder.encode(email, java.nio.charset.StandardCharsets.UTF_8)
-                        + "&name=" + java.net.URLEncoder.encode(name, java.nio.charset.StandardCharsets.UTF_8));
+                        + "&name=" + java.net.URLEncoder.encode(name, java.nio.charset.StandardCharsets.UTF_8)));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
     void searchAccounts_withNeitherEmailNorName_returns400() throws Exception {
-        ResponseEntity<List<AccountProfileResponse>> response = accountManagementClient.searchAccountsWithQuery("");
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.searchAccountsWithQuery(""));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
     void searchAccounts_withNonPositiveMaxCount_returns400() throws Exception {
-        ResponseEntity<List<AccountProfileResponse>> response = accountManagementClient.searchAccountsWithQuery(
-                "email=" + java.net.URLEncoder.encode(email, java.nio.charset.StandardCharsets.UTF_8) + "&maxCount=0");
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.searchAccountsWithQuery(
+                "email=" + java.net.URLEncoder.encode(email, java.nio.charset.StandardCharsets.UTF_8) + "&maxCount=0"));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
