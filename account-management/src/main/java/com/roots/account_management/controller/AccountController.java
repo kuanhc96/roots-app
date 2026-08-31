@@ -203,7 +203,7 @@ public class AccountController {
             @RequestBody UpdatePasswordRequest updatePasswordRequest) throws UserCredentialNotFoundException {
         validator.validateUserGUID(userGUID);
         validator.validateUpdatePasswordRequest(updatePasswordRequest);
-        return accountService.updatePasswordByUserGUID(userGUID, updatePasswordRequest.password());
+        return accountService.updatePasswordByUserGUID(userGUID, updatePasswordRequest.password(), updatePasswordRequest.oldPassword());
     }
 
     @Operation(

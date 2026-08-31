@@ -22,7 +22,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ContextConfiguration;
@@ -106,7 +105,7 @@ class AccountStatusIntegrationTest {
     void updatePassword_updatesStoredPasswordAndReturnsUserGUID() throws Exception {
         String newPassword = "NewPassword123";
 
-        ResponseEntity<UpdatePasswordResponse> updateResponse = accountManagementClient.updatePasswordByUserGUID(userGUID, newPassword);
+        ResponseEntity<UpdatePasswordResponse> updateResponse = accountManagementClient.updatePasswordByUserGUID(userGUID, newPassword, TEST_PASSWORD);
         assertThat(updateResponse.getStatusCode().value()).isEqualTo(200);
         assertThat(updateResponse.getBody().userGUID()).isEqualTo(userGUID);
 
@@ -119,7 +118,7 @@ class AccountStatusIntegrationTest {
 
     @Test
     void updatePassword_withMissingPassword_returns400() throws Exception {
-        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updatePasswordByUserGUID(userGUID, null));
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updatePasswordByUserGUID(userGUID, null, TEST_PASSWORD));
 
         assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
@@ -127,16 +126,23 @@ class AccountStatusIntegrationTest {
     @ParameterizedTest
     @MethodSource("invalidPasswords")
     void updatePassword_withInvalidPassword_returns400(String invalidPassword) throws Exception {
-        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updatePasswordByUserGUID(userGUID, invalidPassword));
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updatePasswordByUserGUID(userGUID, invalidPassword, TEST_PASSWORD));
 
         assertThat(exception.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
     void updatePassword_withUnknownUserGUID_returns404() throws Exception {
-        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updatePasswordByUserGUID(UUID.randomUUID().toString(), "NewPassword123"));
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updatePasswordByUserGUID(UUID.randomUUID().toString(), "NewPassword123", TEST_PASSWORD));
 
         assertThat(exception.getStatusCode().value()).isEqualTo(404);
+    }
+
+    @Test
+    void updatePassword_withIncorrectOldPassword_returns401() throws Exception {
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.updatePasswordByUserGUID(userGUID, "NewPassword123", "wrong" + TEST_PASSWORD));
+
+        assertThat(exception.getStatusCode().value()).isEqualTo(401);
     }
 
     @Test

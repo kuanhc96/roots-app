@@ -289,10 +289,11 @@ class AccountServiceTest {
         UserCredential existing = new UserCredential(
                 5L, userGUID, "jane@example.com", "Jane", "old-hash", true, true, false);
         when(userCredentialRepository.findByUserGUID(userGUID)).thenReturn(Optional.of(existing));
+        when(passwordEncoder.matches("old-hash", "old-hash")).thenReturn(true);
         when(passwordEncoder.encode("NewPassword123")).thenReturn("new-hash");
         when(userCredentialRepository.setPasswordByUserGUID(5L, "new-hash")).thenReturn(1);
 
-        UpdatePasswordResponse result = accountService.updatePasswordByUserGUID(userGUID, "NewPassword123");
+        UpdatePasswordResponse result = accountService.updatePasswordByUserGUID(userGUID, "NewPassword123", "old-hash");
 
         verify(userCredentialRepository).findByUserGUID(userGUID);
         verify(passwordEncoder).encode("NewPassword123");
@@ -305,7 +306,7 @@ class AccountServiceTest {
         String userGUID = "missing-guid";
         when(userCredentialRepository.findByUserGUID(userGUID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> accountService.updatePasswordByUserGUID(userGUID, "NewPassword123"))
+        assertThatThrownBy(() -> accountService.updatePasswordByUserGUID(userGUID, "NewPassword123", "old-hash"))
                 .isInstanceOf(UserCredentialNotFoundException.class)
                 .hasMessage("No account found for userGUID " + userGUID);
 

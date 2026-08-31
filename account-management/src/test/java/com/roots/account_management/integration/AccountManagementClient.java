@@ -92,8 +92,8 @@ public class AccountManagementClient {
         return restTemplate.exchange(baseUrl + "/api/account/mfa/" + (userGUID), HttpMethod.PUT, entity, UpdateMfaResponse.class);
     }
 
-    public ResponseEntity<UpdatePasswordResponse> updatePasswordByUserGUID(String userGUID, String password) {
-        HttpEntity<UpdatePasswordRequest> entity = new HttpEntity<>(UpdatePasswordRequest.builder().password(password).build(), headers);
+    public ResponseEntity<UpdatePasswordResponse> updatePasswordByUserGUID(String userGUID, String password, String oldPassword) {
+        HttpEntity<UpdatePasswordRequest> entity = new HttpEntity<>(UpdatePasswordRequest.builder().password(password).oldPassword(oldPassword).build(), headers);
         return restTemplate.exchange(baseUrl + "/api/account/password/" + (userGUID), HttpMethod.PUT, entity, UpdatePasswordResponse.class);
     }
 

@@ -322,8 +322,8 @@ class AccountControllerTest {
     @Test
     void updatePassword_withValidRequest_returns200AndBody() throws Exception {
         String userGUID = "test-guid";
-        UpdatePasswordRequest request = new UpdatePasswordRequest("NewPassword123");
-        when(accountService.updatePasswordByUserGUID(userGUID, "NewPassword123"))
+        UpdatePasswordRequest request = new UpdatePasswordRequest("NewPassword123", "old-hash");
+        when(accountService.updatePasswordByUserGUID(userGUID, "NewPassword123", "old-hash"))
                 .thenReturn(UpdatePasswordResponse.builder().userGUID(userGUID).build());
 
         mockMvc.perform(put("/api/account/password/{userGUID}", userGUID)
@@ -334,7 +334,7 @@ class AccountControllerTest {
 
         verify(validator).validateUserGUID(userGUID);
         verify(validator).validateUpdatePasswordRequest(any(UpdatePasswordRequest.class));
-        verify(accountService).updatePasswordByUserGUID(userGUID, "NewPassword123");
+        verify(accountService).updatePasswordByUserGUID(userGUID, "NewPassword123", "old-hash");
     }
 
     @Test
@@ -345,11 +345,11 @@ class AccountControllerTest {
 
         mockMvc.perform(put("/api/account/password/{userGUID}", userGUID)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new UpdatePasswordRequest("short"))))
+                        .content(objectMapper.writeValueAsString(new UpdatePasswordRequest("short", "old-hash"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Password must be at least 8 characters"));
 
-        verify(accountService, never()).updatePasswordByUserGUID(anyString(), anyString());
+        verify(accountService, never()).updatePasswordByUserGUID(anyString(), anyString(), anyString());
     }
 
     @Test

@@ -21,6 +21,7 @@ import com.roots.account_management.dto.response.UpdateNameResponse;
 import com.roots.account_management.dto.response.UpdatePasswordResponse;
 import com.roots.account_management.enums.Role;
 import com.roots.account_management.exception.EmailAlreadyExistsException;
+import com.roots.account_management.exception.UnauthorizedException;
 import com.roots.account_management.exception.UserCredentialNotFoundException;
 import com.roots.account_management.model.UserCredential;
 import com.roots.account_management.repository.RoleRepository;
@@ -145,9 +146,12 @@ public class AccountService {
     }
 
     @Transactional
-    public UpdatePasswordResponse updatePasswordByUserGUID(String userGUID, String password)
+    public UpdatePasswordResponse updatePasswordByUserGUID(String userGUID, String password, String oldPassword)
             throws UserCredentialNotFoundException {
         UserCredential userCredential = getUserCredentialByUserGUID(userGUID);
+        if (!passwordEncoder.matches(oldPassword, userCredential.password())) {
+            throw new UnauthorizedException("Old password does not match");
+        }
         String encodedPassword = passwordEncoder.encode(password);
         userCredentialRepository.setPasswordByUserGUID(userCredential.id(), encodedPassword);
         return UpdatePasswordResponse.builder().userGUID(userGUID).build();
