@@ -56,23 +56,23 @@ public class AccountManagementClient {
     }
 
     public ResponseEntity<UserCredentialTestingResponse> getTestAccountByEmail(String email) {
-        return getTestAccount("email=" + encode(email));
+        return getTestAccount("email=" + (email));
     }
 
     public ResponseEntity<UserCredentialTestingResponse> getTestAccountByUserGUID(String userGUID) {
-        return getTestAccount("userGUID=" + encode(userGUID));
+        return getTestAccount("userGUID=" + (userGUID));
     }
 
     public ResponseEntity<Void> deleteByEmail(String email) {
-        return deleteTestAccount("email=" + encode(email));
+        return deleteTestAccount("email=" + (email));
     }
 
     public ResponseEntity<Void> deleteByUserGUID(String userGUID) {
-        return deleteTestAccount("userGUID=" + encode(userGUID));
+        return deleteTestAccount("userGUID=" + (userGUID));
     }
 
     public ResponseEntity<Void> deleteByEmailAndUserGUID(String email, String userGUID) {
-        return deleteTestAccount("email=" + encode(email) + "&userGUID=" + encode(userGUID));
+        return deleteTestAccount("email=" + (email) + "&userGUID=" + (userGUID));
     }
 
     public ResponseEntity<Void> deleteWithoutParams() {
@@ -89,35 +89,35 @@ public class AccountManagementClient {
 
     public ResponseEntity<UpdateMfaResponse> updateMfaByUserGUID(String userGUID, Boolean mfaEnabled) {
         HttpEntity<UpdateMfaRequest> entity = new HttpEntity<>(UpdateMfaRequest.builder().mfaEnabled(mfaEnabled).build(), headers);
-        return restTemplate.exchange(baseUrl + "/api/account/mfa/" + encode(userGUID), HttpMethod.PUT, entity, UpdateMfaResponse.class);
+        return restTemplate.exchange(baseUrl + "/api/account/mfa/" + (userGUID), HttpMethod.PUT, entity, UpdateMfaResponse.class);
     }
 
     public ResponseEntity<UpdatePasswordResponse> updatePasswordByUserGUID(String userGUID, String password) {
         HttpEntity<UpdatePasswordRequest> entity = new HttpEntity<>(UpdatePasswordRequest.builder().password(password).build(), headers);
-        return restTemplate.exchange(baseUrl + "/api/account/password/" + encode(userGUID), HttpMethod.PUT, entity, UpdatePasswordResponse.class);
+        return restTemplate.exchange(baseUrl + "/api/account/password/" + (userGUID), HttpMethod.PUT, entity, UpdatePasswordResponse.class);
     }
 
     public ResponseEntity<UpdateNameResponse> updateNameByUserGUID(String userGUID, String name) {
         HttpEntity<UpdateNameRequest> entity = new HttpEntity<>(UpdateNameRequest.builder().name(name).build(), headers);
-        return restTemplate.exchange(baseUrl + "/api/account/name/" + encode(userGUID), HttpMethod.PUT, entity, UpdateNameResponse.class);
+        return restTemplate.exchange(baseUrl + "/api/account/name/" + (userGUID), HttpMethod.PUT, entity, UpdateNameResponse.class);
     }
 
     public ResponseEntity<UpdateEmailResponse> updateEmailByUserGUID(String userGUID, String email) {
         HttpEntity<UpdateEmailRequest> entity = new HttpEntity<>(UpdateEmailRequest.builder().email(email).build(), headers);
-        return restTemplate.exchange(baseUrl + "/api/account/email/" + encode(userGUID), HttpMethod.PUT, entity, UpdateEmailResponse.class);
+        return restTemplate.exchange(baseUrl + "/api/account/email/" + (userGUID), HttpMethod.PUT, entity, UpdateEmailResponse.class);
     }
 
     public ResponseEntity<AddRoleResponse> addRoleByUserGUID(String userGUID, Role role) {
         HttpEntity<AddRoleRequest> entity = new HttpEntity<>(AddRoleRequest.builder().role(role.getValue()).build(), headers);
-        return restTemplate.exchange(baseUrl + "/api/account/role/" + encode(userGUID), HttpMethod.POST, entity, AddRoleResponse.class);
+        return restTemplate.exchange(baseUrl + "/api/account/role/" + (userGUID), HttpMethod.POST, entity, AddRoleResponse.class);
     }
 
     public ResponseEntity<AccountProfileResponse> getAccountProfileByEmail(String email) {
-        return getAccountProfile("email=" + encode(email));
+        return getAccountProfile("email=" + (email));
     }
 
     public ResponseEntity<AccountProfileResponse> getAccountProfileByUserGUID(String userGUID) {
-        return getAccountProfile("userGUID=" + encode(userGUID));
+        return getAccountProfile("userGUID=" + (userGUID));
     }
 
     public ResponseEntity<AccountProfileResponse> getAccountProfileWithQuery(String query) {
@@ -134,7 +134,7 @@ public class AccountManagementClient {
     }
 
     public ResponseEntity<List<AccountProfileResponse>> searchAccountsByEmail(String email, boolean fullMatch, Integer maxCount) {
-        String query = "email=" + encode(email) + "&fullMatch=" + fullMatch;
+        String query = "email=" + (email) + "&fullMatch=" + fullMatch;
         if (maxCount != null) {
             query = query + "&maxCount=" + maxCount;
         }
@@ -142,7 +142,7 @@ public class AccountManagementClient {
     }
 
     public ResponseEntity<List<AccountProfileResponse>> searchAccountsByName(String name, boolean fullMatch, Integer maxCount) {
-        String query = "name=" + encode(name) + "&fullMatch=" + fullMatch;
+        String query = "name=" + (name) + "&fullMatch=" + fullMatch;
         if (maxCount != null) {
             query = query + "&maxCount=" + maxCount;
         }
@@ -178,8 +178,5 @@ public class AccountManagementClient {
         return headers;
     }
 
-    private static String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
-    }
 }
 

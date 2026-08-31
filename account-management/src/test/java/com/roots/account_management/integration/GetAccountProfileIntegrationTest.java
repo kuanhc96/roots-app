@@ -4,6 +4,7 @@ import com.roots.account_management.dto.response.AccountProfileResponse;
 import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
 
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,7 +53,7 @@ class GetAccountProfileIntegrationTest {
 
     @AfterEach
     void tearDown() throws Exception {
-        if (userGUID != null) {
+        if (StringUtils.isNotBlank(userGUID)) {
             ResponseEntity<Void> deleteResponse = accountManagementClient.deleteByUserGUID(userGUID);
             assertThat(deleteResponse.getStatusCode().value()).isIn(200, 204);
         }
