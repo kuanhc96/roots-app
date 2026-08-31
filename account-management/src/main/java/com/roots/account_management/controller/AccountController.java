@@ -1,5 +1,15 @@
 package com.roots.account_management.controller;
 
+import static com.roots.account_management.constant.PreAuthorizeConstants.AMC_AND_ADMIN_OR_IT_DELETE;
+import static com.roots.account_management.constant.PreAuthorizeConstants.AMC_AND_ADMIN_OR_IT_READ;
+import static com.roots.account_management.constant.PreAuthorizeConstants.AMC_AND_ADMIN_OR_IT_WRITE;
+import static com.roots.account_management.constant.PreAuthorizeConstants.AMC_AND_MEMBER_OR_IT_READ;
+import static com.roots.account_management.constant.PreAuthorizeConstants.AMC_AND_MEMBER_OR_IT_WRITE;
+import static com.roots.account_management.constant.PreAuthorizeConstants.AMSC_AND_MEMBER_OR_IT_WRITE;
+import static com.roots.account_management.constant.PreAuthorizeConstants.INTEGRATION_TEST_CLIENT_DELETE;
+import static com.roots.account_management.constant.PreAuthorizeConstants.INTEGRATION_TEST_CLIENT_READ;
+import static com.roots.account_management.constant.PreAuthorizeConstants.INTEGRATION_TEST_CLIENT_WRITE;
+
 import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
@@ -32,7 +42,6 @@ import com.roots.account_management.dto.response.UpdateEmailResponse;
 import com.roots.account_management.dto.response.UpdateMfaResponse;
 import com.roots.account_management.dto.response.UpdateNameResponse;
 import com.roots.account_management.dto.response.UpdatePasswordResponse;
-import com.roots.account_management.dto.response.UserCredentialResponse;
 import com.roots.account_management.dto.response.UserCredentialTestingResponse;
 import com.roots.account_management.exception.UserCredentialNotFoundException;
 import com.roots.account_management.model.UserCredential;
@@ -63,7 +72,7 @@ public class AccountController {
                     + "(client_credentials) create an account with arbitrary mfa/emailVerified/passwordChangeRequired/roles."
     )
     @PostMapping("/test")
-    @PreAuthorize("hasAuthority('INTEGRATION_TEST_CLIENT_WRITE')")
+    @PreAuthorize(INTEGRATION_TEST_CLIENT_WRITE)
     @ResponseStatus(HttpStatus.CREATED)
     public CreateTestAccountResponse createTestAccount(@RequestBody CreateAccountRequest createAccountRequest) {
         validator.validateCreateAccountRequest(createAccountRequest);
@@ -76,7 +85,7 @@ public class AccountController {
                     + "(client_credentials) delete an account by exactly one of email or userGUID."
     )
     @DeleteMapping("/test")
-    @PreAuthorize("hasAuthority('INTEGRATION_TEST_CLIENT_DELETE')")
+    @PreAuthorize(INTEGRATION_TEST_CLIENT_DELETE)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteTestAccount(
             @Parameter(description = "Email of the account to delete; provide this or userGUID, not both")
@@ -93,9 +102,10 @@ public class AccountController {
 
     @Operation(
             summary = "Delete accounts",
-            description = "Public endpoint: deletes accounts by a list of userGUID values. Missing userGUIDs are treated as already deleted."
+            description = "ADMIN-only: deletes accounts by a list of userGUID values. Missing userGUIDs are treated as already deleted."
     )
     @DeleteMapping
+    @PreAuthorize(AMC_AND_ADMIN_OR_IT_DELETE)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteAccounts(@RequestBody DeleteAccountsRequest deleteAccountsRequest) {
         validator.validateDeleteAccountsRequest(deleteAccountsRequest, MAX_DELETE_ACCOUNT_COUNT);
@@ -109,7 +119,7 @@ public class AccountController {
                     + "password, by exactly one of email or userGUID."
     )
     @GetMapping("/test")
-    @PreAuthorize("hasAuthority('INTEGRATION_TEST_CLIENT_READ')")
+    @PreAuthorize(INTEGRATION_TEST_CLIENT_READ)
     public UserCredentialTestingResponse getTestAccount(
             @Parameter(description = "Email of the account to fetch; provide this or userGUID, not both")
             @RequestParam(required = false) String email,
@@ -119,25 +129,12 @@ public class AccountController {
     }
 
     @Operation(
-            summary = "Get an account (restricted fields)",
-            description = "Public endpoint: returns only email, userGUID, and MFA status for an "
-                    + "account, by exactly one of email or userGUID."
-    )
-    @GetMapping
-    public UserCredentialResponse getAccount(
-            @Parameter(description = "Email of the account to fetch; provide this or userGUID, not both")
-            @RequestParam(required = false) String email,
-            @Parameter(description = "GUID of the account to fetch; provide this or email, not both")
-            @RequestParam(required = false) String userGUID) throws UserCredentialNotFoundException {
-        return UserCredentialResponse.from(lookup(email, userGUID));
-    }
-
-    @Operation(
             summary = "Get account profile",
-            description = "Public endpoint: returns userGUID, email, and name for an account, by exactly "
+            description = "Authenticated member only: returns userGUID, email, and name for an account, by exactly "
                     + "one of email or userGUID."
     )
     @GetMapping("/profile")
+    @PreAuthorize(AMC_AND_MEMBER_OR_IT_READ)
     public AccountProfileResponse getAccountProfile(
             @Parameter(description = "Email of the account to fetch; provide this or userGUID, not both")
             @RequestParam(required = false) String email,
@@ -148,9 +145,10 @@ public class AccountController {
 
     @Operation(
             summary = "Get account profiles",
-            description = "Public endpoint: returns paginated account profile rows (userGUID, email, name)."
+            description = "ADMIN only: returns paginated account profile rows (userGUID, email, name)."
     )
     @GetMapping("/profiles")
+    @PreAuthorize(AMC_AND_ADMIN_OR_IT_READ)
     public AccountProfilesResponse getAccountProfiles(
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
@@ -163,10 +161,11 @@ public class AccountController {
 
     @Operation(
             summary = "Search account profiles",
-            description = "Public endpoint: searches accounts by either email or name (not both). "
+            description = "ADMIN only: searches accounts by either email or name (not both). "
                     + "When fullMatch is true, performs exact case-insensitive matching; otherwise fuzzy case-insensitive contains matching."
     )
     @PostMapping("/search")
+    @PreAuthorize(AMC_AND_ADMIN_OR_IT_WRITE)
     public List<AccountProfileResponse> searchAccountProfiles(
             @RequestParam(required = false) String email,
             @RequestParam(required = false) String name,
@@ -179,10 +178,11 @@ public class AccountController {
 
     @Operation(
             summary = "Update MFA enabled status",
-            description = "Public endpoint: updates is_mfa_enabled by userGUID and returns the updated "
+            description = "Authenticated member only: updates is_mfa_enabled by userGUID and returns the updated "
                     + "restricted account view."
     )
     @PutMapping("/mfa/{userGUID}")
+    @PreAuthorize(AMC_AND_MEMBER_OR_IT_WRITE)
     public UpdateMfaResponse updateMfaEnabled(
             @Parameter(description = "GUID of the account to update")
             @PathVariable String userGUID,
@@ -194,9 +194,10 @@ public class AccountController {
 
     @Operation(
             summary = "Update account password",
-            description = "Public endpoint: updates password by userGUID using auth-server password policy."
+            description = "Authenticated member only: updates password by userGUID using auth-server password policy."
     )
     @PutMapping("/password/{userGUID}")
+    @PreAuthorize(AMC_AND_MEMBER_OR_IT_WRITE)
     public UpdatePasswordResponse updatePassword(
             @Parameter(description = "GUID of the account to update")
             @PathVariable String userGUID,
@@ -208,9 +209,10 @@ public class AccountController {
 
     @Operation(
             summary = "Update account name",
-            description = "Public endpoint: updates name by userGUID. Name is trimmed and must be non-blank."
+            description = "Authenticated member only: updates name by userGUID. Name is trimmed and must be non-blank."
     )
     @PutMapping("/name/{userGUID}")
+    @PreAuthorize(AMC_AND_MEMBER_OR_IT_WRITE)
     public UpdateNameResponse updateName(
             @Parameter(description = "GUID of the account to update")
             @PathVariable String userGUID,
@@ -222,9 +224,10 @@ public class AccountController {
 
     @Operation(
             summary = "Update account email",
-            description = "Public endpoint: updates email by userGUID. Email is trimmed and validated."
+            description = "Authenticated member only: updates email by userGUID. Email is trimmed and validated."
     )
     @PutMapping("/email/{userGUID}")
+    @PreAuthorize(AMSC_AND_MEMBER_OR_IT_WRITE)
     public UpdateEmailResponse updateEmail(
             @Parameter(description = "GUID of the account to update")
             @PathVariable String userGUID,
@@ -236,11 +239,12 @@ public class AccountController {
 
     @Operation(
             summary = "Add a role to an account",
-            description = "Public endpoint: adds a role to the account identified by userGUID. "
+            description = "ADMIN only: adds a role to the account identified by userGUID. "
                     + "Returns 201 if the role was added, 200 if the account already had the role. "
                     + "GUEST cannot be added."
     )
     @PostMapping("/role/{userGUID}")
+    @PreAuthorize(AMC_AND_ADMIN_OR_IT_WRITE)
     public ResponseEntity<AddRoleResponse> addRole(
             @Parameter(description = "GUID of the account to update")
             @PathVariable String userGUID,
