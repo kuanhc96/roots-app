@@ -3,7 +3,8 @@ INSERT INTO user_credential (user_guid, email, name, password) VALUES
     ('def-123', 'danielle@example.com', 'Danielle', '{noop}Test1234'),
     ('ghi-123', 'alexrider1105@gmail.com', 'Kuan', '{noop}Test1234'),
     ('jkl-123', 'henry@example.com',    'Henry',    '{noop}Test1234'),
-    ('mno-123', 'alice@example.com',    'Alice',    '{noop}Test1234');
+    ('mno-123', 'alice@example.com',    'Alice',    '{noop}Test1234'),
+    ('pqr-234', 'skchen1105@gmail.com',    'Kuan Admin',    '{bcrypt}$2a$12$Uy1TGSkgJ.y4l3V23NiX.OohSt.qfj20hEW4BNG7ZPuVjJWiaepx2');
 
 INSERT INTO role (role_guid, credential_id, role_name) VALUES
     ('stu-234', 1, 'pastor'),
@@ -14,4 +15,6 @@ INSERT INTO role (role_guid, credential_id, role_name) VALUES
     ('klm-234', 3, 'member'),
     ('bcd-234', 4, 'vice_small_group_leader'),
     ('tuv-234', 4, 'member'),
-    ('efg-234', 5, 'member');
+    ('efg-234', 5, 'member'),
+    ('pqr-234', 6, 'member'),
+    ('pqr-234', 6, 'admin');
