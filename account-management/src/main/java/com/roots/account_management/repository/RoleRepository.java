@@ -1,5 +1,6 @@
 package com.roots.account_management.repository;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -17,6 +18,13 @@ public class RoleRepository {
         jdbcTemplate.update(
                 "INSERT INTO role (role_guid, credential_id, role_name) VALUES (?, ?, ?)",
                 UUID.randomUUID().toString(), credentialId, roleName
+        );
+    }
+
+    public List<String> findRoleNamesByCredentialId(long credentialId) {
+        return jdbcTemplate.queryForList(
+                "SELECT role_name FROM role WHERE credential_id = ?",
+                String.class, credentialId
         );
     }
 

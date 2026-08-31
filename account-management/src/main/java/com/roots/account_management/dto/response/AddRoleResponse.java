@@ -1,0 +1,8 @@
+package com.roots.account_management.dto.response;
+
+import java.util.List;
+
+import com.roots.account_management.enums.Role;
+
+public record AddRoleResponse(String userGUID, List<Role> roles) {
+}

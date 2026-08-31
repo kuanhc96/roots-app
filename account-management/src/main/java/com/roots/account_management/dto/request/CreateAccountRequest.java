@@ -3,7 +3,9 @@ package com.roots.account_management.dto.request;
 import java.util.List;
 
 import com.roots.account_management.enums.Role;
+import lombok.Builder;
 
+@Builder
 public record CreateAccountRequest(
         String name,
         String email,

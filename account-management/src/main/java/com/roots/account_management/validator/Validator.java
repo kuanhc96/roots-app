@@ -1,10 +1,19 @@
 package com.roots.account_management.validator;
 
+import java.util.List;
 import java.util.regex.Pattern;
 
+import org.apache.commons.lang3.ObjectUtils;
 import org.springframework.stereotype.Component;
 
+import com.roots.account_management.dto.request.AddRoleRequest;
 import com.roots.account_management.dto.request.CreateAccountRequest;
+import com.roots.account_management.dto.request.DeleteAccountsRequest;
+import com.roots.account_management.dto.request.UpdateEmailRequest;
+import com.roots.account_management.dto.request.UpdateMfaRequest;
+import com.roots.account_management.dto.request.UpdateNameRequest;
+import com.roots.account_management.dto.request.UpdatePasswordRequest;
+import com.roots.account_management.enums.Role;
 import com.roots.account_management.exception.InvalidRequestException;
 
 @Component
@@ -34,6 +43,99 @@ public class Validator {
         }
     }
 
+    public void validateSearchInput(String email, String name, int maxCount) {
+        boolean hasEmail = email != null && !email.isBlank();
+        boolean hasName = name != null && !name.isBlank();
+
+        if (hasEmail && hasName) {
+            throw new InvalidRequestException("Provide either email or name, not both");
+        }
+        if (!hasEmail && !hasName) {
+            throw new InvalidRequestException("Provide either email or name");
+        }
+        if (maxCount <= 0) {
+            throw new InvalidRequestException("maxCount must be greater than 0");
+        }
+    }
+
+    public void validateDeleteAccountsRequest(DeleteAccountsRequest request, int maxDeleteCount) {
+        if (request == null || ObjectUtils.isEmpty(request.userGUIDs())) {
+            throw new InvalidRequestException("userGUIDs must contain at least one value");
+        }
+
+        List<String> userGUIDs = request.userGUIDs();
+        if (userGUIDs.size() > maxDeleteCount) {
+            throw new InvalidRequestException("userGUIDs must contain at most " + maxDeleteCount + " values");
+        }
+
+        boolean hasBlank = userGUIDs.stream().anyMatch(guid -> guid == null || guid.isBlank());
+        if (hasBlank) {
+            throw new InvalidRequestException("userGUIDs must not contain blank values");
+        }
+    }
+
+    public void validateAddRoleRequest(AddRoleRequest request) {
+        if (request == null || request.role() == null || request.role().isBlank()) {
+            throw new InvalidRequestException("role is required");
+        }
+        Role role;
+        try {
+            role = Role.getValue(request.role());
+        } catch (IllegalArgumentException e) {
+            throw new InvalidRequestException(e.getMessage());
+        }
+        if (role == Role.GUEST) {
+            throw new InvalidRequestException("GUEST role cannot be added");
+        }
+    }
+
+    public void validateUserGUID(String userGUID) {
+        if (userGUID == null || userGUID.isBlank()) {
+            throw new InvalidRequestException("userGUID is required");
+        }
+    }
+
+    public void validateUpdateMfaRequest(UpdateMfaRequest request) {
+        if (request == null || request.mfaEnabled() == null) {
+            throw new InvalidRequestException("mfaEnabled is required");
+        }
+    }
+
+    public void validateUpdateEmailRequest(UpdateEmailRequest request) {
+        if (request == null) {
+            throw new InvalidRequestException("email is required");
+        }
+        String trimmedEmail = request.email() == null ? null : request.email().trim();
+        validateEmail(trimmedEmail);
+    }
+
+    public void validateUpdateNameRequest(UpdateNameRequest request) {
+        if (request == null) {
+            throw new InvalidRequestException("name is required");
+        }
+        String trimmedName = request.name() == null ? null : request.name().trim();
+        validateName(trimmedName);
+    }
+
+    public void validateUpdatePasswordRequest(UpdatePasswordRequest request) {
+        if (request == null) {
+            throw new InvalidRequestException("password is required");
+        }
+        validatePassword(request.password());
+    }
+
+    public void validatePagination(int page, int size, int maxSize) {
+        if (page < 0) {
+            throw new InvalidRequestException("page must be greater than or equal to 0");
+        }
+        if (size <= 0) {
+            throw new InvalidRequestException("size must be greater than 0");
+        }
+        if (size > maxSize) {
+            throw new InvalidRequestException("size must be less than or equal to " + maxSize);
+        }
+    }
+
     private void validateName(String name) {
         if (name == null || name.isBlank()) {
             throw new InvalidRequestException("Name is required");
@@ -43,7 +145,7 @@ public class Validator {
         }
     }
 
-    private void validateEmail(String email) {
+    public void validateEmail(String email) {
         if (email == null || email.isBlank()) {
             throw new InvalidRequestException("Email is required");
         }
@@ -52,7 +154,7 @@ public class Validator {
         }
     }
 
-    private void validatePassword(String password) {
+    public void validatePassword(String password) {
         if (password == null || password.isBlank()) {
             throw new InvalidRequestException("Password is required");
         }

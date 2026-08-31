@@ -2,6 +2,7 @@ package com.roots.account_management.repository;
 
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -48,6 +49,41 @@ public class UserCredentialRepository {
         return results.stream().findFirst();
     }
 
+    public List<UserCredential> findAllPaged(int size, int offset) {
+        return jdbcTemplate.query(
+                "SELECT id, user_guid, email, name, password, is_mfa_enabled, is_email_verified, is_password_change_required "
+                        + "FROM user_credential ORDER BY id ASC LIMIT ? OFFSET ?",
+                ROW_MAPPER,
+                size,
+                offset
+        );
+    }
+
+    public List<UserCredential> searchByEmail(String email, boolean fullMatch, int maxCount) {
+        String query = fullMatch
+                ? "SELECT id, user_guid, email, name, password, is_mfa_enabled, is_email_verified, is_password_change_required "
+                    + "FROM user_credential WHERE LOWER(email) = LOWER(?) ORDER BY LOWER(email) ASC LIMIT ?"
+                : "SELECT id, user_guid, email, name, password, is_mfa_enabled, is_email_verified, is_password_change_required "
+                    + "FROM user_credential WHERE LOWER(email) LIKE CONCAT('%', LOWER(?), '%') ORDER BY LOWER(email) ASC LIMIT ?";
+
+        return jdbcTemplate.query(query, ROW_MAPPER, email, maxCount);
+    }
+
+    public List<UserCredential> searchByName(String name, boolean fullMatch, int maxCount) {
+        String query = fullMatch
+                ? "SELECT id, user_guid, email, name, password, is_mfa_enabled, is_email_verified, is_password_change_required "
+                    + "FROM user_credential WHERE LOWER(name) = LOWER(?) ORDER BY LOWER(name) ASC LIMIT ?"
+                : "SELECT id, user_guid, email, name, password, is_mfa_enabled, is_email_verified, is_password_change_required "
+                    + "FROM user_credential WHERE LOWER(name) LIKE CONCAT('%', LOWER(?), '%') ORDER BY LOWER(name) ASC LIMIT ?";
+
+        return jdbcTemplate.query(query, ROW_MAPPER, name, maxCount);
+    }
+
+    public long countAll() {
+        Long count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM user_credential", Long.class);
+        return count == null ? 0L : count;
+    }
+
     public void deleteById(long id) {
         jdbcTemplate.update("DELETE FROM user_credential WHERE id = ?", id);
     }
@@ -70,5 +106,37 @@ public class UserCredentialRepository {
             return ps;
         }, keyHolder);
         return keyHolder.getKey().longValue();
+    }
+
+    public int setMfaEnabledByUserGUID(Long userId, boolean mfaEnabled) {
+        return jdbcTemplate.update(
+                "UPDATE user_credential SET is_mfa_enabled = ? WHERE id = ?",
+                mfaEnabled,
+                userId
+        );
+    }
+
+    public int setPasswordByUserGUID(Long userId, String encodedPassword) {
+        return jdbcTemplate.update(
+                "UPDATE user_credential SET password = ? WHERE id = ?",
+                encodedPassword,
+                userId
+        );
+    }
+
+    public int setNameByUserGUID(Long userId, String name) {
+        return jdbcTemplate.update(
+                "UPDATE user_credential SET name = ? WHERE id = ?",
+                name,
+                userId
+        );
+    }
+
+    public int setEmailByUserGUID(Long userId, String email) {
+        return jdbcTemplate.update(
+                "UPDATE user_credential SET email = ? WHERE id = ?",
+                email,
+                userId
+        );
     }
 }

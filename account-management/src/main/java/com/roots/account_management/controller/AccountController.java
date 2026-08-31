@@ -1,24 +1,43 @@
 package com.roots.account_management.controller;
 
+import java.util.List;
+
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.roots.account_management.dto.request.AddRoleRequest;
 import com.roots.account_management.dto.request.CreateAccountRequest;
+import com.roots.account_management.dto.request.DeleteAccountsRequest;
+import com.roots.account_management.dto.request.UpdateEmailRequest;
+import com.roots.account_management.dto.request.UpdateMfaRequest;
+import com.roots.account_management.dto.request.UpdateNameRequest;
+import com.roots.account_management.dto.request.UpdatePasswordRequest;
+import com.roots.account_management.dto.response.AddRoleResponse;
+import com.roots.account_management.dto.response.AccountProfileResponse;
+import com.roots.account_management.dto.response.AccountProfilesResponse;
 import com.roots.account_management.dto.response.CreateTestAccountResponse;
+import com.roots.account_management.dto.response.UpdateEmailResponse;
+import com.roots.account_management.dto.response.UpdateMfaResponse;
+import com.roots.account_management.dto.response.UpdateNameResponse;
+import com.roots.account_management.dto.response.UpdatePasswordResponse;
 import com.roots.account_management.dto.response.UserCredentialResponse;
 import com.roots.account_management.dto.response.UserCredentialTestingResponse;
 import com.roots.account_management.exception.UserCredentialNotFoundException;
 import com.roots.account_management.model.UserCredential;
 import com.roots.account_management.service.AccountService;
+import com.roots.account_management.service.AccountService.AddRoleServiceResult;
 import com.roots.account_management.validator.Validator;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -28,6 +47,12 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api/account")
 @RequiredArgsConstructor
 public class AccountController {
+
+    private static final int DEFAULT_PAGE = 0;
+    private static final int DEFAULT_SIZE = 20;
+    private static final int MAX_SIZE = 100;
+    private static final int DEFAULT_SEARCH_MAX_COUNT = 100;
+    private static final int MAX_DELETE_ACCOUNT_COUNT = 10;
 
     private final AccountService accountService;
     private final Validator validator;
@@ -67,6 +92,17 @@ public class AccountController {
     }
 
     @Operation(
+            summary = "Delete accounts",
+            description = "Public endpoint: deletes accounts by a list of userGUID values. Missing userGUIDs are treated as already deleted."
+    )
+    @DeleteMapping
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteAccounts(@RequestBody DeleteAccountsRequest deleteAccountsRequest) {
+        validator.validateDeleteAccountsRequest(deleteAccountsRequest, MAX_DELETE_ACCOUNT_COUNT);
+        accountService.deleteAccountsByUserGUIDs(deleteAccountsRequest.userGUIDs());
+    }
+
+    @Operation(
             summary = "Get a test account (all fields)",
             description = "Integration-test-only endpoint: lets the INTEGRATION_TEST_CLIENT "
                     + "(client_credentials) read every field of an account, including the hashed "
@@ -96,8 +132,126 @@ public class AccountController {
         return UserCredentialResponse.from(lookup(email, userGUID));
     }
 
-    // Validates that exactly one identifier is present, then reads the credential by
-    // whichever was supplied. Shared by both GET endpoints.
+    @Operation(
+            summary = "Get account profile",
+            description = "Public endpoint: returns userGUID, email, and name for an account, by exactly "
+                    + "one of email or userGUID."
+    )
+    @GetMapping("/profile")
+    public AccountProfileResponse getAccountProfile(
+            @Parameter(description = "Email of the account to fetch; provide this or userGUID, not both")
+            @RequestParam(required = false) String email,
+            @Parameter(description = "GUID of the account to fetch; provide this or email, not both")
+            @RequestParam(required = false) String userGUID) throws UserCredentialNotFoundException {
+        return AccountProfileResponse.from(lookup(email, userGUID));
+    }
+
+    @Operation(
+            summary = "Get account profiles",
+            description = "Public endpoint: returns paginated account profile rows (userGUID, email, name)."
+    )
+    @GetMapping("/profiles")
+    public AccountProfilesResponse getAccountProfiles(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        int resolvedPage = page == null ? DEFAULT_PAGE : page;
+        int resolvedSize = size == null ? DEFAULT_SIZE : size;
+
+        validator.validatePagination(resolvedPage, resolvedSize, MAX_SIZE);
+        return accountService.getAccountProfiles(resolvedPage, resolvedSize);
+    }
+
+    @Operation(
+            summary = "Search account profiles",
+            description = "Public endpoint: searches accounts by either email or name (not both). "
+                    + "When fullMatch is true, performs exact case-insensitive matching; otherwise fuzzy case-insensitive contains matching."
+    )
+    @PostMapping("/search")
+    public List<AccountProfileResponse> searchAccountProfiles(
+            @RequestParam(required = false) String email,
+            @RequestParam(required = false) String name,
+            @RequestParam(defaultValue = "false") boolean fullMatch,
+            @RequestParam(defaultValue = "" + DEFAULT_SEARCH_MAX_COUNT) int maxCount) {
+
+        validator.validateSearchInput(email, name, maxCount);
+        return accountService.searchAccountProfiles(email, name, fullMatch, maxCount);
+    }
+
+    @Operation(
+            summary = "Update MFA enabled status",
+            description = "Public endpoint: updates is_mfa_enabled by userGUID and returns the updated "
+                    + "restricted account view."
+    )
+    @PutMapping("/mfa/{userGUID}")
+    public UpdateMfaResponse updateMfaEnabled(
+            @Parameter(description = "GUID of the account to update")
+            @PathVariable String userGUID,
+            @RequestBody UpdateMfaRequest updateMfaRequest) throws UserCredentialNotFoundException {
+        validator.validateUserGUID(userGUID);
+        validator.validateUpdateMfaRequest(updateMfaRequest);
+        return accountService.updateMfaEnabledByUserGUID(userGUID, updateMfaRequest.mfaEnabled());
+    }
+
+    @Operation(
+            summary = "Update account password",
+            description = "Public endpoint: updates password by userGUID using auth-server password policy."
+    )
+    @PutMapping("/password/{userGUID}")
+    public UpdatePasswordResponse updatePassword(
+            @Parameter(description = "GUID of the account to update")
+            @PathVariable String userGUID,
+            @RequestBody UpdatePasswordRequest updatePasswordRequest) throws UserCredentialNotFoundException {
+        validator.validateUserGUID(userGUID);
+        validator.validateUpdatePasswordRequest(updatePasswordRequest);
+        return accountService.updatePasswordByUserGUID(userGUID, updatePasswordRequest.password(), updatePasswordRequest.oldPassword());
+    }
+
+    @Operation(
+            summary = "Update account name",
+            description = "Public endpoint: updates name by userGUID. Name is trimmed and must be non-blank."
+    )
+    @PutMapping("/name/{userGUID}")
+    public UpdateNameResponse updateName(
+            @Parameter(description = "GUID of the account to update")
+            @PathVariable String userGUID,
+            @RequestBody UpdateNameRequest updateNameRequest) throws UserCredentialNotFoundException {
+        validator.validateUserGUID(userGUID);
+        validator.validateUpdateNameRequest(updateNameRequest);
+        return accountService.updateNameByUserGUID(userGUID, updateNameRequest.name());
+    }
+
+    @Operation(
+            summary = "Update account email",
+            description = "Public endpoint: updates email by userGUID. Email is trimmed and validated."
+    )
+    @PutMapping("/email/{userGUID}")
+    public UpdateEmailResponse updateEmail(
+            @Parameter(description = "GUID of the account to update")
+            @PathVariable String userGUID,
+            @RequestBody UpdateEmailRequest updateEmailRequest) throws UserCredentialNotFoundException {
+        validator.validateUserGUID(userGUID);
+        validator.validateUpdateEmailRequest(updateEmailRequest);
+        return accountService.updateEmailByUserGUID(userGUID, updateEmailRequest.email());
+    }
+
+    @Operation(
+            summary = "Add a role to an account",
+            description = "Public endpoint: adds a role to the account identified by userGUID. "
+                    + "Returns 201 if the role was added, 200 if the account already had the role. "
+                    + "GUEST cannot be added."
+    )
+    @PostMapping("/role/{userGUID}")
+    public ResponseEntity<AddRoleResponse> addRole(
+            @Parameter(description = "GUID of the account to update")
+            @PathVariable String userGUID,
+            @RequestBody AddRoleRequest addRoleRequest) throws UserCredentialNotFoundException {
+        validator.validateUserGUID(userGUID);
+        validator.validateAddRoleRequest(addRoleRequest);
+        AddRoleServiceResult result = accountService.addRoleToAccount(userGUID, addRoleRequest.role());
+        HttpStatus status = result.wasAdded() ? HttpStatus.CREATED : HttpStatus.OK;
+        return ResponseEntity.status(status).body(result.response());
+    }
+
     private UserCredential lookup(String email, String userGUID) throws UserCredentialNotFoundException {
         validator.validateAccountLookup(email, userGUID);
         return StringUtils.isNotBlank(email)

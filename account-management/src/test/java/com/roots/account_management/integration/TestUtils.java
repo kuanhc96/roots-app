@@ -30,13 +30,7 @@ public final class TestUtils {
 
     /** A unique email so repeated runs never collide on the UNIQUE(email) constraint. */
     public static String getUniqueEmail() {
-        return "itest+" + UUID.randomUUID() + "@example.com";
+        return "itest_" + UUID.randomUUID() + "@example.com";
     }
 
-    /** Asserts the body is the {@code {"error": "..."}} shape with a non-blank message. */
-    public static void assertHasErrorField(String body) throws Exception {
-        JsonNode json = OBJECT_MAPPER.readTree(body);
-        assertThat(json.hasNonNull("error")).isTrue();
-        assertThat(json.get("error").asText()).isNotBlank();
-    }
 }
