@@ -30,7 +30,7 @@ public final class TestUtils {
 
     /** A unique email so repeated runs never collide on the UNIQUE(email) constraint. */
     public static String getUniqueEmail() {
-        return "itest+" + UUID.randomUUID() + "@example.com";
+        return "itest_" + UUID.randomUUID() + "@example.com";
     }
 
 }

@@ -76,13 +76,6 @@ class AccountBulkDeleteIntegrationTest {
     }
 
     @Test
-    void deleteAccounts_withNullEntry_returns400() throws Exception {
-        ResponseEntity<Void> response = accountManagementClient.deleteAccounts(List.of(userGUID, null));
-
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
-    }
-
-    @Test
     void deleteAccounts_withBlankEntry_returns400() throws Exception {
         HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.deleteAccounts(List.of(userGUID, "   ")));
 

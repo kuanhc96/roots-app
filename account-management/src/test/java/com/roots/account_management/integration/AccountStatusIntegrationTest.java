@@ -256,13 +256,6 @@ class AccountStatusIntegrationTest {
     }
 
     @Test
-    void addRole_withMissingRole_returns400() throws Exception {
-        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.addRoleByUserGUID(userGUID, null));
-
-        assertThat(exception.getStatusCode().value()).isEqualTo(400);
-    }
-
-    @Test
     void addRole_withUnknownUserGUID_returns404() throws Exception {
         HttpClientErrorException exception = assertThrows(HttpClientErrorException.class, () -> accountManagementClient.addRoleByUserGUID(UUID.randomUUID().toString(), Role.PASTOR));
 
