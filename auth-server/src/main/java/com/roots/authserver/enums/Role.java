@@ -8,6 +8,7 @@ import lombok.Getter;
 
 @Getter
 public enum Role {
+    ADMIN("admin"),
     PASTOR("pastor"),
     DEACON("deacon"),
     SMALL_GROUP_LEADER("small_group_leader"),

@@ -288,7 +288,7 @@ public class AuthFlowController {
         try {
             userCredentialService.completePasswordReset(user.getUsername(), newPassword);
         } catch (InvalidRequestException e) {
-            return "redirect:/reset-password?e=" + ErrorCode.INVALID_PASSWORD;
+            return "redirect:/sso/reset-password?e=" + ErrorCode.INVALID_PASSWORD;
         }
 
         MfaAuthenticationToken full = new MfaAuthenticationToken(user, user.getAuthorities());
