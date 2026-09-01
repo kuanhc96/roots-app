@@ -124,7 +124,8 @@ public class AccountManagementClient {
 
     public ResponseEntity<AccountProfilesResponse> getAccountProfilesWithQuery(String query) {
         String url = baseUrl + "/api/account/profiles" + (query.isBlank() ? "" : "?" + query);
-        return restTemplate.exchange(url, HttpMethod.GET, HttpEntity.EMPTY, AccountProfilesResponse.class);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        return restTemplate.exchange(url, HttpMethod.GET, entity, AccountProfilesResponse.class);
     }
 
     public ResponseEntity<List<AccountProfileResponse>> searchAccountsByEmail(String email, boolean fullMatch, Integer maxCount) {
@@ -145,12 +146,14 @@ public class AccountManagementClient {
 
     public ResponseEntity<List<AccountProfileResponse>> searchAccountsWithQuery(String query) {
         String url = baseUrl + "/api/account/search" + (query.isBlank() ? "" : "?" + query);
-        return restTemplate.exchange(url, HttpMethod.POST, HttpEntity.EMPTY, new ParameterizedTypeReference<List<AccountProfileResponse>>() {});
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        return restTemplate.exchange(url, HttpMethod.POST, entity, new ParameterizedTypeReference<List<AccountProfileResponse>>() {});
     }
 
     private ResponseEntity<AccountProfileResponse> getAccountProfile(String query) {
         String url = baseUrl + "/api/account/profile" + (query.isBlank() ? "" : "?" + query);
-        return restTemplate.exchange(url, HttpMethod.GET, HttpEntity.EMPTY, AccountProfileResponse.class);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        return restTemplate.exchange(url, HttpMethod.GET, entity, AccountProfileResponse.class);
     }
 
     private ResponseEntity<UserCredentialTestingResponse> getTestAccount(String query) {
