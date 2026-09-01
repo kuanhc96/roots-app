@@ -197,7 +197,7 @@ class AccountControllerTest {
                 0,
                 20,
                 1,
-                List.of(new AccountProfileResponse("guid-1", "jane@example.com", "Jane"))
+                List.of(new AccountProfileResponse("guid-1", "jane@example.com", "Jane", true))
         );
         when(accountService.getAccountProfiles(0, 20)).thenReturn(response);
 
@@ -245,7 +245,7 @@ class AccountControllerTest {
     @Test
     void searchAccountProfiles_byEmail_usesDefaultParams() throws Exception {
         when(accountService.searchAccountProfiles("jane@example.com", null, false, 100))
-                .thenReturn(List.of(new AccountProfileResponse("guid-1", "jane@example.com", "Jane")));
+                .thenReturn(List.of(new AccountProfileResponse("guid-1", "jane@example.com", "Jane", true)));
 
         mockMvc.perform(post("/api/account/search").param("email", "jane@example.com"))
                 .andExpect(status().isOk())
