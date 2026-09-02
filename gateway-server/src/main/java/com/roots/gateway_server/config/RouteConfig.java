@@ -35,6 +35,13 @@ public class RouteConfig {
                         )
                         .uri("lb://BFF-SERVER")
                 )
+                .route(p -> p
+                        .path("/roots-app/account-management/**")
+                        .filters(f -> f
+                                .rewritePath("/roots-app/account-management/(?<segment>.*)", "/api/$\\{segment}")
+                        )
+                        .uri("lb://ACCOUNT-MANAGEMENT")
+                )
                 .build();
     }
 }
