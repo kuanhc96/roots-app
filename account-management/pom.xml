@@ -8,10 +8,11 @@
 		<version>4.0.6</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
+
 	<groupId>com.roots</groupId>
 	<artifactId>account-management</artifactId>
 	<version>0.0.9-SNAPSHOT</version>
-	<name/>
+	<name>account-management-server</name>
 	<description/>
 	<url/>
 	<licenses>
@@ -105,6 +106,14 @@
 					<from>
 						<image>eclipse-temurin:21-jre</image>
 					</from>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-resources-plugin</artifactId>
+				<configuration>
+					<useDefaultDelimiters>false</useDefaultDelimiters>
+					<delimiters>@</delimiters>
 				</configuration>
 			</plugin>
 		</plugins>

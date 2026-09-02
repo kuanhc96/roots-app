@@ -13,3 +13,26 @@ spring:
 
 server:
   port: ${SERVER_PORT:8082}
+
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    fetch-registry: true
+    register-with-eureka: true
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8070/eureka/}
+info:
+  app:
+    name: ${spring.application.name}
+    description: account management server for managing user account information
+    version: @project.version@
+
+management:
+  info:
+    env:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,shutdown
