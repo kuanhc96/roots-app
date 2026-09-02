@@ -106,6 +106,8 @@ services:
         condition: service_healthy
       auth-server:
         condition: service_healthy
+      eureka-server:
+        condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
       MYSQL_AUTH_SERVER_ROOT_USERNAME: ${MYSQL_AUTH_SERVER_ROOT_USERNAME}
