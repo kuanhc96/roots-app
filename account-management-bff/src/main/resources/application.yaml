@@ -1,3 +1,59 @@
 spring:
   application:
     name: account-management-bff
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+server:
+  port: ${SERVER_PORT:8084}
+  servlet:
+    session:
+      cookie:
+        name: __Host-AMC_SESSION
+        secure: true
+        http-only: true
+        same-site: Lax
+        path: /
+
+account-management-bff:
+  external-location: ${ACCOUNT_MANAGEMENT_BFF_EXTERNAL_LOCATION:http://localhost:8084}
+
+auth-server:
+  internal-location: ${AUTH_SERVER_INTERNAL_LOCATION:http://localhost:9000}
+  external-location: ${AUTH_SERVER_EXTERNAL_LOCATION:http://localhost:9000}
+
+account-management:
+  client:
+    id: ${ACCOUNT_MANAGEMENT_CLIENT_ID:ACCOUNT_MANAGEMENT_CLIENT}
+    secret: ${ACCOUNT_MANAGEMENT_CLIENT_SECRET}
+    origin: ${ACCOUNT_MANAGEMENT_CLIENT_ORIGIN:http://localhost:3001}
+
+token-store:
+  refresh-token-ttl-seconds: ${REFRESH_TOKEN_TTL_SECONDS:3600}
+
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8070/eureka/}
+
+info:
+  app:
+    name: ${spring.application.name}
+    description: Backend-for-frontend service for account-management
+    version: @project.version@
+
+management:
+  info:
+    env:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,shutdown
+  endpoint:
+    shutdown:
+      access: unrestricted

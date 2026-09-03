@@ -1,4 +1,4 @@
-package com.roots_app.account_management_bff;
+package com.roots.account_management_bff;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -6,8 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class AccountManagementBffApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(AccountManagementBffApplication.class, args);
-	}
-
+    public static void main(String[] args) {
+        SpringApplication.run(AccountManagementBffApplication.class, args);
+    }
 }
