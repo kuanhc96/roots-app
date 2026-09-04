@@ -39,7 +39,7 @@ export function useOAuth() {
    */
   async function checkStatus(): Promise<LoginStatus> {
     const response = await fetch(
-      `${config.public.accountManagementBffUrl}/api/auth/status`,
+      `${config.public.accountManagementBffUrl}/auth/status`,
       {
         credentials: 'include',
       }
@@ -63,7 +63,7 @@ export function useOAuth() {
    * which owns the state and every OAuth2 parameter and 302s on to auth-server.
    */
   function authorize() {
-    window.location.href = `${config.public.accountManagementBffUrl}/api/auth/authorize`
+    window.location.href = `${config.public.accountManagementBffUrl}/auth/authorize`
   }
 
   /** The full login flow: check status, and if not logged in, authorize. */
@@ -85,7 +85,7 @@ export function useOAuth() {
    * account-management-client's /logout landing page.
    */
   function startLogout() {
-    window.location.href = `${config.public.accountManagementBffUrl}/api/auth/logout`
+    window.location.href = `${config.public.accountManagementBffUrl}/auth/logout`
   }
 
   /**
