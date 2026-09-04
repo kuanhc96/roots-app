@@ -52,6 +52,12 @@ web:
     id: ${WEB_CLIENT_ID:WEB_CLIENT}
     secret: ${WEB_CLIENT_SECRET:secret}
 
+account-management:
+  client:
+    origin: ${ACCOUNT_MANAGEMENT_CLIENT_ORIGIN:http://localhost:3001}
+    id: ${ACCOUNT_MANAGEMENT_CLIENT_ID:ACCOUNT_MANAGEMENT_CLIENT}
+    secret: ${ACCOUNT_MANAGEMENT_CLIENT_SECRET:secret}
+
 auth-server:
   internal-location: ${AUTH_SERVER_INTERNAL_LOCATION:http://localhost:9000}
 
