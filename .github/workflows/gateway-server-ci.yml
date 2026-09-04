@@ -85,6 +85,7 @@ jobs:
             echo "Attempt $i: waiting for GATEWAY-SERVER, SIMPLE-RESOURCE-SERVER, ACCOUNT-MANAGEMENT, ACCOUNT-MANAGEMENT-BFF, BFF-SERVER in /eureka/apps"
             sleep 2
           done
+          sleep 4
           echo "Timed out waiting for required Eureka app registrations"
           exit 1
 
