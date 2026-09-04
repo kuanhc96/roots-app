@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.roots</groupId>
 	<artifactId>account-management-bff</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<version>0.0.2-SNAPSHOT</version>
 	<name>account-management-bff</name>
 
 	<properties>
