@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+This document reflects the current runtime architecture after the gateway/bff/account-management work landed in the 2026-08-17 through 2026-08-31 feature commits. The repo-level README is kept in sync with those changes.
+
 ## Architecture Overview
 
 This is a Spring Cloud microservices application called **roots-app**. The services are:
@@ -12,12 +14,13 @@ This is a Spring Cloud microservices application called **roots-app**. The servi
 | `config-server` | Spring Cloud Config | — | Centralized configuration |
 | `gateway-server` | Spring Cloud Gateway (WebFlux) | 8080 | API gateway; single entry point routing all traffic + attaching OAuth2 tokens from Redis |
 | `auth-server` | Spring Boot (Maven) + Nuxt/Vue | 9000 | Authentication + embedded SPA frontend; OAuth2 Authorization Server |
-| `bff-server` | Spring Boot (Maven) | 8083 | Backend-for-frontend; manages web-client's tokens server-side in Redis-backed sessions |
+| `bff-server` | Spring Boot (Maven) | 8083 | Backend-for-frontend; manages the main web-client's tokens server-side in Redis-backed sessions |
+| `account-management-bff` | Spring Boot (Maven) | 8084 | Backend-for-frontend for the account-management client; uses a separate `__Host-AMC_SESSION` cookie and PKCE confidential clients |
 | `simple-resource-server` | Spring Boot (Maven) | 8081 | Example protected resource with role endpoints |
 | `account-management` | Spring Boot (Maven) | 8082 | Account CRUD resource server (integration-test-only endpoints) |
 | `web-client` | Nuxt 4 / Vue 3 | 3000 | Standalone frontend |
 
-**Startup order:** eureka-server → config-server → auth-server-db → auth-server → bff-server-redis → bff-server → gateway-server; separately: simple-resource-server, account-management, web-client.
+**Startup order:** eureka-server → config-server → auth-server-db → auth-server → bff-server-redis → bff-server → account-management-bff → gateway-server; separately: simple-resource-server, account-management, web-client.
 
 ### auth-server is special
 

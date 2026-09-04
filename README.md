@@ -1,66 +1,127 @@
 # roots-app
 
-A Spring Cloud microservices application providing authentication, authorization, and role-based resource access.
+A Spring Cloud microservices application that combines a Spring Authorization Server, a token-managing BFF, a gateway, and multiple resource services behind a shared database and Redis-backed session layer.
 
-## Services
+## Service map
 
 | Service | Tech | Port | Role |
 |---|---|---|---|
-| `eureka-server` | Spring Cloud Netflix Eureka | — | Service discovery registry |
-| `config-server` | Spring Cloud Config | — | Centralized configuration |
-| `gateway-server` | Spring Cloud Gateway (WebFlux) | — | API gateway / routing |
-| `auth-server` | Spring Boot + Nuxt/Vue | 9000 | Authentication + embedded SSR frontend |
-| `bff-server` | Spring Boot | — | Backend-for-frontend |
-| `simple-resource-server` | Spring Boot | 8081 | Example protected resource with role endpoints |
-| `account-management` | Spring Boot | 8082 | Account CRUD resource server (integration-test-only endpoints so far) |
-| `web-client` | Nuxt 4 / Vue 3 | 3000 | Standalone frontend |
+| `eureka-server` | Spring Cloud Netflix Eureka | 8070 (internal registry) | Service discovery registry |
+| `config-server` | Spring Cloud Config | configurable | Centralized configuration |
+| `gateway-server` | Spring Cloud Gateway (WebFlux) | 8080 | Single entry point; attaches OAuth2 tokens from shared Redis and routes all traffic |
+| `auth-server` | Spring Boot + Nuxt/Vue | 9000 | OAuth2 Authorization Server + embedded SPA frontend |
+| `bff-server` | Spring Boot | 8083 | Backend-for-frontend; owns token storage in Redis and manages browser-facing auth state |
+| `account-management-bff` | Spring Boot | 8084 | BFF for the account-management client; stores tokens in Redis under a separate `__Host-AMC_SESSION` session |
+| `simple-resource-server` | Spring Boot | 8081 | Example protected resource server with role-based endpoints |
+| `account-management` | Spring Boot | 8082 | Shared-db account CRUD service used for integration fixtures and testing |
+| `web-client` | Nuxt 4 / Vue 3 | 3000 | Standalone browser app |
 
-**Startup order:** `auth-server` must start before `account-management` — it provides the JWK set and owns the shared DB schema/seed that account-management depends on.
+## Startup order
 
-## Docker Compose
+The current stack is intended to start in this order:
 
-`docker-compose.yml` defines the integration-test stack on a shared `roots_backend` bridge network: `auth-server-db` (MySQL 8, internal port `3308`), `auth-server-redis` (Redis 8, internal port `6381`), `auth-server` (`9000`), and `account-management` (`8082`). It is the same compose file the CI workflows use to stand up services for integration testing.
+1. `eureka-server`
+2. `config-server`
+3. `auth-server-db`
+4. `auth-server`
+5. `bff-server-redis`
+6. `bff-server`
+7. `account-management-bff` (for the account-management client flow)
+8. `gateway-server`
 
-- **DB self-seeds.** `auth-server/src/main/resources/initialize_db/` is mounted into the DB container's `/docker-entrypoint-initdb.d`, so MySQL runs the schema + seed scripts automatically on first init (in dependency order, by filename) — no manual seed step.
-- **App images.** `auth-server` and `account-management` reference `${DOCKERHUB_USERNAME}/<service>:${<SERVICE>_TAG:-latest}`, so by default they pull the published `:latest`. CI overrides the relevant tag to a locally-built `:ci` image.
-- **Profile is env-driven.** Both app services read `SPRING_PROFILES_ACTIVE` from the environment (CI sets it to `test`).
-- **Healthchecks + `depends_on`.** `account-management` waits for both `auth-server-db` and `auth-server` to be healthy; `docker compose up --wait` blocks until everything reports healthy.
+Then separately, as needed:
 
-Environment expected by `docker compose up`: `DOCKERHUB_USERNAME`, `MYSQL_AUTH_SERVER_ROOT_USERNAME`, `MYSQL_AUTH_SERVER_ROOT_PASSWORD`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`, and `SPRING_PROFILES_ACTIVE` (plus optional `AUTH_SERVER_TAG` / `ACCOUNT_MANAGEMENT_TAG` to override the default `:latest`).
+- `simple-resource-server`
+- `account-management`
+- `web-client`
 
-## CI / CD
+## Runtime model
 
-GitHub Actions workflows are defined in `.github/workflows/`.
+The architecture has moved beyond a simple auth-server + resource-server pattern:
 
-### CI — runs on pull requests
+- `auth-server` is the Authorization Server and also serves the embedded Nuxt frontend.
+- `bff-server` owns the browser session for the main web-client flow and stores access/refresh/id tokens in Redis keyed by the session ID.
+- `account-management-bff` mirrors that pattern for the account-management client, using a separate `__Host-AMC_SESSION` cookie and the `ACCOUNT_MANAGEMENT_CLIENT` / `ACCOUNT_MANAGEMENT_SUPER_CLIENT` confidential PKCE clients.
+- `gateway-server` sits in front of downstream services, reads the session's token data from the shared Redis, and attaches bearer tokens before routing requests.
+- `simple-resource-server` and `account-management` validate JWTs from `auth-server` and enforce scope/role checks with `@PreAuthorize`.
+- `account-management` shares the same MySQL schema as `auth-server` (`user_credential` and `role`) and is used for integration fixtures and account lifecycle testing.
+- `web-client` does not hold tokens client-side; it relies on `bff-server` for status, authorize, callback, and logout flows, while the account-management client uses the dedicated BFF.
 
-| Workflow | Trigger path | What it does |
-|---|---|---|
-| `auth-server-ci.yml` | `auth-server/**` | Builds a local `:ci` auth-server image (`mvn jib:dockerBuild`), brings up DB + auth-server via `docker compose up --wait` (DB self-seeds from `initialize_db/`), and runs integration tests against `localhost:9000` |
-| `account-management-ci.yml` | `account-management/src/**`, `account-management/pom.xml` | Runs unit tests, builds a local `:ci` account-management image, then `docker compose up --wait` brings up DB + auth-server (pulled `:latest`) + account-management before running integration tests against `localhost:8082`/`localhost:9000` |
-| `simple-resource-server-ci.yml` | `simple-resource-server/**` | Runs `mvn test` to verify the service context loads |
+## Local infrastructure
 
-### CD — runs on push to `main`
+The root `docker-compose.yml` wires up the shared test stack on the `roots_backend` network.
 
-| Workflow | Trigger path | What it does |
-|---|---|---|
-| `auth-server-cd.yml` | `auth-server/**` | Strips `-SNAPSHOT`, increments the patch version, builds and pushes a Docker image via Jib, then commits the next SNAPSHOT version back to `main` |
+- `auth-server-db` runs MySQL 8 on port `3308`
+- `auth-server-redis` runs Redis on port `6381`
+- `bff-server-redis` runs Redis on port `6379`
+- `auth-server` exposes port `9000`
+- `account-management` exposes port `8082`
+- `bff-server` exposes port `8083`
+- `account-management-bff` exposes port `8084`
+- `gateway-server` exposes port `8080`
 
-#### auth-server CD details
+The database self-seeds from `auth-server/src/main/resources/initialize_db/` on first startup, and the Compose stack uses `docker compose up -d --wait ...` with health checks in CI and local verification.
 
-1. Reads the current version from `auth-server/pom.xml` (e.g. `0.0.1-SNAPSHOT`).
-2. Produces the release version by stripping `-SNAPSHOT` and incrementing the patch digit (e.g. `0.0.2`).
-3. Builds and pushes the Docker image with `mvn jib:build -DskipTests` — base image `eclipse-temurin:21-jre`; pushes two tags: `<release-version>` and `latest`.
-4. Commits `pom.xml` back to `main` at the next SNAPSHOT (e.g. `0.0.2-SNAPSHOT`) with `[skip ci]` to prevent a loop.
+## Key configuration and security notes
 
-**Required secrets:**
+- `auth-server` uses MySQL on `localhost:3308` by default (`MYSQL_AUTH_SERVER_DB_URL`).
+- `auth-server` requires `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` at startup.
+- Spring Session uses a secure `__Host-AUTH_SESSION` cookie for the auth-server session, while bff-server uses its own `__Host-SESSION` cookie.
+- `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET` is a frontend build-time variable, not a runner-time JVM variable, because the embedded Nuxt app is statically generated.
+- The mail credentials (`SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`) are required in every profile because the `JavaMailSender` is built regardless of profile and its health check opens an SMTP connection.
+- `gateway-server`, `bff-server`, and `account-management-bff` all depend on the shared Redis store used by the browser-backed token flow.
+- `account-management-bff` authenticates as the `ACCOUNT_MANAGEMENT_CLIENT` / `ACCOUNT_MANAGEMENT_SUPER_CLIENT` confidential PKCE clients and expects `ACCOUNT_MANAGEMENT_CLIENT_SECRET` to match the seeded `{noop}secret` value in the auth-server DB.
 
-| Secret | Purpose |
-|---|---|
-| `DOCKERHUB_USERNAME` | Docker Hub account name used to tag and push the image |
-| `DOCKERHUB_TOKEN` | Docker Hub access token (not your account password) used to authenticate the `jib:build` push |
-| `GH_PAT` | GitHub Personal Access Token with `contents: write` permission; used to push the version-bump commit back to `main`, bypassing branch protection rules that block the default `GITHUB_TOKEN` from pushing to protected branches |
+## Repository layout
 
-**Required one-time repo setup:**
-- Settings → Actions → General → Workflow permissions → **Read and write permissions**
-- Settings → Branches → main protection rule → Allow specified actors to bypass required pull requests → add **GitHub Actions**
+- `auth-server/` — OAuth2 Authorization Server and embedded Nuxt frontend
+- `bff-server/` — session-backed token broker for the main web-client
+- `account-management-bff/` — session-backed token broker for the account-management client
+- `gateway-server/` — API gateway and token relay
+- `simple-resource-server/` — sample protected resource app
+- `account-management/` — shared-account CRUD service for testing
+- `web-client/` — standalone Nuxt app
+- `eureka-server/` and `config-server/` — service discovery and configuration
+
+## CI and CD
+
+GitHub Actions workflows live in `.github/workflows/` and cover the service-specific CI/CD flows for `auth-server`, `account-management`, `bff-server`, `gateway-server`, and `simple-resource-server`.
+
+The current workflow pattern is:
+
+- PRs run targeted CI: unit checks, local image builds, Docker Compose boot of dependencies, then service-specific integration tests.
+- `main` pushes trigger the release version bump, Jib image push, and the next SNAPSHOT commit.
+- `account-management-bff` also has its own CI workflow (`.github/workflows/account-management-bff-ci.yml`), which boots the service with Redis + auth-server and health-checks the `/actuator/health` endpoint on port `8084`.
+
+For service-specific setup, see the README in each service directory.
+
+## Local commands
+
+```bash
+# Start shared infra
+# mysql and redis are defined in the root docker-compose.yml
+docker compose up -d auth-server-db
+docker compose up -d auth-server-redis
+docker compose up -d bff-server-redis
+
+# Run a service from its own directory
+cd auth-server && mvn spring-boot:run
+cd bff-server && WEB_CLIENT_SECRET=secret mvn spring-boot:run
+cd account-management-bff && ACCOUNT_MANAGEMENT_CLIENT_SECRET=secret mvn spring-boot:run
+cd gateway-server && mvn spring-boot:run
+cd simple-resource-server && mvn spring-boot:run
+cd account-management && mvn spring-boot:run
+cd web-client && npm install && npm run dev
+```
+
+## Further reading
+
+See the service READMEs for the operational details and workflow-specific instructions:
+
+- `auth-server/README.md`
+- `bff-server/README.md`
+- `account-management-bff/README.md`
+- `gateway-server/README.md`
+- `account-management/README.md`
+- `simple-resource-server/README.md`
+- `web-client/README.md`
