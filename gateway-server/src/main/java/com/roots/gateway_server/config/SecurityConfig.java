@@ -17,6 +17,9 @@ public class SecurityConfig {
     @Value("${web.client.origin}")
     private String webClientLocation;
 
+    @Value("${account-management.client.origin}")
+    private String accountManagementClientLocation;
+
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -28,7 +31,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(webClientLocation));
+        config.setAllowedOrigins(List.of(webClientLocation, accountManagementClientLocation));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
