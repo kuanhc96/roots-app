@@ -34,4 +34,5 @@ public class LogoutService {
 
         return builder.encode().build().toUri();
     }
+
 }
