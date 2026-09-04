@@ -114,6 +114,7 @@ services:
       MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${MYSQL_AUTH_SERVER_ROOT_PASSWORD}
       MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://auth-server-db:3308/auth-server-db
       AUTH_SERVER_JWK_URI: http://auth-server:9000/oauth2/jwks
+      EUREKA_SERVER_URL: http://eureka-server:8070/eureka/
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent localhost:8082/actuator/health | grep UP || exit 1"]
       interval: 15s
