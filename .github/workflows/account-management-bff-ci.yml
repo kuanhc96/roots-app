@@ -6,7 +6,6 @@ on:
     paths:
       - 'account-management-bff/src/**'
       - 'account-management-bff/pom.xml'
-      - 'docker-compose.yml'
 
 jobs:
   build-and-healthcheck:

@@ -238,6 +238,8 @@ services:
         condition: service_healthy
       account-management:
         condition: service_healthy
+      account-management-bff:
+        condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
       REDIS_HOST: bff-server-redis
