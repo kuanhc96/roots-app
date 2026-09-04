@@ -1,75 +1,56 @@
-# Nuxt Minimal Starter
+# Account Management Client
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+A Nuxt 4 / Vue 3 client for managing user accounts. Authenticates via **account-management-bff**, which handles OAuth2 tokens server-side in Redis.
 
-## Setup
+## Development
 
-Make sure to install dependencies:
+### Prerequisites
+
+- Node.js 18+
+- npm
+
+### Installation
 
 ```bash
-# npm
 npm install
-
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
 ```
 
-## Development Server
-
-Start the development server on `http://localhost:3000`:
+### Running the dev server
 
 ```bash
-# npm
 npm run dev
-
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
 ```
 
-## Production
+The client will start on **http://localhost:3001** by default.
 
-Build the application for production:
+### Features
+
+- **Check Status** button — polls account-management-bff to check login status
+- **Authorize** button — kicks off the OAuth2 authorization code flow
+- **Login** button — checks status and authorizes if not logged in
+- **Logout** button — server-side logout with RP-Initiated OIDC logout
+
+When logged in, the UI displays the user's email and roles.
+
+### Configuration
+
+The BFF endpoint is configured in `nuxt.config.ts` under `runtimeConfig.public.accountManagementBffUrl`.
+
+Override via the `NUXT_PUBLIC_ACCOUNT_MANAGEMENT_BFF_URL` environment variable:
 
 ```bash
-# npm
+NUXT_PUBLIC_ACCOUNT_MANAGEMENT_BFF_URL=http://localhost:8080/roots-app/account-management-bff npm run dev
+```
+
+### Building for production
+
+```bash
 npm run build
-
-# pnpm
-pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
+npm run preview
 ```
 
-Locally preview production build:
+### Static generation
 
 ```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
+npm run generate
 ```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.

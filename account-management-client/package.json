@@ -1,17 +1,22 @@
 {
   "name": "account-management-client",
+  "version": "0.0.1",
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "nuxt build",
     "dev": "nuxt dev",
-    "generate": "nuxt generate",
+    "build": "nuxt build",
     "preview": "nuxt preview",
+    "generate": "nuxt generate",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
-    "nuxt": "^4.5.2",
-    "vue": "^3.5.42",
-    "vue-router": "^5.3.0"
+    "vue": "^3.5.32",
+    "nuxt": "^4.4.2",
+    "vuetify": "^4.0.5",
+    "vuetify-nuxt-module": "^0.19.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
   }
 }
