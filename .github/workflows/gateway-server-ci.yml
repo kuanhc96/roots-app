@@ -77,13 +77,15 @@ jobs:
             if echo "$compact_json" | grep -q '"name":"GATEWAY-SERVER"' \
               && echo "$compact_json" | grep -q '"name":"SIMPLE-RESOURCE-SERVER"' \
               && echo "$compact_json" | grep -q '"name":"ACCOUNT-MANAGEMENT"' \
+              && echo "$compact_json" | grep -q '"name":"ACCOUNT-MANAGEMENT-BFF"' \
               && echo "$compact_json" | grep -q '"name":"BFF-SERVER"'; then
               echo "All required apps are registered in Eureka."
               exit 0
             fi
-            echo "Attempt $i: waiting for GATEWAY-SERVER, SIMPLE-RESOURCE-SERVER, ACCOUNT-MANAGEMENT, BFF-SERVER in /eureka/apps"
+            echo "Attempt $i: waiting for GATEWAY-SERVER, SIMPLE-RESOURCE-SERVER, ACCOUNT-MANAGEMENT, ACCOUNT-MANAGEMENT-BFF, BFF-SERVER in /eureka/apps"
             sleep 2
           done
+          sleep 4
           echo "Timed out waiting for required Eureka app registrations"
           exit 1
 
