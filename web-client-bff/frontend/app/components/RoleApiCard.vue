@@ -13,6 +13,7 @@
       <v-alert v-if="error" type="error" variant="tonal">{{ error }}</v-alert>
     </v-card-text>
     <v-card-actions>
+      <v-btn @click="checkLoginStatus">check status</v-btn>
       <v-btn @click="login">login</v-btn>
       <v-btn @click="startLogout">logout</v-btn>
     </v-card-actions>
@@ -21,7 +22,7 @@
 
 <script setup lang="ts">
 const client = useSimpleResourceClient()
-const { login, startLogout } = useOAuth()
+const { checkStatus, login, startLogout } = useOAuth()
 
 const response = ref<string>('')
 const error = ref<string>('')
@@ -49,6 +50,16 @@ async function callRole(method: RoleMethod) {
     error.value = e instanceof Error ? e.message : 'Request failed'
   } finally {
     loading.value = false
+  }
+}
+
+async function checkLoginStatus() {
+  response.value = ''
+  error.value = ''
+  try {
+    response.value = JSON.stringify(await checkStatus())
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Status check failed'
   }
 }
 

@@ -1,3 +1,11 @@
+<script setup lang="ts">
+const { login } = useOAuth()
+
+onBeforeMount(async () => {
+  await login()
+})
+</script>
+
 <template>
   <v-container class="px-6">
     <v-row justify="center" class="mb-4">
