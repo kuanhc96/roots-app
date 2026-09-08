@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: web-client-bff
+  security:
+    oauth2:
+      client:
+        registration:
+          web-client-pkce-registration:
+            provider: auth-server-provider
+            client-id: ${WEB_CLIENT_ID:WEB_CLIENT_PKCE}
+            client-secret: ${WEB_CLIENT_SECRET}
+            client-authentication-method: client_secret_basic
+            authorization-grant-type: authorization_code
+            redirect-uri: ${BASE_URL:http://localhost:8085}/login/oauth2/code/web-client-pkce-registration
+            scope: openid,WEB_CLIENT_READ
+        provider:
+          auth-server-provider:
+            issuer-uri: ${AUTH_SERVER_LOCATION:http://localhost:9000}
+
+server:
+  port: ${SERVER_PORT:8085}
+
+simple-resource-server:
+  location: ${SIMPLE_RESOURCE_SERVER_LOCATION:http://localhost:8081}
