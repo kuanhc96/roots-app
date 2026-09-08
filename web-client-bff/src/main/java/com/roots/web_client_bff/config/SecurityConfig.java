@@ -33,6 +33,7 @@ public class SecurityConfig {
                                 new RedirectServerAuthenticationSuccessHandler("/home")
                         )
                 )
+                .logout(ServerHttpSecurity.LogoutSpec::disable)
                 .oauth2Client(Customizer.withDefaults());
         return http.build();
     }

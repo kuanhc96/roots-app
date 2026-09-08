@@ -29,7 +29,7 @@ export function useOAuth() {
   }
 
   function startLogout() {
-    window.location.href = '/logout'
+    window.location.href = '/api/auth/logout'
   }
 
   function authorize() {

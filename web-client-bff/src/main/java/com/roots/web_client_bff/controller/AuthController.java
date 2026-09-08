@@ -2,18 +2,27 @@ package com.roots.web_client_bff.controller;
 
 import com.roots.web_client_bff.dto.response.IdTokenClaimsResponse;
 import com.roots.web_client_bff.dto.response.LoginStatusResponse;
+import com.roots.web_client_bff.service.LogoutService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/auth")
+@RequiredArgsConstructor
 public class AuthController {
+    private final LogoutService logoutService;
+
     @GetMapping("/status")
     public LoginStatusResponse getLoginStatus(Authentication authentication) {
         if (!(authentication instanceof OAuth2AuthenticationToken oauth2Token) || !oauth2Token.isAuthenticated()) {
@@ -39,5 +48,14 @@ public class AuthController {
     private static List<String> getStringListClaim(OidcUser oidcUser, String claimName) {
         List<String> values = oidcUser.getClaimAsStringList(claimName);
         return values == null ? List.of() : values;
+    }
+
+    @GetMapping("/logout")
+    public Mono<ResponseEntity<Void>> logout(Authentication authentication, ServerWebExchange exchange) {
+        return exchange.getSession()
+                .flatMap(webSession -> webSession.invalidate()
+                        .thenReturn(ResponseEntity.status(HttpStatus.FOUND)
+                                .location(logoutService.buildLogoutRedirect(authentication))
+                                .build()));
     }
 }
