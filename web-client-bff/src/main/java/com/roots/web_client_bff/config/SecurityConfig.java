@@ -21,13 +21,16 @@ public class SecurityConfig {
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         http
-                .authorizeExchange(exchanges -> exchanges.anyExchange().authenticated())
+                .authorizeExchange(exchanges -> exchanges
+                        .pathMatchers("/api/role/**").authenticated()
+                        .anyExchange().permitAll()
+                )
                 .oauth2Login(oauth2LoginSpec -> oauth2LoginSpec
                         .authenticationMatcher(
                                 new PathPatternParserServerWebExchangeMatcher("/login/oauth2/code/{registrationId}")
                         )
                         .authenticationSuccessHandler(
-                                new RedirectServerAuthenticationSuccessHandler("/login/oauth2/success")
+                                new RedirectServerAuthenticationSuccessHandler("/home")
                         )
                 )
                 .oauth2Client(Customizer.withDefaults());
