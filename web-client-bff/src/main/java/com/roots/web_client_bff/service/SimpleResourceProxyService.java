@@ -1,8 +1,8 @@
 package com.roots.web_client_bff.service;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -13,18 +13,17 @@ public class SimpleResourceProxyService {
     private final String simpleResourceServerLocation;
 
     public SimpleResourceProxyService(
-            WebClient.Builder webClientBuilder,
+            @Qualifier("simpleResourceServerWebClient") WebClient webClient,
             @Value("${simple-resource-server.location}") String simpleResourceServerLocation
     ) {
-        this.webClient = webClientBuilder.build();
+        this.webClient = webClient;
         this.simpleResourceServerLocation = removeTrailingSlash(simpleResourceServerLocation);
     }
 
-    public Mono<ResponseEntity<String>> get(String endpointPath, OAuth2AuthorizedClient authorizedClient) {
+    public Mono<ResponseEntity<String>> get(String endpointPath) {
         return webClient
                 .get()
                 .uri(simpleResourceServerLocation + endpointPath)
-                .headers(headers -> headers.setBearerAuth(authorizedClient.getAccessToken().getTokenValue()))
                 .exchangeToMono(clientResponse -> clientResponse.toEntity(String.class))
                 .map(response -> ResponseEntity.status(response.getStatusCode()).body(response.getBody()));
     }

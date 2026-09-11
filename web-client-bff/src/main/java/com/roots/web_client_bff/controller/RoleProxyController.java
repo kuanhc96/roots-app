@@ -3,8 +3,6 @@ package com.roots.web_client_bff.controller;
 import com.roots.web_client_bff.service.SimpleResourceProxyService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
-import org.springframework.security.oauth2.client.annotation.RegisteredOAuth2AuthorizedClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,44 +15,32 @@ public class RoleProxyController {
     private final SimpleResourceProxyService simpleResourceProxyService;
 
     @GetMapping("/pastor")
-    public Mono<ResponseEntity<String>> pastor(
-            @RegisteredOAuth2AuthorizedClient("web-client-pkce-registration") OAuth2AuthorizedClient authorizedClient
-    ) {
-        return simpleResourceProxyService.get("/api/role/pastor", authorizedClient);
+    public Mono<ResponseEntity<String>> pastor() {
+        return simpleResourceProxyService.get("/api/role/pastor");
     }
 
     @GetMapping("/deacon")
-    public Mono<ResponseEntity<String>> deacon(
-            @RegisteredOAuth2AuthorizedClient("web-client-pkce-registration") OAuth2AuthorizedClient authorizedClient
-    ) {
-        return simpleResourceProxyService.get("/api/role/deacon", authorizedClient);
+    public Mono<ResponseEntity<String>> deacon() {
+        return simpleResourceProxyService.get("/api/role/deacon");
     }
 
     @GetMapping("/small-group-leader")
-    public Mono<ResponseEntity<String>> smallGroupLeader(
-            @RegisteredOAuth2AuthorizedClient("web-client-pkce-registration") OAuth2AuthorizedClient authorizedClient
-    ) {
-        return simpleResourceProxyService.get("/api/role/small-group-leader", authorizedClient);
+    public Mono<ResponseEntity<String>> smallGroupLeader() {
+        return simpleResourceProxyService.get("/api/role/small-group-leader");
     }
 
     @GetMapping("/vice-small-group-leader")
-    public Mono<ResponseEntity<String>> viceSmallGroupLeader(
-            @RegisteredOAuth2AuthorizedClient("web-client-pkce-registration") OAuth2AuthorizedClient authorizedClient
-    ) {
-        return simpleResourceProxyService.get("/api/role/vice-small-group-leader", authorizedClient);
+    public Mono<ResponseEntity<String>> viceSmallGroupLeader() {
+        return simpleResourceProxyService.get("/api/role/vice-small-group-leader");
     }
 
     @GetMapping("/member")
-    public Mono<ResponseEntity<String>> member(
-            @RegisteredOAuth2AuthorizedClient("web-client-pkce-registration") OAuth2AuthorizedClient authorizedClient
-    ) {
-        return simpleResourceProxyService.get("/api/role/member", authorizedClient);
+    public Mono<ResponseEntity<String>> member() {
+        return simpleResourceProxyService.get("/api/role/member");
     }
 
     @GetMapping("/guest")
-    public Mono<ResponseEntity<String>> guest(
-            @RegisteredOAuth2AuthorizedClient("web-client-pkce-registration") OAuth2AuthorizedClient authorizedClient
-    ) {
-        return simpleResourceProxyService.get("/api/role/guest", authorizedClient);
+    public Mono<ResponseEntity<String>> guest() {
+        return simpleResourceProxyService.get("/api/role/guest");
     }
 }
