@@ -5,7 +5,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
+import org.springframework.security.config.web.server.OidcBackChannelServerLogoutHandler;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.oauth2.client.oidc.server.session.InMemoryReactiveOidcSessionRegistry;
+import org.springframework.security.oauth2.client.oidc.server.session.ReactiveOidcSessionRegistry;
 import org.springframework.security.oauth2.client.oidc.web.server.logout.OidcClientInitiatedServerLogoutSuccessHandler;
 import org.springframework.security.oauth2.client.ReactiveOAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.registration.InMemoryReactiveClientRegistrationRepository;
@@ -16,6 +19,8 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.authentication.logout.ServerLogoutSuccessHandler;
 import org.springframework.security.web.server.util.matcher.PathPatternParserServerWebExchangeMatcher;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.server.session.CookieWebSessionIdResolver;
+import org.springframework.web.server.session.WebSessionIdResolver;
 
 @Configuration
 @EnableWebFluxSecurity
@@ -36,7 +41,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
+    public SecurityWebFilterChain securityWebFilterChain(
+            ServerHttpSecurity http,
+            OidcBackChannelServerLogoutHandler backChannelServerLogoutHandler
+    ) {
         http
                 .authorizeExchange(exchanges -> exchanges
                         .pathMatchers("/api/role/**").authenticated()
@@ -53,10 +61,35 @@ public class SecurityConfig {
                                 new RedirectServerAuthenticationFailureHandler("/?e=login_failed")
                         )
                 )
-                .logout(logout -> logout.logoutSuccessHandler(oidcLogoutSuccessHandler()))
-                .oidcLogout(logout -> logout.backChannel(Customizer.withDefaults()))
+                .logout(ServerHttpSecurity.LogoutSpec::disable)
+                .oidcLogout(logout -> logout.backChannel(backChannel -> backChannel.logoutHandler(backChannelServerLogoutHandler)))
                 .oauth2Client(Customizer.withDefaults());
         return http.build();
+    }
+
+    @Bean
+    public ReactiveOidcSessionRegistry sessionRegistry() {
+        return new InMemoryReactiveOidcSessionRegistry();
+    }
+
+    @Bean
+    public OidcBackChannelServerLogoutHandler oidcLogOutHandler(ReactiveOidcSessionRegistry sessionRegistry) {
+        OidcBackChannelServerLogoutHandler handler = new OidcBackChannelServerLogoutHandler(sessionRegistry);
+        handler.setSessionCookieName("__Host-SESSION");
+        return handler;
+    }
+
+    @Bean
+    public WebSessionIdResolver webSessionIdResolver() {
+        CookieWebSessionIdResolver resolver = new CookieWebSessionIdResolver();
+        resolver.setCookieName("__Host-SESSION");
+        resolver.addCookieInitializer(builder -> builder
+                .path("/")
+                .sameSite("Lax")
+                .httpOnly(true)
+                .secure(true)
+        );
+        return resolver;
     }
 
     private ServerLogoutSuccessHandler oidcLogoutSuccessHandler() {
