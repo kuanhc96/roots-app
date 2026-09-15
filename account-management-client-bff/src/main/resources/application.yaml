@@ -1,3 +1,38 @@
 spring:
   application:
     name: account-management-client-bff
+  security:
+    oauth2:
+      client:
+        registration:
+          account-management-pkce-registration:
+            provider: auth-server-provider
+            client-id: ${account-management.client.id}
+            client-secret: ${account-management.client.secret}
+            client-authentication-method: client_secret_basic
+            authorization-grant-type: authorization_code
+            redirect-uri: ${account-management-client-bff.external-location}/login/oauth2/code/account-management-pkce-registration
+            scope: openid,ACCOUNT_MANAGEMENT_CLIENT
+        provider:
+          auth-server-provider:
+            issuer-uri: ${auth-server.external-location}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+server:
+  port: ${SERVER_PORT:8084}
+
+account-management-client-bff:
+  external-location: ${ACCOUNT_MANAGEMENT_CLIENT_BFF_EXTERNAL_LOCATION:http://localhost:8084}
+
+auth-server:
+  external-location: ${AUTH_SERVER_EXTERNAL_LOCATION:http://localhost:9000}
+
+account-management:
+  location: ${ACCOUNT_MANAGEMENT_LOCATION:http://localhost:8082}
+  client:
+    id: ${ACCOUNT_MANAGEMENT_CLIENT_ID:ACCOUNT_MANAGEMENT_CLIENT}
+    secret: ${ACCOUNT_MANAGEMENT_CLIENT_SECRET:secret}
+
