@@ -5,15 +5,16 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.roots.authserver.component.CustomOidcLogoutAuthenticationSuccessHandler;
 import com.roots.authserver.component.GuestAuthenticationProvider;
 import com.roots.authserver.component.MfaAwareDaoAuthenticationProvider;
 import com.roots.authserver.component.MfaAwareRememberMeAuthenticationProvider;
 import com.roots.authserver.component.MfaRedirectAuthenticationSuccessHandler;
-import com.roots.authserver.component.RememberMeOidcLogoutAuthenticationSuccessHandler;
 import com.roots.authserver.component.SpaLoginEntryPoint;
 import com.roots.authserver.enums.ErrorCode;
 import com.roots.authserver.repository.CustomJdbcRegisteredClientRepository;
 import com.roots.authserver.repository.UserCredentialRepository;
+import com.roots.authserver.service.LogoutTokenService;
 import com.roots.authserver.service.UserCredentialService;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -33,6 +34,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.authorization.oidc.web.authentication.OidcLogoutAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.RememberMeServices;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -43,6 +45,7 @@ import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.oidc.endpoint.OidcParameterNames;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationProvider;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
@@ -82,11 +85,12 @@ public class SecurityConfig {
 
     @Bean
     @Order(1)
-    public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http,
+            CustomOidcLogoutAuthenticationSuccessHandler customOidcLogoutAuthenticationSuccessHandler) throws Exception {
         http
                 .oauth2AuthorizationServer((authorizationServer) -> {
                     http.securityMatcher(authorizationServer.getEndpointsMatcher());
-                    authorizationServer.oidc(oidc -> oidc.logoutEndpoint(logout -> logout.logoutResponseHandler(rememberMeOidcLogoutAuthenticationSuccessHandler())));
+                    authorizationServer.oidc(oidc -> oidc.logoutEndpoint(logout -> logout.logoutResponseHandler(customOidcLogoutAuthenticationSuccessHandler)));
                 })
                 .authorizeHttpRequests((authorize) -> authorize.anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions
@@ -149,11 +153,6 @@ public class SecurityConfig {
         converter.setJwtGrantedAuthoritiesConverter(scopesConverter);
 
         return converter;
-    }
-
-    @Bean
-    public RegisteredClientRepository registeredClientRepository(DataSource dataSource) {
-        return new CustomJdbcRegisteredClientRepository(new JdbcTemplate(dataSource));
     }
 
     @Bean
@@ -273,6 +272,11 @@ public class SecurityConfig {
     }
 
     @Bean
+    public JwtEncoder jwtEncoder(JWKSource<SecurityContext> jwkSource) {
+        return new NimbusJwtEncoder(jwkSource);
+    }
+
+    @Bean
     public AuthorizationServerSettings authorizationServerSettings() {
         return AuthorizationServerSettings.builder()
                 .build();
@@ -289,7 +293,12 @@ public class SecurityConfig {
     }
 
     @Bean
-    public RememberMeOidcLogoutAuthenticationSuccessHandler rememberMeOidcLogoutAuthenticationSuccessHandler() {
-        return new RememberMeOidcLogoutAuthenticationSuccessHandler(new OidcLogoutAuthenticationSuccessHandler());
+    public CustomOidcLogoutAuthenticationSuccessHandler customOidcLogoutAuthenticationSuccessHandler(
+            CustomJdbcRegisteredClientRepository registeredClientRepository,
+            LogoutTokenService logoutTokenService) {
+        return new CustomOidcLogoutAuthenticationSuccessHandler(
+                new OidcLogoutAuthenticationSuccessHandler(),
+                registeredClientRepository,
+                logoutTokenService);
     }
 }
