@@ -17,6 +17,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
+import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -62,15 +63,16 @@ public class LogoutTokenService {
      * Asynchronously sends LogoutTokens to all RPs that have back-channel logout enabled.
      * Errors are logged per-RP so one failing client doesn't block the others or the logout flow.
      */
-    @Async
+//    @Async
     public void sendBackChannelLogoutAsync(List<RegisteredClient> registeredClients, String clientId,
                                            String iss, Authentication authentication, HttpSession session) {
         for (RegisteredClient client : registeredClients) {
             try {
-                Boolean sessionRequired = client.getClientSettings()
-                        .getSetting("backchannel-logout-session-required");
-                String backChannelLogoutUri = client.getClientSettings()
-                        .getSetting("backchannel-logout-uri");
+                ClientSettings clientSettings = client.getClientSettings();
+                Boolean sessionRequired = clientSettings
+                        .getSetting("settings.client.back-channel-logout-session-required");
+                String backChannelLogoutUri = clientSettings
+                        .getSetting("settings.client.back-channel-logout-uri");
 
                 if (StringUtils.hasText(backChannelLogoutUri) && Boolean.TRUE.equals(sessionRequired)) {
                     String logoutToken = generateLogoutToken(client.getClientId(), iss, authentication, session);

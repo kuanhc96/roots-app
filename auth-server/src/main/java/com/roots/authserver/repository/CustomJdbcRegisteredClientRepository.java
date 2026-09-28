@@ -1,5 +1,6 @@
 package com.roots.authserver.repository;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,37 +34,31 @@ public class CustomJdbcRegisteredClientRepository extends JdbcRegisteredClientRe
             String id = rs.getString("id");
             String clientId = rs.getString("client_id");
             String clientSecret = rs.getString("client_secret");
-            
-            // Parse clientAuthenticationMethods JSON to ClientAuthenticationMethod objects
-            @SuppressWarnings("unchecked")
-            Set<String> clientAuthMethodStrings = jsonMapper.readValue(rs.getString("client_authentication_methods"), Set.class);
-            Set<ClientAuthenticationMethod> clientAuthenticationMethods = clientAuthMethodStrings.stream()
-                    .map(ClientAuthenticationMethod::new)
-                    .collect(Collectors.toUnmodifiableSet());
-            
-            // Parse authorizationGrantTypes JSON to AuthorizationGrantType objects
-            @SuppressWarnings("unchecked")
-            Set<String> grantTypeStrings = jsonMapper.readValue(rs.getString("authorization_grant_types"), Set.class);
-            Set<AuthorizationGrantType> authorizationGrantTypes = grantTypeStrings.stream()
-                    .map(grant -> new AuthorizationGrantType(grant))
-                    .collect(Collectors.toUnmodifiableSet());
-            
-            // Parse redirectUris JSON to Set<String>
-            @SuppressWarnings("unchecked")
-            Set<String> redirectUris = jsonMapper.readValue(rs.getString("redirect_uris"), Set.class);
-            
-            // Parse scopes JSON to Set<String>
-            @SuppressWarnings("unchecked")
-            Set<String> scopes = jsonMapper.readValue(rs.getString("scopes"), Set.class);
-            
+
             // Parse clientSettings JSON to Map
             @SuppressWarnings("unchecked")
             Map<String, Object> clientSettingsMap = jsonMapper.readValue(rs.getString("client_settings"), Map.class);
-            
+
             // Parse tokenSettings JSON to Map, then build TokenSettings from it
             @SuppressWarnings("unchecked")
             Map<String, Object> tokenSettingsMap = jsonMapper.readValue(rs.getString("token_settings"), Map.class);
 
+            // Parse clientAuthenticationMethods: comma-separated values to ClientAuthenticationMethod objects
+            Set<ClientAuthenticationMethod> clientAuthenticationMethods = parseStringSet(rs.getString("client_authentication_methods")).stream()
+                    .map(ClientAuthenticationMethod::new)
+                    .collect(Collectors.toUnmodifiableSet());
+
+            // Parse authorizationGrantTypes: comma-separated values to AuthorizationGrantType objects
+            Set<AuthorizationGrantType> authorizationGrantTypes = parseStringSet(rs.getString("authorization_grant_types")).stream()
+                    .map(AuthorizationGrantType::new)
+                    .collect(Collectors.toUnmodifiableSet());
+            
+            // Parse redirectUris: comma-separated values to Set<String>
+            Set<String> redirectUris = parseStringSet(rs.getString("redirect_uris"));
+
+            // Parse scopes: comma-separated values to Set<String>
+            Set<String> scopes = parseStringSet(rs.getString("scopes"));
+            
             return RegisteredClient.withId(id)
                     .clientId(clientId)
                     .clientSecret(clientSecret)
@@ -75,5 +70,22 @@ public class CustomJdbcRegisteredClientRepository extends JdbcRegisteredClientRe
                     .tokenSettings(TokenSettings.withSettings(tokenSettingsMap).build())
                     .build();
         });
+    }
+
+    /**
+     * Parses a comma-separated string into a Set of trimmed strings.
+     * Handles null/empty strings gracefully.
+     *
+     * @param commaSeparatedValues the comma-separated string (e.g., "A,B,C" or "A")
+     * @return an unmodifiable Set of parsed values, or an empty Set if input is null/blank
+     */
+    private Set<String> parseStringSet(String commaSeparatedValues) {
+        if (commaSeparatedValues == null || commaSeparatedValues.isBlank()) {
+            return Set.of();
+        }
+        return Arrays.stream(commaSeparatedValues.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toUnmodifiableSet());
     }
 }
