@@ -79,7 +79,15 @@ public class AuthCallbackService {
             return failureRedirect();
         }
 
-        String idTokenNonce = JwtPayload.parse(tokens.get().idToken()).getString("nonce");
+        JwtPayload idTokenPayload;
+        try {
+            idTokenPayload = JwtPayload.parse(tokens.get().idToken());
+            idTokenPayload.requireSid();
+        } catch (IllegalArgumentException e) {
+            log.warn("Callback for session {} received an id_token without a decodable sid", sessionId);
+            return failureRedirect();
+        }
+        String idTokenNonce = idTokenPayload.getString("nonce");
         if (storedNonce.isEmpty() || !storedNonce.get().equals(idTokenNonce)) {
             log.warn("Nonce mismatch on callback for session {} — id_token nonce does not match stored nonce", sessionId);
             return failureRedirect();

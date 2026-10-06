@@ -50,15 +50,23 @@ public class AuthStatusService {
             return LoginStatusResponse.notLoggedIn();
         }
 
-        Optional<TokenResponse> tokens = authServerTokenClient.refreshTokens(refreshToken.get())
-                .filter(response -> response.idToken() != null);
+        Optional<TokenResponse> tokens = authServerTokenClient.refreshTokens(refreshToken.get());
         if (tokens.isEmpty()) {
             tokenStore.delete(sessionId, TokenType.REFRESH_TOKEN);
             return LoginStatusResponse.notLoggedIn();
         }
 
+        JwtPayload refreshedIdToken;
+        try {
+            refreshedIdToken = JwtPayload.parse(tokens.get().idToken());
+            refreshedIdToken.requireSid();
+        } catch (IllegalArgumentException e) {
+            log.warn("Discarding refreshed tokens without a decodable sid for session {}", sessionId);
+            tokenStore.clearTokens(sessionId);
+            return LoginStatusResponse.notLoggedIn();
+        }
         tokenStore.storeTokenResponse(sessionId, tokens.get());
-        return toLoggedInResponse(JwtPayload.parse(tokens.get().idToken()));
+        return toLoggedInResponse(refreshedIdToken);
     }
 
     private static LoginStatusResponse toLoggedInResponse(JwtPayload idTokenPayload) {

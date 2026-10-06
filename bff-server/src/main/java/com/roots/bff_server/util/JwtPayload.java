@@ -9,9 +9,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Decoded JWT payload. No signature verification: every JWT the bff handles either
- * came straight from auth-server's token endpoint over a server-to-server call, or
- * out of Redis where the bff itself stored it.
+ * Decoded JWT payload, without signature verification. Token-endpoint responses
+ * and stored tokens are trusted; back-channel logout token validation is deferred.
  */
 public record JwtPayload(Map<String, Object> claims) {
 
@@ -31,6 +30,14 @@ public record JwtPayload(Map<String, Object> claims) {
     public String getString(String name) {
         Object value = claims.get(name);
         return value == null ? null : value.toString();
+    }
+
+    public String requireSid() {
+        Object value = claims.get("sid");
+        if (!(value instanceof String sid) || sid.isBlank()) {
+            throw new IllegalArgumentException("JWT must contain a non-empty string sid");
+        }
+        return sid;
     }
 
     @SuppressWarnings("unchecked")

@@ -2,13 +2,18 @@ package com.roots.bff_server.service;
 
 import com.roots.bff_server.enums.TokenType;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.util.Optional;
 
+import com.roots.bff_server.util.JwtPayload;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -27,6 +32,7 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class LogoutService {
+    private static final Logger log = LoggerFactory.getLogger(LogoutService.class);
 
     private final TokenStoreService tokenStore;
 
@@ -42,7 +48,6 @@ public class LogoutService {
     public URI buildLogoutRedirect(String sessionId) {
         // Read the id_token for the hint before clearing — clearTokens deletes it.
         Optional<String> idToken = tokenStore.find(sessionId, TokenType.ID_TOKEN);
-        tokenStore.clearTokens(sessionId);
 
         UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(authServerExternalLocation)
                 .path("/connect/logout")
@@ -51,5 +56,17 @@ public class LogoutService {
         idToken.ifPresent(token -> builder.queryParam("id_token_hint", token));
 
         return builder.encode().build().toUri();
+    }
+
+    public void logout(String logoutToken) {
+        String sid;
+        try {
+            sid = JwtPayload.parse(logoutToken).requireSid();
+        } catch (IllegalArgumentException e) {
+            log.warn("Rejecting back-channel logout: malformed token or invalid sid");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid logout_token", e);
+        }
+        // Signature and OIDC logout-claim validation must be added before public exposure.
+        tokenStore.clearTokensBySid(sid);
     }
 }

@@ -7,8 +7,10 @@ import com.roots.bff_server.service.AuthorizeService;
 import com.roots.bff_server.service.LogoutService;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -93,5 +95,17 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.FOUND)
                 .location(logoutRedirect)
                 .build();
+    }
+
+    @Operation(
+            summary = "Receive a back-channel logout notification",
+            description = "Uses logout_token's sid to remove the mapped BFF session's OAuth2 tokens. "
+                    + "Returns 200 even for an unknown sid. Token signature/claim validation is not yet implemented."
+    )
+    @PostMapping(value = "/logout/connect/back-channel/web-client-pkce-registration",
+            consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+    public ResponseEntity<Void> backChannelLogout(@RequestParam("logout_token") String logoutToken) {
+        logoutService.logout(logoutToken);
+        return ResponseEntity.ok().build();
     }
 }

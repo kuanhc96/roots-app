@@ -7,6 +7,8 @@ import com.roots.bff_server.util.JwtPayload;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -24,6 +26,8 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class TokenStoreService {
+
+    private static final Logger log = LoggerFactory.getLogger(TokenStoreService.class);
 
     private final StringRedisTemplate redisTemplate;
 
@@ -50,16 +54,18 @@ public class TokenStoreService {
     }
 
     /**
-     * Removes the session's three OAuth2 tokens — the counterpart to
+     * Removes the session's three OAuth2 tokens and its known sid mapping — the counterpart to
      * {@link #storeTokenResponse}. Used at logout: once these are gone the session is
      * no longer a login (an absent id_token/refresh token is exactly what
      * {@code AuthStatusService} treats as "not logged in"). The short-lived
      * {@code oauth_state} is left alone — it only exists mid-authorize-flow.
      */
     public void clearTokens(String sessionId) {
+        Optional<String> idToken = find(sessionId, TokenType.ID_TOKEN);
         delete(sessionId, TokenType.ACCESS_TOKEN);
         delete(sessionId, TokenType.ID_TOKEN);
         delete(sessionId, TokenType.REFRESH_TOKEN);
+        removeKnownSidMapping(sessionId, idToken);
     }
 
     /**
@@ -67,10 +73,16 @@ public class TokenStoreService {
      * TTL = their own {@code exp}, and the rotated refresh token with the configured
      * TTL — or, in the unexpected case the response carries no refresh token, the
      * stored one is dropped (rotation invalidated the token that was just used).
+     * The ID token must contain a valid sid; its session mapping uses the configured
+     * refresh-token TTL, renewed on every successful BFF refresh.
      */
     public void storeTokenResponse(String sessionId, TokenResponse tokens) {
+        JwtPayload idToken = JwtPayload.parse(tokens.idToken());
+        String sid = idToken.requireSid();
+        Duration idTokenTtl = Duration.between(Instant.now(), idToken.expiresAt());
+        removeKnownSidMapping(sessionId, find(sessionId, TokenType.ID_TOKEN));
         storeJwt(sessionId, TokenType.ACCESS_TOKEN, tokens.accessToken());
-        storeJwt(sessionId, TokenType.ID_TOKEN, tokens.idToken());
+        store(sessionId, TokenType.ID_TOKEN, tokens.idToken(), idTokenTtl);
 
         if (tokens.refreshToken() != null) {
             store(sessionId, TokenType.REFRESH_TOKEN, tokens.refreshToken(),
@@ -78,6 +90,40 @@ public class TokenStoreService {
         } else {
             delete(sessionId, TokenType.REFRESH_TOKEN);
         }
+
+        Duration mappingTtl = Duration.ofSeconds(refreshTokenTtlSeconds);
+        if (mappingTtl.isPositive()) {
+            redisTemplate.opsForValue().set(sidKey(sid), sessionId, mappingTtl);
+        }
+    }
+
+    public Optional<String> findSessionIdBySid(String sid) {
+        return Optional.ofNullable(redisTemplate.opsForValue().get(sidKey(sid)));
+    }
+
+    public void clearTokensBySid(String sid) {
+        findSessionIdBySid(sid).ifPresent(this::clearTokens);
+        redisTemplate.delete(sidKey(sid));
+    }
+
+    private void removeKnownSidMapping(String sessionId, Optional<String> idToken) {
+        if (idToken.isEmpty()) {
+            return;
+        }
+        String sid;
+        try {
+            sid = JwtPayload.parse(idToken.get()).requireSid();
+        } catch (IllegalArgumentException e) {
+            log.warn("Cannot clean sid mapping for session {}: stored id_token has no decodable sid", sessionId);
+            return;
+        }
+        if (findSessionIdBySid(sid).filter(sessionId::equals).isPresent()) {
+            redisTemplate.delete(sidKey(sid));
+        }
+    }
+
+    private static String sidKey(String sid) {
+        return "oidc:sid:" + sid;
     }
 
     /** Stores a JWT with TTL = its own exp, so Redis drops it the moment it expires. */
