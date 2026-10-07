@@ -11,7 +11,6 @@ The **full-stack backend-for-frontend** for `web-client`. It embeds a copy of th
 | `SERVER_PORT` | No | `8083` | HTTP port the server listens on |
 | `REDIS_HOST` | No | `localhost` | Redis host backing Spring Session + the token store |
 | `REDIS_PORT` | No | `6379` | Redis port |
-| `EUREKA_SERVER_URL` | No | `http://localhost:8070/eureka/` | Eureka registry URL; compose sets `http://eureka-server:8070/eureka/` |
 | `WEB_CLIENT_ORIGIN` | No | `http://localhost:8083` | Public origin of this app; used for OAuth callback exchanges and the post-logout return URL (property `web.client.origin`) |
 | `AUTH_SERVER_INTERNAL_LOCATION` | No | `http://localhost:9000` | Auth-server base URL reachable from **inside** the deployment network; used by the server-to-server RestClient (refresh-token exchange). Property `auth-server.internal-location`; docker-compose sets `http://auth-server:9000` |
 | `AUTH_SERVER_EXTERNAL_LOCATION` | No | `http://localhost:9000` | Auth-server base URL reachable from **outside** — i.e. by the user's browser; used in redirects the browser follows (the authorize kick-off). Property `auth-server.external-location`. Separate from the internal one because in docker `auth-server:9000` doesn't resolve outside the compose network — compose leaves this at the default |
@@ -30,16 +29,12 @@ The **full-stack backend-for-frontend** for `web-client`. It embeds a copy of th
 4. The call goes to `{gateway-server.internal-location}/roots-app/simple-resource-server/role/<role>` with `Authorization: Bearer <access_token>` and **no** session cookie, so the gateway's cookie-driven token filters are no-ops (they would refresh as `WEB_CLIENT`, not this app's `WEB_CLIENT_PKCE`).
 5. Downstream 2xx/4xx are relayed verbatim (e.g. **403** when the login lacks the role); a 5xx or connection failure becomes **502**.
 
-## Eureka Service Discovery
+## Service connectivity
 
-web-client-bff is a Spring Cloud Netflix Eureka client. On startup, it automatically registers itself with the Eureka server (default: `http://localhost:8070/eureka/`), making itself discoverable by other services.
-
-**De-registration:** To gracefully de-register from Eureka:
-```bash
-curl -X POST http://localhost:8083/actuator/shutdown
-```
-
-This triggers a clean shutdown with proper Eureka de-registration before the process exits.
+web-client-bff is a browser-facing application, not an internal discoverable service.
+It does not register with Eureka or fetch its registry. Role API calls reach internal
+services through the configured gateway-server URL; OAuth token exchanges continue
+to use the configured auth-server URL directly.
 
 ## Login status — `GET /api/auth/status`
 
