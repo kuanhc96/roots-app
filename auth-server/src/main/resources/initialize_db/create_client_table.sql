@@ -41,15 +41,14 @@ INSERT INTO oauth2_registered_client (
     'WEB_CLIENT',
     'client_secret_basic',
     'refresh_token,authorization_code',
-    -- Two registered callbacks during the bff migration: web-client's own (legacy
-    -- browser-side exchange, removed once web-client is repointed) and bff-server's
-    -- (the server-side exchange at GET /api/auth/callback).
+    -- Keep the standalone web-client callback and the BFF server-side callback
+    -- registered so either frontend deployment can use the shared client.
     'http://localhost:3000/callback,http://localhost:8083/api/auth/callback',
-    'http://localhost:3000/logout',
+    'http://localhost:3000/logout,http://localhost:8083/logout',
     'openid,WEB_CLIENT_READ',
     '{"@class":"java.util.Collections$UnmodifiableMap","settings.client.require-proof-key":false,"settings.client.require-authorization-consent":false}',
     -- reuse-refresh-tokens=false: every refresh exchange rotates the refresh token, so
-    -- bff-server always stores a fresh one with a fresh TTL (see bff-server's auth status flow).
+    -- The BFF applications store a fresh one with a fresh TTL.
     '{"@class":"java.util.Collections$UnmodifiableMap","settings.token.reuse-refresh-tokens":false,"settings.token.x509-certificate-bound-access-tokens":false,"settings.token.id-token-signature-algorithm":["org.springframework.security.oauth2.jose.jws.SignatureAlgorithm","RS256"],"settings.token.access-token-time-to-live":["java.time.Duration",300.000000000],"settings.token.access-token-format":{"@class":"org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat","value":"self-contained"},"settings.token.refresh-token-time-to-live":["java.time.Duration",3600.000000000],"settings.token.authorization-code-time-to-live":["java.time.Duration",300.000000000],"settings.token.device-code-time-to-live":["java.time.Duration",300.000000000]}'
 );
 
@@ -78,7 +77,7 @@ INSERT INTO oauth2_registered_client (
     'client_secret_basic',
     'refresh_token,authorization_code',
     'http://localhost:3000/callback,http://localhost:8083/api/auth/callback',
-    'http://localhost:3000/logout',
+    'http://localhost:3000/logout,http://localhost:8083/logout',
     'openid,WEB_CLIENT_READ',
     '{"@class":"java.util.Collections$UnmodifiableMap","settings.client.require-proof-key":true,"settings.client.require-authorization-consent":false}',
     '{"@class":"java.util.Collections$UnmodifiableMap","settings.token.reuse-refresh-tokens":false,"settings.token.x509-certificate-bound-access-tokens":false,"settings.token.id-token-signature-algorithm":["org.springframework.security.oauth2.jose.jws.SignatureAlgorithm","RS256"],"settings.token.access-token-time-to-live":["java.time.Duration",300.000000000],"settings.token.access-token-format":{"@class":"org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat","value":"self-contained"},"settings.token.refresh-token-time-to-live":["java.time.Duration",3600.000000000],"settings.token.authorization-code-time-to-live":["java.time.Duration",300.000000000],"settings.token.device-code-time-to-live":["java.time.Duration",300.000000000]}'

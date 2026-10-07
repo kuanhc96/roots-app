@@ -456,7 +456,7 @@ Auth-server implements **OIDC RP-Initiated Logout** (`GET /connect/logout`). The
 
 ### Registered `post_logout_redirect_uri`
 
-The `WEB_CLIENT` seed in `create_client_table.sql` sets `post_logout_redirect_uris` to `http://localhost:3000/logout`. Logout requests specifying any other URI are rejected.
+The `WEB_CLIENT` and `WEB_CLIENT_PKCE` seeds in `create_client_table.sql` allow both the standalone web-client's `http://localhost:3000/logout` and the embedded web-client-bff's `http://localhost:8083/logout`. Logout requests specifying any other URI are rejected.
 
 ### `MfaAuthenticationToken` and `FactorGrantedAuthority`
 
