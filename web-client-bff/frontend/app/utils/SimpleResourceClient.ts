@@ -1,15 +1,14 @@
 import axios, { type AxiosInstance } from 'axios'
 
-// Calls go through gateway-server's /simple-resource-server prefix. The browser
-// sends only the __Host-SESSION cookie; gateway-server resolves and injects the
-// bearer token from Redis before proxying to simple-resource-server.
+// Calls go to this app's own same-origin /api/role/* endpoints. The browser sends
+// only the __Host-SESSION cookie; the bff looks up (or refreshes) the session's
+// access token and forwards the call through gateway-server to simple-resource-server.
 export class SimpleResourceClient {
   private readonly http: AxiosInstance
 
   constructor(baseUrl: string) {
     this.http = axios.create({
       baseURL: baseUrl,
-      withCredentials: true,
     })
 
     this.http.interceptors.response.use(

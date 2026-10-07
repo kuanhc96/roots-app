@@ -2,7 +2,7 @@
 
 The **full-stack backend-for-frontend** for `web-client`. It embeds a copy of the Nuxt 4 frontend and serves its generated SPA from Spring Boot, following the same static-SPA architecture as `auth-server`. OAuth2 tokens stay server-side in Redis; the browser holds only the `__Host-SESSION` cookie and the UI stores returned login claims.
 
-`web-client/` remains an independent standalone frontend. The embedded SPA calls web-client-bff directly at same-origin `/api/auth/**` endpoints. Protected role API calls still go to gateway-server.
+`web-client/` remains an independent standalone frontend. The embedded SPA calls web-client-bff directly at same-origin `/api/auth/**` and `/api/role/**` endpoints; role calls are proxied by the bff to simple-resource-server (see [Role proxy](#role-proxy--get-apirole)).
 
 ## Environment Variables
 
@@ -18,8 +18,17 @@ The **full-stack backend-for-frontend** for `web-client`. It embeds a copy of th
 | `WEB_CLIENT_ID` | No | `WEB_CLIENT_PKCE` | OAuth2 client id the bff uses for authorize/token exchanges (property `web.client.id`) |
 | `WEB_CLIENT_SECRET` | **Yes** | — (no default) | Client secret for `WEB_CLIENT_PKCE` confidential PKCE flow (`client_secret_basic`) |
 | `REFRESH_TOKEN_TTL_SECONDS` | No | `3600` | Redis TTL applied to stored refresh tokens (property `token-store.refresh-token-ttl-seconds`); mirrors auth-server's `refresh-token-time-to-live` |
+| `GATEWAY_SERVER_INTERNAL_LOCATION` | No | `http://localhost:8080` | gateway-server base URL reachable from inside the deployment network; the role proxy calls `{this}/roots-app/simple-resource-server/role/*` (property `gateway-server.internal-location`) |
 
-`NUXT_PUBLIC_SIMPLE_RESOURCE_SERVER_URL` is a frontend build-time variable. It defaults to `http://localhost:8080/roots-app/simple-resource-server`; set it in the environment running Maven when building for another gateway URL, since Nuxt bakes public config into the generated JavaScript bundle.
+## Role proxy — `GET /api/role/*`
+
+`RoleProxyController` exposes six GET endpoints mirroring simple-resource-server 1:1: `/api/role/pastor`, `/deacon`, `/small-group-leader`, `/vice-small-group-leader`, `/member`, `/guest`. The SPA calls them same-origin with only its `__Host-SESSION` cookie (`RoleProxyController` → `RoleProxyService` → `SimpleResourceClient`):
+
+1. `<sessionId>:access_token` present → used as-is.
+2. Otherwise `TokenRefreshService` (shared with `/api/auth/status`) exchanges `<sessionId>:refresh_token` as `web.client.id`, stores the rotated tokens, and uses the new access token. A rejected refresh token is deleted.
+3. No usable token → **401** without calling downstream (the SPA redirects to `/session-expired`).
+4. The call goes to `{gateway-server.internal-location}/roots-app/simple-resource-server/role/<role>` with `Authorization: Bearer <access_token>` and **no** session cookie, so the gateway's cookie-driven token filters are no-ops (they would refresh as `WEB_CLIENT`, not this app's `WEB_CLIENT_PKCE`).
+5. Downstream 2xx/4xx are relayed verbatim (e.g. **403** when the login lacks the role); a 5xx or connection failure becomes **502**.
 
 ## Eureka Service Discovery
 
@@ -79,7 +88,7 @@ Location: {auth-server.external-location}/oauth2/authorize
 
 Maven installs Node.js/npm, runs `npm install` and `npm run generate` under `frontend/`, then copies `frontend/.output/public` into Spring Boot's `classpath:/static/`. The Nuxt app uses `ssr: false`; `SpaFallbackConfig` serves real assets and falls back to `index.html` for client-side routes such as `/home`, `/logout`, and `/session-expired`.
 
-Authentication calls use same-origin `/api/auth/status`, `/api/auth/authorize`, and `/api/auth/logout`; the server owns `/api/auth/callback`. Role API calls still target the configured gateway URL. Gateway CORS has not yet been updated for the new `http://localhost:8083` frontend origin, so those cross-origin resource calls may be blocked until that integration is handled.
+Authentication calls use same-origin `/api/auth/status`, `/api/auth/authorize`, and `/api/auth/logout`; the server owns `/api/auth/callback`. Role API calls use same-origin `/api/role/*`, which the bff proxies to simple-resource-server — so no gateway CORS configuration is needed for the `http://localhost:8083` origin.
 
 ## Sessions in Redis (Spring Session)
 

@@ -5,6 +5,6 @@ directory. From `web-client-bff/`, `mvn package` runs `npm install` and `npm run
 then copies the generated static files into the application JAR.
 
 The app is built with `ssr: false` and uses the Spring Boot API at the same origin
-for `/api/auth/**`. Simple-resource-server requests continue to use the gateway URL
-configured by `NUXT_PUBLIC_SIMPLE_RESOURCE_SERVER_URL`; for a non-local gateway,
-set that variable in the Maven build environment.
+for `/api/auth/**` and `/api/role/**`. Role requests are proxied by the bff, which
+attaches the session's access token and forwards them through gateway-server to
+simple-resource-server — the browser never calls the gateway directly.

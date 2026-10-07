@@ -31,6 +31,12 @@ auth-server:
   # hostname doesn't resolve for the browser, so this stays localhost:9000 there.
   external-location: ${AUTH_SERVER_EXTERNAL_LOCATION:http://localhost:9000}
 
+gateway-server:
+  # Reachable from inside the deployment network; the bff proxies simple-resource-server
+  # calls through the gateway's /roots-app/simple-resource-server route with the
+  # session's access token attached as a bearer header.
+  internal-location: ${GATEWAY_SERVER_INTERNAL_LOCATION:http://localhost:8080}
+
 web:
   client:
     # Default to the confidential PKCE client; can be overridden for legacy flows/tests.
