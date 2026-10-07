@@ -1,0 +1,71 @@
+spring:
+  application:
+    name: web-client-bff
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+server:
+  port: ${SERVER_PORT:8083}
+  servlet:
+    session:
+      cookie:
+        name: __Host-SESSION
+        secure: true
+        http-only: true
+        same-site: Lax
+        path: /
+
+bff-server:
+  # This server's externally reachable base URL; it serves both the SPA and BFF API.
+  # Used to build the OAuth2 redirect_uri, which must match an auth-server client URI.
+  external-location: ${BFF_SERVER_EXTERNAL_LOCATION:http://localhost:8083}
+
+auth-server:
+  # Reachable from inside the deployment network; used by the server-to-server
+  # RestClient. In docker this is http://auth-server:9000.
+  internal-location: ${AUTH_SERVER_INTERNAL_LOCATION:http://localhost:9000}
+  # Reachable from outside (i.e. by the user's browser); used in redirects the
+  # browser must follow, such as the authorize kick-off. In docker the internal
+  # hostname doesn't resolve for the browser, so this stays localhost:9000 there.
+  external-location: ${AUTH_SERVER_EXTERNAL_LOCATION:http://localhost:9000}
+
+web:
+  client:
+    # Default to the confidential PKCE client; can be overridden for legacy flows/tests.
+    id: ${WEB_CLIENT_ID:WEB_CLIENT_PKCE}
+    # Required: WEB_CLIENT_PKCE is confidential and authenticates with client_secret_basic.
+    secret: ${WEB_CLIENT_SECRET}
+    # The SPA is served by this app, so callback and logout return to the same origin.
+    origin: ${WEB_CLIENT_ORIGIN:http://localhost:8083}
+
+token-store:
+  # TTL applied to stored refresh tokens. The refresh token is opaque (no readable
+  # exp), so this mirrors auth-server's settings.token.refresh-token-time-to-live.
+  refresh-token-ttl-seconds: ${REFRESH_TOKEN_TTL_SECONDS:3600}
+
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8070/eureka/}
+
+info:
+  app:
+    name: ${spring.application.name}
+    description: Backend-for-frontend service for roots-app
+    version: @project.version@
+
+management:
+  info:
+    env:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,shutdown
+  endpoint:
+    shutdown:
+      access: unrestricted
