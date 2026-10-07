@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.roots.bff_server.client.AuthServerClient;
 import com.roots.bff_server.client.BffClient;
 import com.roots.bff_server.enums.TokenType;
+import com.roots.bff_server.util.JwtPayload;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
@@ -96,6 +97,9 @@ class CallbackIntegrationTest {
         assertThat(tokenStore.getTimeToLive(sessionId, TokenType.ID_TOKEN)).isPositive();
         assertThat(tokenStore.getTimeToLive(sessionId, TokenType.ACCESS_TOKEN)).isPositive();
         assertThat(tokenStore.getTimeToLive(sessionId, TokenType.REFRESH_TOKEN)).isPositive();
+        String sid = JwtPayload.parse(tokenStore.find(sessionId, TokenType.ID_TOKEN).orElseThrow()).requireSid();
+        assertThat(tokenStore.findSessionIdBySid(sid)).contains(sessionId);
+        assertThat(tokenStore.getSidTimeToLive(sid)).isPositive();
         // The state and nonce are single-use: consumed by the callback.
         assertThat(tokenStore.find(sessionId, TokenType.OAUTH_STATE)).isEmpty();
         assertThat(tokenStore.find(sessionId, TokenType.OAUTH_NONCE)).isEmpty();

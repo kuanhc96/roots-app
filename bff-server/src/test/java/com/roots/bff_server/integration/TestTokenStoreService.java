@@ -1,6 +1,7 @@
 package com.roots.bff_server.integration;
 
 import com.roots.bff_server.enums.TokenType;
+import com.roots.bff_server.util.JwtPayload;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
 
@@ -35,8 +36,22 @@ public class TestTokenStoreService {
         return redisTemplate.getExpire(key(sessionId, type));
     }
 
+    public Optional<String> findSessionIdBySid(String sid) {
+        return Optional.ofNullable(redisTemplate.opsForValue().get("oidc:sid:" + sid));
+    }
+
+    public long getSidTimeToLive(String sid) {
+        return redisTemplate.getExpire("oidc:sid:" + sid);
+    }
+
     /** Removes every per-session key (all {@link TokenType}s); idempotent, for teardown. */
     public void deleteAll(String sessionId) {
+        find(sessionId, TokenType.ID_TOKEN).ifPresent(token -> {
+            String sid = JwtPayload.parse(token).getString("sid");
+            if (sid != null && findSessionIdBySid(sid).filter(sessionId::equals).isPresent()) {
+                redisTemplate.delete("oidc:sid:" + sid);
+            }
+        });
         for (TokenType type : TokenType.values()) {
             redisTemplate.delete(key(sessionId, type));
         }

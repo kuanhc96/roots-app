@@ -53,6 +53,32 @@ The endpoint web-client calls to ask "does this browser have a valid login?". Se
 
 The claims come from the **id_token**, which auth-server's `jwtTokenCustomizer` enriches with `email`, `userGUID`, and `roles` specifically for this endpoint.
 
+## Back-channel logout
+
+After a successful callback, the BFF stores `oidc:sid:<sid> -> <sessionId>` using the
+ID token's non-empty string `sid`. A missing or invalid `sid` fails the callback
+with `/?e=login_failed` without storing new tokens. The mapping uses the configured
+refresh-token TTL (`REFRESH_TOKEN_TTL_SECONDS`, default 3600 seconds). Successful
+BFF refreshes renew it; a refreshed ID token without a valid `sid` clears the
+session's tokens and reports logged out.
+
+Auth-server posts a form-encoded `logout_token` to
+`POST /api/auth/logout/connect/back-channel/web-client-pkce-registration`.
+The BFF decodes its `sid`, finds the mapped session, and removes its three OAuth2
+tokens and the mapping. Spring Session and pending state/PKCE/nonce keys are left
+alone. Successful, unknown, and repeated logout notifications return an empty
+**200**; missing tokens, malformed JWT payloads, and invalid `sid` claims return
+**400**. Redis errors propagate as server errors. Browser-initiated logout also
+removes the mapping when its stored ID token still identifies it and this session
+still owns it.
+
+**Initial-version limitations:** logout-token signature and OIDC claim validation
+are deferred, so this endpoint must not be exposed to untrusted callers. Each
+`sid` maps to only one BFF session (last write wins). No reverse index is maintained:
+once the old ID token expires, an old mapping may remain until its TTL and a delayed
+logout can clear a newer login on the same BFF session. Gateway refreshes do not
+renew these mappings, and an in-flight refresh can restore tokens after logout.
+
 ## Authorize kick-off — `GET /api/auth/authorize`
 
 Starts the OAuth2 authorization-code flow on behalf of web-client: an unconditional **302 browser redirect** to auth-server's `/oauth2/authorize` with every parameter filled in.
