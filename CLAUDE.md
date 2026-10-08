@@ -630,10 +630,9 @@ Triggers on `pull_request` `opened`/`synchronize`. Steps:
 3. `docker login` — bff-server and auth-server are unchanged dependencies (pulled `:latest`; these are private repos, so authenticate)
 4. Build gateway-server jar: `mvn package -DskipTests`
 5. Build gateway-server image: `mvn jib:dockerBuild -Djib.to.image=$DOCKERHUB_USERNAME/gateway-server:ci`
-6. `docker compose up -d --wait gateway-server` with `GATEWAY_SERVER_TAG=ci`, `SPRING_PROFILES_ACTIVE=test`, which `depends_on`-chains in `eureka-server`, `bff-server-redis`, `bff-server`, and (transitively) `auth-server` + `auth-server-db`; blocks until all are healthy
+6. `docker compose up -d --wait gateway-server` with `GATEWAY_SERVER_TAG=ci`, `SPRING_PROFILES_ACTIVE=test`, which starts `eureka-server`, `bff-server-redis`, the downstream services, and (transitively) `auth-server` + `auth-server-db`; `bff-server` is still started transitively through `simple-resource-server`; blocks until all are healthy
 7. Verify gateway health: `curl --fail --silent http://localhost:8080/actuator/health | grep -q UP`
-8. Run integration test: `mvn surefire:test '-Dtest=GuestRoleGatewayIntegrationTest'` (drives guest authorize→callback via `/bff-server/**` and validates `/simple-resource-server/api/role/guest` through the gateway)
-9. Dump logs on failure
+8. Dump logs on failure
 
 **Required secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `MYSQL_AUTH_SERVER_ROOT_USERNAME` (= `root`), `MYSQL_AUTH_SERVER_ROOT_PASSWORD`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`.
 

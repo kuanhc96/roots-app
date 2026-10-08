@@ -233,8 +233,6 @@ services:
         condition: service_healthy
       bff-server-redis:
         condition: service_healthy
-      bff-server:
-        condition: service_healthy
       simple-resource-server:
         condition: service_healthy
       account-management:
