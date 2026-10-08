@@ -9,6 +9,7 @@ import com.roots.web_client_bff.service.LogoutService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -93,5 +94,10 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.FOUND)
                 .location(logoutRedirect)
                 .build();
+    }
+
+    @PostMapping("/logout/back-channel/test")
+    public ResponseEntity<Void> backChannelLogout(@RequestParam("logout_token") String logoutToken) {
+        return ResponseEntity.ok().build();
     }
 }

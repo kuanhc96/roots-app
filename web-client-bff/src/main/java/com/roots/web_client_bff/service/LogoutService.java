@@ -3,13 +3,19 @@ package com.roots.web_client_bff.service;
 import com.roots.web_client_bff.enums.TokenType;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.util.Optional;
 
+import io.micrometer.common.util.StringUtils;
+
+import com.roots.web_client_bff.util.JwtPayload;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Drives RP-Initiated Logout on behalf of web-client: clears the session's tokens
@@ -24,6 +30,7 @@ import lombok.RequiredArgsConstructor;
  * stored. When the id_token is present it rides along as {@code id_token_hint}: with
  * it, Spring's OIDC logout skips the confirmation page and redirects straight back.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class LogoutService {
@@ -51,5 +58,15 @@ public class LogoutService {
         idToken.ifPresent(token -> builder.queryParam("id_token_hint", token));
 
         return builder.encode().build().toUri();
+    }
+
+    public void logout(String logoutToken) {
+        String sid = JwtPayload.parse(logoutToken).getSid();
+        if (StringUtils.isBlank(sid)) {
+            log.warn("Rejecting back-channel logout: malformed token or invalid sid");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid logout_token");
+        }
+
+        tokenStore.clearTokensBySid(sid);
     }
 }

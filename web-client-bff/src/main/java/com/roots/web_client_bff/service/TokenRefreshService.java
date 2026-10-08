@@ -4,10 +4,12 @@ import com.roots.web_client_bff.client.AuthServerTokenClient;
 import com.roots.web_client_bff.dto.response.TokenResponse;
 import com.roots.web_client_bff.enums.TokenType;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
 
+import com.roots.web_client_bff.util.JwtPayload;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -31,6 +33,12 @@ public class TokenRefreshService {
 
         Optional<TokenResponse> tokens = authServerTokenClient.refreshTokens(refreshToken.get());
         if (tokens.isEmpty()) {
+            tokenStore.delete(sessionId, TokenType.REFRESH_TOKEN);
+            return Optional.empty();
+        }
+
+        JwtPayload idTokenPayload = JwtPayload.parse(tokens.get().idToken());
+        if (StringUtils.isBlank(idTokenPayload.getSid())) {
             tokenStore.delete(sessionId, TokenType.REFRESH_TOKEN);
             return Optional.empty();
         }
