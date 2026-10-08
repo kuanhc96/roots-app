@@ -42,4 +42,12 @@ public record JwtPayload(Map<String, Object> claims) {
     public Instant expiresAt() {
         return Instant.ofEpochSecond(((Number) claims.get("exp")).longValue());
     }
+
+    public String getSid() {
+        Object value = claims.get("sid");
+        if (!(value instanceof String sid) || sid.isBlank()) {
+            return null;
+        }
+        return sid;
+    }
 }

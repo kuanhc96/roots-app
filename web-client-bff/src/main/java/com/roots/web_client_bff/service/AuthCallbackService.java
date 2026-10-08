@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import java.net.URI;
 import java.util.Optional;
 
+import io.micrometer.common.util.StringUtils;
+
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -79,12 +81,17 @@ public class AuthCallbackService {
             return failureRedirect();
         }
 
-        String idTokenNonce = JwtPayload.parse(tokens.get().idToken()).getString("nonce");
+        String idToken = tokens.get().idToken();
+        String idTokenNonce = JwtPayload.parse(idToken).getString("nonce");
         if (storedNonce.isEmpty() || !storedNonce.get().equals(idTokenNonce)) {
             log.warn("Nonce mismatch on callback for session {} — id_token nonce does not match stored nonce", sessionId);
             return failureRedirect();
         }
 
+        String sid = JwtPayload.parse(idToken).getSid();
+        if (StringUtils.isBlank(sid)) {
+            return failureRedirect();
+        }
         tokenStore.storeTokenResponse(sessionId, tokens.get());
         return URI.create(webClientOrigin + "/");
     }
