@@ -5,6 +5,7 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.roots.authserver.component.BackChannelOidcLogoutAuthenticationSuccessHandler;
 import com.roots.authserver.component.GuestAuthenticationProvider;
 import com.roots.authserver.component.MfaAwareDaoAuthenticationProvider;
 import com.roots.authserver.component.MfaAwareRememberMeAuthenticationProvider;
@@ -35,6 +36,8 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.authorization.oidc.web.authentication.OidcLogoutAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.RememberMeServices;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -85,11 +88,14 @@ public class SecurityConfig {
 
     @Bean
     @Order(1)
-    public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain authorizationServerSecurityFilterChain(
+            HttpSecurity http,
+            BackChannelOidcLogoutAuthenticationSuccessHandler backChannelOidcLogoutAuthenticationSuccessHandler
+    ) throws Exception {
         http
                 .oauth2AuthorizationServer((authorizationServer) -> {
                     http.securityMatcher(authorizationServer.getEndpointsMatcher());
-                    authorizationServer.oidc(oidc -> oidc.logoutEndpoint(logout -> logout.logoutResponseHandler(rememberMeOidcLogoutAuthenticationSuccessHandler())));
+                    authorizationServer.oidc(oidc -> oidc.logoutEndpoint(logout -> logout.logoutResponseHandler(backChannelOidcLogoutAuthenticationSuccessHandler)));
                 })
                 .authorizeHttpRequests((authorize) -> authorize.anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions
@@ -292,7 +298,6 @@ public class SecurityConfig {
     }
 
     @Bean
-    public RememberMeOidcLogoutAuthenticationSuccessHandler rememberMeOidcLogoutAuthenticationSuccessHandler() {
-        return new RememberMeOidcLogoutAuthenticationSuccessHandler(new OidcLogoutAuthenticationSuccessHandler());
-    }
-}
+    public JwtEncoder jwtEncoder(JWKSource<SecurityContext> jwkSource) {
+        return new NimbusJwtEncoder(jwkSource);
+    }}
