@@ -29,13 +29,6 @@ public class RouteConfig {
                         .uri("lb://SIMPLE-RESOURCE-SERVER")
                 )
                 .route(p -> p
-                        .path("/roots-app/bff-server/**")
-                        .filters(f -> f
-                                .rewritePath("/roots-app/bff-server/(?<segment>.*)", "/api/$\\{segment}")
-                        )
-                        .uri("lb://BFF-SERVER")
-                )
-                .route(p -> p
                         .path("/roots-app/account-management/**")
                         .filters(f -> f
                                 .rewritePath("/roots-app/account-management/(?<segment>.*)", "/api/$\\{segment}")

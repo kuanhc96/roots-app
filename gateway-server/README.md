@@ -32,6 +32,8 @@ Gateway routing behavior:
 | `/auth-server/**` | `AUTH-SERVER` via discovery-locator route (service-id prefix) |
 | `/account-management/**` | `ACCOUNT-MANAGEMENT` via discovery-locator route (service-id prefix) |
 
+The explicit `/roots-app/bff-server/**` route has been removed; BFF requests, if needed, use only the Eureka discovery-locator route.
+
 ## Configuration
 
 **`src/main/resources/application.yml`:**
@@ -132,9 +134,11 @@ docker compose logs -f gateway-server
 Gateway-server depends on:
 1. `eureka-server` (healthy) — service discovery for `lb://...` targets
 2. `bff-server-redis` (healthy) — the shared token store
-3. `bff-server` (healthy) — gateway routes browser auth traffic to `/bff-server/**`
-   - Which transitively depends on `auth-server` (healthy)
-     - Which transitively depends on `auth-server-db` (healthy)
+3. `simple-resource-server` (healthy) — the gateway's protected resource route
+4. `account-management` and `account-management-bff` (healthy) — gateway discovery routes
+5. `auth-server` and `auth-server-db` are pulled in transitively by the dependent services
+
+The BFF application is not a direct gateway dependency; Compose still starts it transitively through `simple-resource-server`.
 
 ## CI / CD
 
@@ -150,8 +154,7 @@ Gateway-server depends on:
 5. Build gateway-server image: `mvn jib:dockerBuild -Djib.to.image=...:ci`
 6. `docker compose up -d --wait gateway-server` (chains in dependencies, blocks until all healthy)
 7. Verify health: `curl http://localhost:8080/actuator/health | grep UP`
-8. Run integration tests after the stack is healthy: `mvn surefire:test -Dtest="GuestRoleGatewayIntegrationTest"`
-9. Dump logs on failure
+8. Dump logs on failure
 
 **Required GitHub Secrets:**
 - `DOCKERHUB_USERNAME` — for pulling/building images
@@ -175,7 +178,3 @@ Gateway-server depends on:
 **Required GitHub Secrets:**
 - `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` — for push
 - `GH_PAT` — GitHub personal access token for pushing version-bump commit
-
-## Integration Testing
-
-Gateway-server includes an integration test (`GuestRoleGatewayIntegrationTest`) that exercises the guest-login flow through the gateway and validates guest endpoint access.

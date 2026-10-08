@@ -49,7 +49,7 @@ class AccessTokenFilterTest {
         RedisClient redisClient = mock(RedisClient.class);
         AccessTokenFilter filter = new AccessTokenFilter(redisClient);
 
-        MockServerHttpRequest request = MockServerHttpRequest.get("http://localhost:8080/bff-server/api/auth/status")
+        MockServerHttpRequest request = MockServerHttpRequest.get("http://localhost:8080/account-management/api/account")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer incoming")
                 .build();
         ServerWebExchange exchange = MockServerWebExchange.from(request);
