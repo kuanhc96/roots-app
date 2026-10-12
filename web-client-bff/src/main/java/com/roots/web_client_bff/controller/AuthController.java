@@ -98,6 +98,7 @@ public class AuthController {
 
     @PostMapping("/logout/back-channel/test")
     public ResponseEntity<Void> backChannelLogout(@RequestParam("logout_token") String logoutToken) {
+        logoutService.logout(logoutToken);
         return ResponseEntity.ok().build();
     }
 }

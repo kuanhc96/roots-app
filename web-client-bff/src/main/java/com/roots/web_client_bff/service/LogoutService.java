@@ -49,7 +49,6 @@ public class LogoutService {
     public URI buildLogoutRedirect(String sessionId) {
         // Read the id_token for the hint before clearing — clearTokens deletes it.
         Optional<String> idToken = tokenStore.find(sessionId, TokenType.ID_TOKEN);
-        tokenStore.clearTokens(sessionId);
 
         UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(authServerExternalLocation)
                 .path("/connect/logout")
@@ -62,11 +61,6 @@ public class LogoutService {
 
     public void logout(String logoutToken) {
         String sid = JwtPayload.parse(logoutToken).getSid();
-        if (StringUtils.isBlank(sid)) {
-            log.warn("Rejecting back-channel logout: malformed token or invalid sid");
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid logout_token");
-        }
-
         tokenStore.clearTokensBySid(sid);
     }
 }
