@@ -1,6 +1,7 @@
 package com.roots.web_client_bff.validator;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -67,6 +68,12 @@ public class LogoutTokenValidator {
         String nonce = jwtPayload.getNonce();
         if (StringUtils.isNotBlank(nonce)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid logout_token: cannot contain nonce");
+        }
+
+        Object eventsClaim = jwtPayload.claims().get("events");
+        if (!(eventsClaim instanceof Map<?, ?> events)
+                || !events.containsKey("http://schemas.openid.net/event/backchannel-logout")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid logout_token: invalid events claim");
         }
 
         Optional<String> optionalSession = tokenStoreService.findSessionIdBySid(sid);
