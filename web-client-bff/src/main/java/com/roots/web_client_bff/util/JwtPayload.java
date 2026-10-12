@@ -3,7 +3,6 @@ package com.roots.web_client_bff.util;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;

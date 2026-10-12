@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+
+import com.roots.web_client_bff.validator.LogoutTokenValidator;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 
@@ -30,6 +32,7 @@ public class AuthController {
     private final AuthorizeService authorizeService;
     private final AuthCallbackService authCallbackService;
     private final LogoutService logoutService;
+    private final LogoutTokenValidator logoutTokenValidator;
 
     @Operation(
             summary = "Get login status",
@@ -98,6 +101,7 @@ public class AuthController {
 
     @PostMapping("/logout/back-channel/test")
     public ResponseEntity<Void> backChannelLogout(@RequestParam("logout_token") String logoutToken) {
+        logoutTokenValidator.validate(logoutToken);
         logoutService.logout(logoutToken);
         return ResponseEntity.ok().build();
     }

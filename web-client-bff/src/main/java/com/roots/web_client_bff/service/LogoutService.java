@@ -3,15 +3,11 @@ package com.roots.web_client_bff.service;
 import com.roots.web_client_bff.enums.TokenType;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.util.Optional;
-
-import io.micrometer.common.util.StringUtils;
 
 import com.roots.web_client_bff.util.JwtPayload;
 import lombok.RequiredArgsConstructor;
