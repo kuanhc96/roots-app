@@ -56,6 +56,7 @@ public class LogoutService {
     }
 
     public void logout(String logoutToken) {
+        tokenStore.storeLogoutToken(logoutToken);
         String sid = JwtPayload.parse(logoutToken).getSid();
         tokenStore.clearTokensBySid(sid);
     }

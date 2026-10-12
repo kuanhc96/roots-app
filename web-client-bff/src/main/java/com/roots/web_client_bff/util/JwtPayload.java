@@ -100,4 +100,13 @@ public record JwtPayload(Map<String, Object> claims, Map<String, Object> headers
         }
         return sub;
     }
+
+    public String getJti() {
+        Object value = claims.get("jti");
+        if (!(value instanceof String jti) || jti.isBlank()) {
+            return null;
+        }
+        return jti;
+
+    }
 }

@@ -4,6 +4,7 @@ import com.roots.web_client_bff.dto.response.TokenResponse;
 import com.roots.web_client_bff.enums.TokenType;
 import com.roots.web_client_bff.util.JwtPayload;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,17 @@ public class TokenStoreService {
         if (timeToLive.isPositive()) {
             redisTemplate.opsForValue().set(key(sessionId, type), token, timeToLive);
         }
+    }
+
+    public void storeLogoutToken(String logoutToken) {
+        JwtPayload jwtPayload = JwtPayload.parse(logoutToken);
+        String jti = jwtPayload.getJti();
+        Duration logoutTokenTtl = Duration.between(Instant.now(), jwtPayload.expiresAt());
+        redisTemplate.opsForValue().set(jti + ":logout_token", logoutToken, logoutTokenTtl);
+    }
+
+    public boolean logoutTokenExists(String jti) {
+        return StringUtils.isNotBlank(redisTemplate.opsForValue().get(jti + ":logout_token"));
     }
 
     public void delete(String sessionId, TokenType type) {
