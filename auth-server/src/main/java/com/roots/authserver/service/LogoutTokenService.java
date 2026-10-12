@@ -3,6 +3,7 @@ package com.roots.authserver.service;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
@@ -43,12 +44,14 @@ public class LogoutTokenService {
                                       HttpSession session) throws NoSuchAlgorithmException {
         String jti = UUID.randomUUID().toString();
         String hashedSid = createSessionIdHash(session.getId());
+        Instant issuedAt = Instant.now();
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer(iss)
                 .subject(authentication.getName())
                 .audience(List.of(clientId))
-                .issuedAt(Instant.now())
+                .issuedAt(issuedAt)
+                .expiresAt(issuedAt.plus(Duration.ofMinutes(5)))
                 .claim("sid", hashedSid)
                 .claim("jti", jti)
                 .claim("events", Map.of("http://schemas.openid.net/event/backchannel-logout", Map.of()))
