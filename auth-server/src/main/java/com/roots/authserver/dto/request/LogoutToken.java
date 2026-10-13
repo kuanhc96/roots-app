@@ -12,6 +12,7 @@ public record LogoutToken(
         String sid,
         String jti,
         Long iat,
+        Long exp,
         Map<String, Object> events
 ) {
 }

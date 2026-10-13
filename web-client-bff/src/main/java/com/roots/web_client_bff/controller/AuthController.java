@@ -9,12 +9,15 @@ import com.roots.web_client_bff.service.LogoutService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+
+import com.roots.web_client_bff.validator.LogoutTokenValidator;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 
@@ -29,6 +32,7 @@ public class AuthController {
     private final AuthorizeService authorizeService;
     private final AuthCallbackService authCallbackService;
     private final LogoutService logoutService;
+    private final LogoutTokenValidator logoutTokenValidator;
 
     @Operation(
             summary = "Get login status",
@@ -93,5 +97,12 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.FOUND)
                 .location(logoutRedirect)
                 .build();
+    }
+
+    @PostMapping("/logout/back-channel/test")
+    public ResponseEntity<Void> backChannelLogout(@RequestParam("logout_token") String logoutToken) {
+        logoutTokenValidator.validate(logoutToken);
+        logoutService.logout(logoutToken);
+        return ResponseEntity.ok().build();
     }
 }

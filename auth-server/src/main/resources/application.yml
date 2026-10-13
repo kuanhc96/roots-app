@@ -68,6 +68,9 @@ remember-me:
   key: ${REMEMBER_ME_KEY:dev-remember-me-key-change-in-prod}
   token-validity-seconds: ${REMEMBER_ME_TOKEN_VALIDITY_SECONDS:1209600}
 
+logout-token:
+  time-to-live-seconds: ${LOGOUT_TOKEN_TIME_TO_LIVE_SECONDS:300}
+
 web-client:
   location: ${WEB_CLIENT_LOCATION:http://localhost:3000}
 

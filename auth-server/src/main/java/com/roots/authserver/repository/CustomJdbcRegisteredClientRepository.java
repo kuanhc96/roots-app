@@ -15,6 +15,7 @@ import org.springframework.security.oauth2.server.authorization.settings.TokenSe
 import org.springframework.stereotype.Repository;
 
 import tools.jackson.databind.json.JsonMapper;
+
 @Repository
 public class CustomJdbcRegisteredClientRepository extends JdbcRegisteredClientRepository {
     private final JsonMapper jsonMapper = new JsonMapper();

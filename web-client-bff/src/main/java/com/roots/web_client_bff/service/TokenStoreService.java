@@ -4,6 +4,7 @@ import com.roots.web_client_bff.dto.response.TokenResponse;
 import com.roots.web_client_bff.enums.TokenType;
 import com.roots.web_client_bff.util.JwtPayload;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -45,6 +46,17 @@ public class TokenStoreService {
         }
     }
 
+    public void storeLogoutToken(String logoutToken) {
+        JwtPayload jwtPayload = JwtPayload.parse(logoutToken);
+        String jti = jwtPayload.getJti();
+        Duration logoutTokenTtl = Duration.between(Instant.now(), jwtPayload.expiresAt());
+        redisTemplate.opsForValue().set(jti + ":logout_token", logoutToken, logoutTokenTtl);
+    }
+
+    public boolean logoutTokenExists(String jti) {
+        return StringUtils.isNotBlank(redisTemplate.opsForValue().get(jti + ":logout_token"));
+    }
+
     public void delete(String sessionId, TokenType type) {
         redisTemplate.delete(key(sessionId, type));
     }
@@ -69,15 +81,34 @@ public class TokenStoreService {
      * stored one is dropped (rotation invalidated the token that was just used).
      */
     public void storeTokenResponse(String sessionId, TokenResponse tokens) {
-        storeJwt(sessionId, TokenType.ACCESS_TOKEN, tokens.accessToken());
-        storeJwt(sessionId, TokenType.ID_TOKEN, tokens.idToken());
+        String accessToken = tokens.accessToken();
+        String refreshToken = tokens.refreshToken();
+        String idToken = tokens.idToken();
+        JwtPayload idTokenPayload = JwtPayload.parse(idToken);
+
+        // should not assume that the sid returned from authorization grant is the same as that returned from token refresh
+        Duration idTokenTtl = Duration.between(Instant.now(), idTokenPayload.expiresAt());
+        redisTemplate.delete(sidKey(idTokenPayload.getSid()));
+        redisTemplate.opsForValue().set(sidKey(idTokenPayload.getSid()), sessionId, idTokenTtl);
+
+        store(sessionId, TokenType.ID_TOKEN, idToken, idTokenTtl);
+        storeJwt(sessionId, TokenType.ACCESS_TOKEN, accessToken);
+        storeJwt(sessionId, TokenType.ID_TOKEN, idToken);
 
         if (tokens.refreshToken() != null) {
-            store(sessionId, TokenType.REFRESH_TOKEN, tokens.refreshToken(),
-                    Duration.ofSeconds(refreshTokenTtlSeconds));
+            store(sessionId, TokenType.REFRESH_TOKEN, refreshToken, Duration.ofSeconds(refreshTokenTtlSeconds));
         } else {
             delete(sessionId, TokenType.REFRESH_TOKEN);
         }
+    }
+
+    public Optional<String> findSessionIdBySid(String sid) {
+        return Optional.ofNullable(redisTemplate.opsForValue().get(sidKey(sid)));
+    }
+
+    public void clearTokensBySid(String sid) {
+        findSessionIdBySid(sid).ifPresent(this::clearTokens);
+        redisTemplate.delete(sidKey(sid));
     }
 
     /** Stores a JWT with TTL = its own exp, so Redis drops it the moment it expires. */
@@ -91,5 +122,9 @@ public class TokenStoreService {
 
     private static String key(String sessionId, TokenType type) {
         return sessionId + ":" + type.key();
+    }
+
+    private static String sidKey(String sid) {
+        return "oidc:sid:" + sid;
     }
 }

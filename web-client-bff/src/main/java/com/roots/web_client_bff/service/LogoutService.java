@@ -9,7 +9,9 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.net.URI;
 import java.util.Optional;
 
+import com.roots.web_client_bff.util.JwtPayload;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Drives RP-Initiated Logout on behalf of web-client: clears the session's tokens
@@ -24,6 +26,7 @@ import lombok.RequiredArgsConstructor;
  * stored. When the id_token is present it rides along as {@code id_token_hint}: with
  * it, Spring's OIDC logout skips the confirmation page and redirects straight back.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class LogoutService {
@@ -42,7 +45,6 @@ public class LogoutService {
     public URI buildLogoutRedirect(String sessionId) {
         // Read the id_token for the hint before clearing — clearTokens deletes it.
         Optional<String> idToken = tokenStore.find(sessionId, TokenType.ID_TOKEN);
-        tokenStore.clearTokens(sessionId);
 
         UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(authServerExternalLocation)
                 .path("/connect/logout")
@@ -51,5 +53,11 @@ public class LogoutService {
         idToken.ifPresent(token -> builder.queryParam("id_token_hint", token));
 
         return builder.encode().build().toUri();
+    }
+
+    public void logout(String logoutToken) {
+        tokenStore.storeLogoutToken(logoutToken);
+        String sid = JwtPayload.parse(logoutToken).getSid();
+        tokenStore.clearTokensBySid(sid);
     }
 }

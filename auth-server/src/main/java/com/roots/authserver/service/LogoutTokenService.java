@@ -3,12 +3,14 @@ package com.roots.authserver.service;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
@@ -35,6 +37,9 @@ public class LogoutTokenService {
 
     private final JwtEncoder jwtEncoder;
 
+    @Value("${logout-token.time-to-live-seconds}")
+    private long timeToLiveSeconds;
+
     /**
      * Generates a signed LogoutToken JWT for notifying an RP of logout.
      * The session ID is hashed using SHA-256 to match the `sid` claim in id_tokens.
@@ -43,12 +48,14 @@ public class LogoutTokenService {
                                       HttpSession session) throws NoSuchAlgorithmException {
         String jti = UUID.randomUUID().toString();
         String hashedSid = createSessionIdHash(session.getId());
+        Instant issuedAt = Instant.now();
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer(iss)
                 .subject(authentication.getName())
                 .audience(List.of(clientId))
-                .issuedAt(Instant.now())
+                .issuedAt(issuedAt)
+                .expiresAt(issuedAt.plus(Duration.ofSeconds(timeToLiveSeconds)))
                 .claim("sid", hashedSid)
                 .claim("jti", jti)
                 .claim("events", Map.of("http://schemas.openid.net/event/backchannel-logout", Map.of()))

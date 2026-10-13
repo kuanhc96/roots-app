@@ -14,6 +14,7 @@ A fullstack Spring Boot + Nuxt/Vue application that handles authentication for t
 | `SERVER_PORT`                     | No | `9000` | HTTP port the server listens on |
 | `REMEMBER_ME_KEY`                 | No | `dev-remember-me-key-change-in-prod` | Secret key used to sign remember-me cookies; change in production |
 | `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` | No | `1209600` (14 days) | Lifetime of the remember-me cookie in seconds |
+| `LOGOUT_TOKEN_TIME_TO_LIVE_SECONDS` | No | `300` (5 minutes) | Logout token lifetime in seconds (`logout-token.time-to-live-seconds`); `exp` is `iat` plus this value |
 | `WEB_CLIENT_LOCATION`               | No | `http://localhost:3000` | Base URL of web-client; used to hand off the OAuth2 flow after magic-link email verification when no saved request exists |
 | `SPRING_MAIL_USERNAME`              | Yes (every profile) | — (no default) | Gmail address; the `JavaMailSender` is built in every profile and the Actuator mail health indicator connects to SMTP, so this is required at startup everywhere |
 | `SPRING_MAIL_PASSWORD`              | Yes (every profile) | — (no default) | Gmail App Password for the above account (not the account password; requires 2FA + App Password in Google Account settings) |
