@@ -26,9 +26,7 @@ jobs:
         working-directory: gateway-server
         run: mvn test -Dtest="GatewayServerApplicationTests,AccessTokenFilterTest,RefreshTokenFilterTest"
 
-      # bff-server and auth-server are unchanged dependencies for this workflow (the paths
-      # filter means a triggering PR only touched gateway-server), so pull their published
-      # :latest images rather than rebuilding them. These are private repos, so authenticate.
+      # Published dependency images include private repositories.
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -46,15 +44,23 @@ jobs:
         working-directory: gateway-server
         run: mvn jib:dockerBuild -Djib.to.image=${{ secrets.DOCKERHUB_USERNAME }}/gateway-server:ci
 
-      # Bring up bff-server-redis + auth-server-db + auth-server + bff-server + gateway-server
-      # on the shared docker network. depends_on chains in the dependencies; gateway-server uses
+      # Build the migrated login fixture locally so CI does not need a first CD release.
+      - name: Build web-client-bff login fixture
+        working-directory: web-client-bff
+        run: |
+          mvn package -DskipTests
+          mvn jib:dockerBuild -Djib.to.image=${{ secrets.DOCKERHUB_USERNAME }}/web-client-bff:ci
+
+      # Bring up web-client-bff after gateway-server and its resource dependencies
+      # on the shared docker network. depends_on chains in dependencies; gateway-server uses
       # the local :ci image. --wait blocks until all are healthy — the gateway-server healthcheck
       # hits /actuator/health.
       - name: Start services
-        run: docker compose up -d --wait gateway-server
+        run: docker compose up -d --wait web-client-bff
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           GATEWAY_SERVER_TAG: ci
+          WEB_CLIENT_BFF_TAG: ci
           SPRING_PROFILES_ACTIVE: test
           # Matches the {noop}secret WEB_CLIENT seed in create_client_table.sql (already
           # public in the checked-in SQL, so not a GitHub secret).
@@ -63,6 +69,7 @@ jobs:
           MYSQL_AUTH_SERVER_ROOT_PASSWORD: ${{ secrets.MYSQL_AUTH_SERVER_ROOT_PASSWORD }}
           SPRING_MAIL_USERNAME: ${{ secrets.SPRING_MAIL_USERNAME }}
           SPRING_MAIL_PASSWORD: ${{ secrets.SPRING_MAIL_PASSWORD }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
 
       - name: Verify gateway-server health
         run: curl --fail --silent http://localhost:8080/actuator/health | grep -q UP
@@ -77,16 +84,28 @@ jobs:
             if echo "$compact_json" | grep -q '"name":"GATEWAY-SERVER"' \
               && echo "$compact_json" | grep -q '"name":"SIMPLE-RESOURCE-SERVER"' \
               && echo "$compact_json" | grep -q '"name":"ACCOUNT-MANAGEMENT"' \
-              && echo "$compact_json" | grep -q '"name":"ACCOUNT-MANAGEMENT-BFF"' \
-              && echo "$compact_json" | grep -q '"name":"BFF-SERVER"'; then
+              && echo "$compact_json" | grep -q '"name":"ACCOUNT-MANAGEMENT-BFF"'; then
               echo "All required apps are registered in Eureka."
               exit 0
             fi
-            echo "Attempt $i: waiting for GATEWAY-SERVER, SIMPLE-RESOURCE-SERVER, ACCOUNT-MANAGEMENT, ACCOUNT-MANAGEMENT-BFF, BFF-SERVER in /eureka/apps"
+            echo "Attempt $i: waiting for GATEWAY-SERVER, SIMPLE-RESOURCE-SERVER, ACCOUNT-MANAGEMENT, ACCOUNT-MANAGEMENT-BFF in /eureka/apps"
             sleep 2
           done
           sleep 4
           echo "Timed out waiting for required Eureka app registrations"
+          exit 1
+
+      - name: Wait for gateway resource route readiness
+        run: |
+          for i in {1..60}; do
+            status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              http://localhost:8080/roots-app/simple-resource-server/role/guest)
+            if [ "$status" = "401" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Timed out waiting for gateway to route requests to simple-resource-server"
           exit 1
 
       # Integration tests run after the docker network/services are up.

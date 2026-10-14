@@ -1,17 +1,20 @@
-name: BFF Server CD
+name: Web Client BFF CD
 
 on:
   push:
     branches: [main]
     paths:
-      - 'bff-server/src/**'
-      - 'bff-server/pom.xml'
+      - 'web-client-bff/src/**'
+      - 'web-client-bff/frontend/**'
+      - 'web-client-bff/pom.xml'
+      - '.github/workflows/web-client-bff-cd.yml'
 
 permissions:
   contents: write
 
 jobs:
   build-and-push:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
 
     steps:
@@ -35,7 +38,7 @@ jobs:
 
       - name: Compute release version
         id: version
-        working-directory: bff-server
+        working-directory: web-client-bff
         run: |
           SNAPSHOT_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           BASE_VERSION=${SNAPSHOT_VERSION%-SNAPSHOT}
@@ -46,24 +49,24 @@ jobs:
           echo "next_snapshot=${NEXT_SNAPSHOT}" >> $GITHUB_OUTPUT
 
       - name: Set pom.xml to release version
-        working-directory: bff-server
+        working-directory: web-client-bff
         run: mvn versions:set -DnewVersion=${{ steps.version.outputs.release }} -DgenerateBackupPoms=false
 
       - name: Build and push Docker image
-        working-directory: bff-server
+        working-directory: web-client-bff
         run: |
           mvn clean compile jib:build -DskipTests \
-            -Djib.to.image=${{ secrets.DOCKERHUB_USERNAME }}/bff-server:${{ steps.version.outputs.release }} \
+            -Djib.to.image=${{ secrets.DOCKERHUB_USERNAME }}/web-client-bff:${{ steps.version.outputs.release }} \
             -Djib.to.tags=latest
 
       - name: Set pom.xml to next snapshot version
-        working-directory: bff-server
+        working-directory: web-client-bff
         run: mvn versions:set -DnewVersion=${{ steps.version.outputs.next_snapshot }} -DgenerateBackupPoms=false
 
       - name: Commit and push version bump
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add bff-server/pom.xml
-          git commit -m "chore: bump bff-server to ${{ steps.version.outputs.next_snapshot }} [skip ci]"
+          git add web-client-bff/pom.xml
+          git commit -m "chore: bump web-client-bff to ${{ steps.version.outputs.next_snapshot }} [skip ci]"
           git push

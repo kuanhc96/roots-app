@@ -105,6 +105,10 @@ class CallbackIntegrationTest {
         Map<String, Object> body = OBJECT_MAPPER.readValue(status.body(), new TypeReference<>() {
         });
         assertThat(body.get("isLoggedIn")).isEqualTo(true);
+
+        HttpResponse<String> role = bffClient.getGuestRole(sessionCookie);
+        assertThat(role.statusCode()).isEqualTo(200);
+        assertThat(role.body()).isEqualTo("I am a guest");
     }
 
     @Test
