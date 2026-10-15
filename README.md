@@ -8,9 +8,9 @@ A Spring Cloud microservices application that combines a Spring Authorization Se
 |---|---|---|---|
 | `eureka-server` | Spring Cloud Netflix Eureka | 8070 (internal registry) | Service discovery registry |
 | `config-server` | Spring Cloud Config | configurable | Centralized configuration |
-| `gateway-server` | Spring Cloud Gateway (WebFlux) | 8080 | Single entry point; attaches OAuth2 tokens from shared Redis and routes all traffic |
+| `gateway-server` | Spring Cloud Gateway (WebFlux) | 8080 | Routes internal resource APIs and supports token enrichment from shared Redis |
 | `auth-server` | Spring Boot + Nuxt/Vue | 9000 | OAuth2 Authorization Server + embedded SPA frontend |
-| `bff-server` | Spring Boot | 8083 | Backend-for-frontend; owns token storage in Redis and manages browser-facing auth state |
+| `web-client-bff` | Spring Boot + Nuxt/Vue | 8083 | Embedded web-client SPA and BFF; owns browser sessions and OAuth2 tokens in Redis |
 | `account-management-bff` | Spring Boot | 8084 | BFF for the account-management client; stores tokens in Redis under a separate `__Host-AMC_SESSION` session |
 | `simple-resource-server` | Spring Boot | 8081 | Example protected resource server with role-based endpoints |
 | `account-management` | Spring Boot | 8082 | Shared-db account CRUD service used for integration fixtures and testing |
@@ -25,14 +25,12 @@ The current stack is intended to start in this order:
 3. `auth-server-db`
 4. `auth-server`
 5. `bff-server-redis`
-6. `bff-server`
-7. `account-management-bff` (for the account-management client flow)
-8. `gateway-server`
+6. `account-management-bff`, `simple-resource-server`, and `account-management`
+7. `gateway-server`
+8. `web-client-bff` (waits for healthy gateway-server, auth-server, and shared Redis)
 
 Then separately, as needed:
 
-- `simple-resource-server`
-- `account-management`
 - `web-client`
 
 ## Runtime model
@@ -40,12 +38,12 @@ Then separately, as needed:
 The architecture has moved beyond a simple auth-server + resource-server pattern:
 
 - `auth-server` is the Authorization Server and also serves the embedded Nuxt frontend.
-- `bff-server` owns the browser session for the main web-client flow and stores access/refresh/id tokens in Redis keyed by the session ID.
+- `web-client-bff` serves the embedded SPA directly, owns its browser session, and stores access/refresh/id tokens in Redis keyed by the session ID. It does not register with Eureka or sit behind gateway-server; its outbound role calls use the gateway.
 - `account-management-bff` mirrors that pattern for the account-management client, using a separate `__Host-AMC_SESSION` cookie and the `ACCOUNT_MANAGEMENT_CLIENT` / `ACCOUNT_MANAGEMENT_SUPER_CLIENT` confidential PKCE clients.
 - `gateway-server` sits in front of downstream services, reads the session's token data from the shared Redis, and attaches bearer tokens before routing requests.
 - `simple-resource-server` and `account-management` validate JWTs from `auth-server` and enforce scope/role checks with `@PreAuthorize`.
 - `account-management` shares the same MySQL schema as `auth-server` (`user_credential` and `role`) and is used for integration fixtures and account lifecycle testing.
-- `web-client` does not hold tokens client-side; it relies on `bff-server` for status, authorize, callback, and logout flows, while the account-management client uses the dedicated BFF.
+- The embedded web-client does not hold tokens client-side; it uses same-origin BFF endpoints for status, authorize, callback, logout, and role calls. The standalone `web-client/` and old `bff-server/` source directories remain, but the old BFF is no longer part of Compose or CI/CD.
 
 ## Local infrastructure
 
@@ -56,7 +54,7 @@ The root `docker-compose.yml` wires up the shared test stack on the `roots_backe
 - `bff-server-redis` runs Redis on port `6379`
 - `auth-server` exposes port `9000`
 - `account-management` exposes port `8082`
-- `bff-server` exposes port `8083`
+- `web-client-bff` exposes port `8083`
 - `account-management-bff` exposes port `8084`
 - `gateway-server` exposes port `8080`
 
@@ -66,16 +64,17 @@ The database self-seeds from `auth-server/src/main/resources/initialize_db/` on 
 
 - `auth-server` uses MySQL on `localhost:3308` by default (`MYSQL_AUTH_SERVER_DB_URL`).
 - `auth-server` requires `MYSQL_AUTH_SERVER_ROOT_USERNAME` and `MYSQL_AUTH_SERVER_ROOT_PASSWORD` at startup.
-- Spring Session uses a secure `__Host-AUTH_SESSION` cookie for the auth-server session, while bff-server uses its own `__Host-SESSION` cookie.
+- Spring Session uses a secure `__Host-AUTH_SESSION` cookie for the auth-server session, while web-client-bff uses its own `__Host-SESSION` cookie.
 - `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET` is a frontend build-time variable, not a runner-time JVM variable, because the embedded Nuxt app is statically generated.
 - The mail credentials (`SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`) are required in every profile because the `JavaMailSender` is built regardless of profile and its health check opens an SMTP connection.
-- `gateway-server`, `bff-server`, and `account-management-bff` all depend on the shared Redis store used by the browser-backed token flow.
+- `gateway-server`, `web-client-bff`, and `account-management-bff` all depend on the shared `bff-server-redis` store used by the browser-backed token flow.
 - `account-management-bff` authenticates as the `ACCOUNT_MANAGEMENT_CLIENT` / `ACCOUNT_MANAGEMENT_SUPER_CLIENT` confidential PKCE clients and expects `ACCOUNT_MANAGEMENT_CLIENT_SECRET` to match the seeded `{noop}secret` value in the auth-server DB.
 
 ## Repository layout
 
 - `auth-server/` — OAuth2 Authorization Server and embedded Nuxt frontend
-- `bff-server/` — session-backed token broker for the main web-client
+- `web-client-bff/` — embedded Nuxt SPA and session-backed token broker
+- `bff-server/` — legacy BFF source (no longer deployed by Compose or CI/CD)
 - `account-management-bff/` — session-backed token broker for the account-management client
 - `gateway-server/` — API gateway and token relay
 - `simple-resource-server/` — sample protected resource app
@@ -85,7 +84,7 @@ The database self-seeds from `auth-server/src/main/resources/initialize_db/` on 
 
 ## CI and CD
 
-GitHub Actions workflows live in `.github/workflows/` and cover the service-specific CI/CD flows for `auth-server`, `account-management`, `bff-server`, `gateway-server`, and `simple-resource-server`.
+GitHub Actions workflows live in `.github/workflows/` and cover the service-specific CI/CD flows for `auth-server`, `account-management`, `web-client-bff`, `gateway-server`, and `simple-resource-server`.
 
 The current workflow pattern is:
 
@@ -106,7 +105,7 @@ docker compose up -d bff-server-redis
 
 # Run a service from its own directory
 cd auth-server && mvn spring-boot:run
-cd bff-server && WEB_CLIENT_SECRET=secret mvn spring-boot:run
+cd web-client-bff && WEB_CLIENT_SECRET=secret mvn spring-boot:run
 cd account-management-bff && ACCOUNT_MANAGEMENT_CLIENT_SECRET=secret mvn spring-boot:run
 cd gateway-server && mvn spring-boot:run
 cd simple-resource-server && mvn spring-boot:run
@@ -119,7 +118,7 @@ cd web-client && npm install && npm run dev
 See the service READMEs for the operational details and workflow-specific instructions:
 
 - `auth-server/README.md`
-- `bff-server/README.md`
+- `web-client-bff/README.md`
 - `account-management-bff/README.md`
 - `gateway-server/README.md`
 - `account-management/README.md`

@@ -1,12 +1,12 @@
 # Gateway Server
 
-**Spring Cloud Gateway** (WebFlux) — the single entry point for all traffic. Routes requests to downstream services (auth-server, bff-server, simple-resource-server, account-management) while enriching them with OAuth2 access tokens stored in Redis by the bff-server.
+**Spring Cloud Gateway** (WebFlux) routes requests to downstream resource services and can enrich them with OAuth2 access tokens from shared Redis. web-client-bff serves browser traffic directly and sends its outbound role API calls through the gateway with a bearer token.
 
 ## Architecture
 
 Gateway-server runs on **port 8080** and acts as a reverse proxy for the entire application:
 
-- **All traffic flows through the gateway**, including OAuth2 redirects and login forms
+- web-client-bff's SPA, login lifecycle, and callback are not gateway routes and require no Eureka registration
 - Browser session cookie (`__Host-SESSION`) is preserved through the gateway
 - Gateway reads access tokens from **shared bff-server Redis** (port 6379) using the session ID decoded from the cookie
 - Tokens are attached to upstream requests targeting protected resource servers
@@ -28,7 +28,6 @@ Gateway routing behavior:
 | Path | Upstream |
 |---|---|
 | `/simple-resource-server/**` | `SIMPLE-RESOURCE-SERVER` via a custom route (`rewritePath` removes the prefix) with `RefreshTokenFilter` then `AccessTokenFilter` |
-| `/bff-server/**` | `BFF-SERVER` via discovery-locator route (service-id prefix) |
 | `/auth-server/**` | `AUTH-SERVER` via discovery-locator route (service-id prefix) |
 | `/account-management/**` | `ACCOUNT-MANAGEMENT` via discovery-locator route (service-id prefix) |
 
@@ -117,7 +116,7 @@ mvn test
 Gateway-server is part of the `docker-compose.yml` stack:
 
 ```bash
-# Start gateway + all dependencies (bff-server-redis, auth-server-redis, auth-server-db, auth-server, bff-server)
+# Start gateway + its registry, resource services, shared Redis and auth dependencies
 docker compose up -d --wait gateway-server
 
 # Gateway health check
@@ -132,9 +131,9 @@ docker compose logs -f gateway-server
 Gateway-server depends on:
 1. `eureka-server` (healthy) — service discovery for `lb://...` targets
 2. `bff-server-redis` (healthy) — the shared token store
-3. `bff-server` (healthy) — gateway routes browser auth traffic to `/bff-server/**`
-   - Which transitively depends on `auth-server` (healthy)
-     - Which transitively depends on `auth-server-db` (healthy)
+3. `simple-resource-server`, `account-management`, and `account-management-bff` (healthy), which bring in auth-server and its DB/Redis dependencies
+
+There is no startup dependency on web-client-bff. Instead, web-client-bff waits for the gateway to be healthy, avoiding a startup cycle.
 
 ## CI / CD
 
@@ -145,10 +144,10 @@ Gateway-server depends on:
 **Steps:**
 1. Checkout and setup JDK 21 + Maven cache
 2. Run unit tests first (fast-fail gate): `mvn test -Dtest="GatewayServerApplicationTests,AccessTokenFilterTest,RefreshTokenFilterTest"`
-3. Docker login (pull private `:latest` images of bff-server, auth-server)
+3. Docker login (pull private `:latest` dependency images, including auth-server)
 4. Build gateway-server jar: `mvn package -DskipTests`
 5. Build gateway-server image: `mvn jib:dockerBuild -Djib.to.image=...:ci`
-6. `docker compose up -d --wait gateway-server` (chains in dependencies, blocks until all healthy)
+6. Build web-client-bff's embedded SPA/JAR and local `:ci` image as the login fixture, then `docker compose up -d --wait web-client-bff` (starts the local gateway image and dependencies first; no initial web-client-bff CD release is required)
 7. Verify health: `curl http://localhost:8080/actuator/health | grep UP`
 8. Run integration tests after the stack is healthy: `mvn surefire:test -Dtest="GuestRoleGatewayIntegrationTest"`
 9. Dump logs on failure
@@ -158,6 +157,7 @@ Gateway-server depends on:
 - `DOCKERHUB_TOKEN` — for Docker Hub authentication
 - `MYSQL_AUTH_SERVER_ROOT_USERNAME` / `MYSQL_AUTH_SERVER_ROOT_PASSWORD` — for DB container
 - `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` — for auth-server mail bean healthcheck
+- `GOOGLE_CLIENT_SECRET` — for auth-server's server-side Google token exchange configuration
 
 ### CD Pipeline (`gateway-server-cd.yml`)
 
@@ -178,4 +178,4 @@ Gateway-server depends on:
 
 ## Integration Testing
 
-Gateway-server includes an integration test (`GuestRoleGatewayIntegrationTest`) that exercises the guest-login flow through the gateway and validates guest endpoint access.
+Gateway-server includes an integration test (`GuestRoleGatewayIntegrationTest`) that exercises guest login directly through web-client-bff, then validates guest endpoint access through the gateway. The old BFF route and its Eureka registration requirement have been removed.

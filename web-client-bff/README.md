@@ -116,7 +116,7 @@ curl -i http://localhost:8083/actuator/health     # expect 200, {"status":"UP"},
 docker exec bff-server-redis redis-cli --scan --pattern "spring:session:*"
 ```
 
-The `web-client-bff` application is not yet defined in Docker Compose or CI/CD. The Redis command starts the existing shared BFF Redis service.
+To start the containerized app and its dependencies, use `docker compose up -d --wait web-client-bff`. It waits for healthy auth-server, shared Redis, and gateway-server; gateway-server starts its discovered resource services first. Set the required Compose environment variables before running this command.
 
 The `auth-server` client seed now permits `http://localhost:8083/logout` for the embedded app while preserving the standalone `http://localhost:3000/logout` URI. MySQL only runs initialization scripts on its first initialization; for an existing local database, add the embedded URI to both browser-client rows:
 
@@ -141,8 +141,8 @@ Start Redis and web-client-bff as shown under [Running](#running), plus a live *
 |---|---|---|
 | `bff-server-location` | `http://localhost:8083` | Existing test property for the base URL of the running web-client-bff |
 | `auth-server-location` | `http://localhost:9000` | Base URL of the running auth-server |
-| `web-client-location` | `http://localhost:3000` | OAuth2 redirect URI origin for the guest flow |
-| `web-client-id` / `web-client-secret` | `WEB_CLIENT` / `secret` | Client credentials for the guest code exchange (must match the DB seed) |
+| `web-client-location` | `http://localhost:8083` | Embedded SPA origin for callback success/error and logout redirects |
+| `web-client-id` / `web-client-secret` | `WEB_CLIENT_PKCE` / `secret` | Client credentials for the guest code exchange (must match the DB seed) |
 | `redis-host` / `redis-port` | `localhost` / `6379` | Where the test seeds token keys directly |
 
 Declared in `src/test/resources/application.yml`; override with `-D<property>=<value>`.
@@ -175,4 +175,12 @@ Covers `GET /api/auth/authorize` at two depths:
 
 ## CI/CD and Docker Compose
 
-No dedicated CI/CD workflows or Docker Compose service have been added for web-client-bff yet. The existing `bff-server` workflows and Compose service remain unchanged.
+The `web-client-bff-ci.yml` and `web-client-bff-cd.yml` workflows replace the old bff-server workflows. Both include `src/**`, `frontend/**`, and `pom.xml` in their path filters.
+
+CI runs on PR `opened`/`synchronize`: set up JDK 21 with Maven cache, log in to Docker Hub, run `mvn package -DskipTests` (including Nuxt generation and test compilation), build a local `web-client-bff:ci` image with Jib, then run `docker compose up -d --wait web-client-bff`. Dependency services use published `:latest` images. After the gateway resource route becomes reachable, `mvn surefire:test '-Dtest=%regex[.*integration.*]'` runs the live integration suite, including guest login followed by `/api/role/guest` through the gateway to simple-resource-server. Container logs are dumped on failure.
+
+CI requires `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `MYSQL_AUTH_SERVER_ROOT_USERNAME`, `MYSQL_AUTH_SERVER_ROOT_PASSWORD`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`, and `GOOGLE_CLIENT_SECRET` secrets. Mail credentials must pass auth-server's SMTP health check; the Google secret is an auth-server runtime variable. `WEB_CLIENT_SECRET=secret` matches the checked-in confidential PKCE client seed.
+
+CD runs on `main` pushes: compute the next patch release, set the POM version, build the embedded SPA and Java classes with `mvn clean compile jib:build -DskipTests`, push versioned and `latest` tags, then commit the next SNAPSHOT with `[skip ci]`. Required secrets are `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, and `GH_PAT`.
+
+Compose publishes port `8083` and sets internal auth-server and gateway URLs to their container hostnames. The browser-facing URLs retain localhost defaults matching the seeded OAuth client. web-client-bff has no Eureka registration or inbound gateway route. Shared `bff-server-redis` remains in use by web-client-bff, account-management-bff, and gateway-server.

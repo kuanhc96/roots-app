@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.roots.web_client_bff.client.AuthServerClient;
 import com.roots.web_client_bff.client.BffClient;
+import com.roots.web_client_bff.client.SimpleResourceProxyClient;
 import com.roots.web_client_bff.enums.TokenType;
 
 import tools.jackson.core.type.TypeReference;
@@ -61,6 +62,7 @@ class CallbackIntegrationTest {
 
     private BffClient bffClient;
     private AuthServerClient authServerClient;
+    private SimpleResourceProxyClient simpleResourceProxyClient;
     private String sessionId;
     private String sessionCookie;
 
@@ -68,6 +70,7 @@ class CallbackIntegrationTest {
     void setUp() {
         bffClient = new BffClient(bffServerLocation);
         authServerClient = new AuthServerClient(authServerLocation, bffServerLocation, webClientId, webClientSecret);
+        simpleResourceProxyClient = new SimpleResourceProxyClient(bffServerLocation);
     }
 
     @AfterEach
@@ -77,6 +80,7 @@ class CallbackIntegrationTest {
         }
         bffClient.close();
         authServerClient.close();
+        simpleResourceProxyClient.close();
     }
 
     @Test
@@ -105,6 +109,10 @@ class CallbackIntegrationTest {
         Map<String, Object> body = OBJECT_MAPPER.readValue(status.body(), new TypeReference<>() {
         });
         assertThat(body.get("isLoggedIn")).isEqualTo(true);
+
+        HttpResponse<String> role = simpleResourceProxyClient.getGuestRole(sessionCookie);
+        assertThat(role.statusCode()).isEqualTo(200);
+        assertThat(role.body()).isEqualTo("I am a guest");
     }
 
     @Test

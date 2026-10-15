@@ -21,14 +21,6 @@ public class GatewayClient implements AutoCloseable {
                 .build();
     }
 
-    public HttpResponse<String> getLoginStatus(String sessionCookie) throws Exception {
-        return get("/roots-app/bff-server/auth/status", sessionCookie);
-    }
-
-    public HttpResponse<String> getAuthorize(String sessionCookie) throws Exception {
-        return get("/roots-app/bff-server/auth/authorize", sessionCookie);
-    }
-
     public HttpResponse<String> getGuestRole(String sessionCookie) throws Exception {
         return get("/roots-app/simple-resource-server/role/guest", sessionCookie);
     }
