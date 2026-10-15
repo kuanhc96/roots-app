@@ -115,7 +115,8 @@ INSERT INTO oauth2_registered_client (
     '{"@class":"java.util.Collections$UnmodifiableMap","settings.token.reuse-refresh-tokens":true,"settings.token.x509-certificate-bound-access-tokens":false,"settings.token.id-token-signature-algorithm":["org.springframework.security.oauth2.jose.jws.SignatureAlgorithm","RS256"],"settings.token.access-token-time-to-live":["java.time.Duration",300.000000000],"settings.token.access-token-format":{"@class":"org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat","value":"self-contained"},"settings.token.refresh-token-time-to-live":["java.time.Duration",3600.000000000],"settings.token.authorization-code-time-to-live":["java.time.Duration",300.000000000],"settings.token.device-code-time-to-live":["java.time.Duration",300.000000000]}'
 );
 
--- Confidential PKCE account-management-bff's code_verifier-based token exchange.
+-- Confidential PKCE account-management-client-bff's code_verifier-based token exchange.
+-- The embedded SPA and BFF callback share port 8084; retain standalone logout on 3001.
 INSERT INTO oauth2_registered_client (
     id,
     client_id,
@@ -140,13 +141,13 @@ INSERT INTO oauth2_registered_client (
              'client_secret_basic',
              'refresh_token,authorization_code',
              'http://localhost:8084/api/auth/callback',
-             'http://localhost:3001/logout',
+             'http://localhost:3001/logout,http://localhost:8084/logout',
              'openid,ACCOUNT_MANAGEMENT_CLIENT',
              '{"@class":"java.util.Collections$UnmodifiableMap","settings.client.require-proof-key":true,"settings.client.require-authorization-consent":false}',
              '{"@class":"java.util.Collections$UnmodifiableMap","settings.token.reuse-refresh-tokens":false,"settings.token.x509-certificate-bound-access-tokens":false,"settings.token.id-token-signature-algorithm":["org.springframework.security.oauth2.jose.jws.SignatureAlgorithm","RS256"],"settings.token.access-token-time-to-live":["java.time.Duration",300.000000000],"settings.token.access-token-format":{"@class":"org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat","value":"self-contained"},"settings.token.refresh-token-time-to-live":["java.time.Duration",3600.000000000],"settings.token.authorization-code-time-to-live":["java.time.Duration",300.000000000],"settings.token.device-code-time-to-live":["java.time.Duration",300.000000000]}'
          );
 
--- Confidential PKCE account-management-bff's code_verifier-based token exchange for special access.
+-- Confidential PKCE account-management-client-bff's code_verifier-based token exchange for special access.
 -- Does not issue refresh tokens. access token should be short-lived and non-refreshable
 INSERT INTO oauth2_registered_client (
     id,
@@ -172,7 +173,7 @@ INSERT INTO oauth2_registered_client (
              'client_secret_basic',
              'authorization_code',
              'http://localhost:8084/api/auth/callback',
-             'http://localhost:3001/logout',
+             'http://localhost:3001/logout,http://localhost:8084/logout',
              'openid,ACCOUNT_MANAGEMENT_CLIENT,ACCOUNT_MANAGEMENT_SUPER_CLIENT',
              '{"@class":"java.util.Collections$UnmodifiableMap","settings.client.require-proof-key":true,"settings.client.require-authorization-consent":false}',
              '{"@class":"java.util.Collections$UnmodifiableMap","settings.token.reuse-refresh-tokens":false,"settings.token.x509-certificate-bound-access-tokens":false,"settings.token.id-token-signature-algorithm":["org.springframework.security.oauth2.jose.jws.SignatureAlgorithm","RS256"],"settings.token.access-token-time-to-live":["java.time.Duration",300.000000000],"settings.token.access-token-format":{"@class":"org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat","value":"self-contained"},"settings.token.refresh-token-time-to-live":["java.time.Duration",3600.000000000],"settings.token.authorization-code-time-to-live":["java.time.Duration",300.000000000],"settings.token.device-code-time-to-live":["java.time.Duration",300.000000000]}'
