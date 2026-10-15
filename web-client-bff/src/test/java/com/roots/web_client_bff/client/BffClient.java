@@ -46,10 +46,6 @@ public class BffClient implements AutoCloseable {
         return get("/api/auth/authorize", sessionCookie);
     }
 
-    public HttpResponse<String> getGuestRole(String sessionCookie) throws Exception {
-        return get("/api/role/guest", sessionCookie);
-    }
-
     /**
      * Calls {@code GET /api/auth/logout} on the given session. The response is the raw
      * 302 (redirects are never followed), so callers can assert the Location — the
