@@ -1,0 +1,52 @@
+spring:
+  application:
+    name: account-management-client-bff
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+server:
+  port: ${SERVER_PORT:8084}
+  servlet:
+    session:
+      cookie:
+        name: __Host-AMC_SESSION
+        secure: true
+        http-only: true
+        same-site: Lax
+        path: /
+
+account-management-client-bff:
+  external-location: ${ACCOUNT_MANAGEMENT_CLIENT_BFF_EXTERNAL_LOCATION:http://localhost:8084}
+
+auth-server:
+  internal-location: ${AUTH_SERVER_INTERNAL_LOCATION:http://localhost:9000}
+  external-location: ${AUTH_SERVER_EXTERNAL_LOCATION:http://localhost:9000}
+
+account-management:
+  client:
+    id: ${ACCOUNT_MANAGEMENT_CLIENT_ID:ACCOUNT_MANAGEMENT_CLIENT}
+    secret: ${ACCOUNT_MANAGEMENT_CLIENT_SECRET}
+    origin: ${ACCOUNT_MANAGEMENT_CLIENT_ORIGIN:${account-management-client-bff.external-location}}
+
+token-store:
+  refresh-token-ttl-seconds: ${REFRESH_TOKEN_TTL_SECONDS:3600}
+
+info:
+  app:
+    name: ${spring.application.name}
+    description: Embedded account-management client and backend-for-frontend
+    version: @project.version@
+
+management:
+  info:
+    env:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,shutdown
+  endpoint:
+    shutdown:
+      access: unrestricted
