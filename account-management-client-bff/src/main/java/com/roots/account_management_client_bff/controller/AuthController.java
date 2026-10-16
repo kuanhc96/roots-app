@@ -5,6 +5,7 @@ import com.roots.account_management_client_bff.service.AuthCallbackService;
 import com.roots.account_management_client_bff.service.AuthStatusService;
 import com.roots.account_management_client_bff.service.AuthorizeService;
 import com.roots.account_management_client_bff.service.LogoutService;
+import com.roots.account_management_client_bff.validator.LogoutTokenValidator;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.servlet.http.HttpSession;
@@ -12,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,6 +29,7 @@ public class AuthController {
     private final AuthorizeService authorizeService;
     private final AuthCallbackService authCallbackService;
     private final LogoutService logoutService;
+    private final LogoutTokenValidator logoutTokenValidator;
 
     @Operation(
             summary = "Get login status",
@@ -68,7 +71,7 @@ public class AuthController {
 
     @Operation(
             summary = "Server-side logout",
-            description = "Clears the token keys, invalidates the session, and redirects the browser to auth-server's /connect/logout."
+            description = "Invalidates the browser session and redirects to auth-server's /connect/logout. Tokens are cleared when auth-server sends the back-channel notification."
     )
     @GetMapping("/logout")
     public ResponseEntity<Void> logout(HttpSession session) {
@@ -77,5 +80,16 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.FOUND)
                 .location(logoutRedirect)
                 .build();
+    }
+
+    @Operation(
+            summary = "Receive back-channel logout",
+            description = "Validates auth-server's logout_token, records it for replay detection, and clears the tokens associated with its sid."
+    )
+    @PostMapping("/logout/back-channel/test")
+    public ResponseEntity<Void> backChannelLogout(@RequestParam("logout_token") String logoutToken) {
+        logoutTokenValidator.validate(logoutToken);
+        logoutService.logout(logoutToken);
+        return ResponseEntity.ok().build();
     }
 }
