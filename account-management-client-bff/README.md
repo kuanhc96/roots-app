@@ -6,8 +6,11 @@ SPA and Spring Boot serves it alongside the same-origin BFF API. The default HTT
 port is **8084**, matching the original account-management BFF.
 
 The original projects remain unchanged and independently usable.
-`account-management` remains a separate resource service. Compose and CI/CD
-integration are intentionally unchanged; run this service directly for now.
+`account-management` remains a separate resource service. Compose starts this
+service after `gateway-server`, `auth-server`, and shared Redis; its CI/CD
+workflows build and publish the `account-management-client-bff` image.
+Compose publishes it at `localhost:8084`; the legacy `account-management-bff`
+remains an internal gateway dependency and does not publish its host port.
 
 ## Structure
 
