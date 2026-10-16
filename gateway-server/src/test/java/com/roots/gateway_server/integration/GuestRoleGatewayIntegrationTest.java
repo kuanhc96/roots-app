@@ -77,7 +77,7 @@ class GuestRoleGatewayIntegrationTest {
         assertThat(statusAfter.statusCode()).isEqualTo(200);
         assertThat(statusAfter.body()).contains("\"isLoggedIn\":true");
 
-        HttpResponse<String> guestRoleResponse = gatewayClient.getGuestRole(sessionCookie);
+        HttpResponse<String> guestRoleResponse = bffClient.getGuestRole(sessionCookie);
         assertThat(guestRoleResponse.statusCode()).isEqualTo(200);
         assertThat(guestRoleResponse.body()).isEqualTo("I am a guest");
     }

@@ -60,6 +60,3 @@ account-management:
 
 auth-server:
   internal-location: ${AUTH_SERVER_INTERNAL_LOCATION:http://localhost:9000}
-
-token-store:
-  refresh-token-ttl-seconds: ${REFRESH_TOKEN_TTL_SECONDS:3600}

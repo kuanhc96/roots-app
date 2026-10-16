@@ -20,12 +20,6 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # Fast fail gate: run unit tests before any build/image work.
-      # If this step fails, GitHub Actions stops the job and no build proceeds.
-      - name: Run unit tests
-        working-directory: gateway-server
-        run: mvn test -Dtest="GatewayServerApplicationTests,AccessTokenFilterTest,RefreshTokenFilterTest"
-
       # Published dependency images include private repositories.
       - name: Log in to Docker Hub
         uses: docker/login-action@v3

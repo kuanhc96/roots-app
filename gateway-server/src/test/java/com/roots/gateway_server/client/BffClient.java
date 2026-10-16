@@ -40,6 +40,14 @@ public class BffClient implements AutoCloseable {
         return httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    public HttpResponse<String> getGuestRole(String sessionCookie) throws Exception {
+        return get("/api/role/guest", sessionCookie);
+    }
+
+    private HttpResponse<String> get(String path, String sessionCookie) throws Exception {
+        return getUrl(baseUrl + path, sessionCookie);
+    }
+
     @Override
     public void close() {
         httpClient.close();
