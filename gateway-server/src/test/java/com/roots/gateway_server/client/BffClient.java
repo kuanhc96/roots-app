@@ -41,7 +41,7 @@ public class BffClient implements AutoCloseable {
     }
 
     public HttpResponse<String> getGuestRole(String sessionCookie) throws Exception {
-        return get(baseUrl + "/api/role/guest", sessionCookie);
+        return get("/api/role/guest", sessionCookie);
     }
 
     private HttpResponse<String> get(String path, String sessionCookie) throws Exception {
