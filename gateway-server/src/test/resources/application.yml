@@ -1,2 +1,3 @@
 gateway-server-location: http://localhost:8080
 auth-server-location: http://localhost:9000
+bff-server-location: http://localhost:8083
