@@ -21,14 +21,6 @@ public class GatewayClient implements AutoCloseable {
                 .build();
     }
 
-    public HttpResponse<String> getGuestRole(String sessionCookie) throws Exception {
-        return get("/roots-app/simple-resource-server/role/guest", sessionCookie);
-    }
-
-    private HttpResponse<String> get(String path, String sessionCookie) throws Exception {
-        return getUrl(baseUrl + path, sessionCookie);
-    }
-
     private HttpResponse<String> getUrl(String url, String sessionCookie) throws Exception {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url)).GET();
         if (sessionCookie != null) {
