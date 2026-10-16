@@ -1,6 +1,7 @@
 package com.roots.account_management_client_bff.service;
 
 import com.roots.account_management_client_bff.enums.TokenType;
+import com.roots.account_management_client_bff.util.JwtPayload;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -24,7 +25,6 @@ public class LogoutService {
 
     public URI buildLogoutRedirect(String sessionId) {
         Optional<String> idToken = tokenStore.find(sessionId, TokenType.ID_TOKEN);
-        tokenStore.clearTokens(sessionId);
 
         UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(authServerExternalLocation)
                 .path("/connect/logout")
@@ -33,6 +33,11 @@ public class LogoutService {
         idToken.ifPresent(token -> builder.queryParam("id_token_hint", token));
 
         return builder.encode().build().toUri();
+    }
+
+    public void logout(String logoutToken) {
+        tokenStore.storeLogoutToken(logoutToken);
+        tokenStore.clearTokensBySid(JwtPayload.parse(logoutToken).getSid());
     }
 
 }

@@ -99,7 +99,7 @@ class AuthFlowTest {
     }
 
     @Test
-    void logoutClearsTokensAndReturnsToEmbeddedLogout() {
+    void logoutDefersTokenCleanupAndReturnsToEmbeddedLogout() {
         LogoutService logout = new LogoutService(tokenStore);
         ReflectionTestUtils.setField(logout, "authServerExternalLocation", "http://localhost:9000");
         ReflectionTestUtils.setField(logout, "clientId", "ACCOUNT_MANAGEMENT_CLIENT");
@@ -112,7 +112,7 @@ class AuthFlowTest {
         assertThat(query.getFirst("post_logout_redirect_uri")).isEqualTo("http://localhost:8084/logout");
         assertThat(query.getFirst("client_id")).isEqualTo("ACCOUNT_MANAGEMENT_CLIENT");
         assertThat(query.getFirst("id_token_hint")).isEqualTo("id-token");
-        verify(tokenStore).clearTokens("session");
+        verify(tokenStore, never()).clearTokens(any());
     }
 
     private void assertFlowConsumed() {
@@ -124,6 +124,6 @@ class AuthFlowTest {
     private static String idToken(String nonce) {
         String payload = Base64.getUrlEncoder().withoutPadding().encodeToString(
                 ("{\"nonce\":\"" + nonce + "\"}").getBytes(StandardCharsets.UTF_8));
-        return "header." + payload + ".signature";
+        return "eyJhbGciOiJSUzI1NiJ9." + payload + ".signature";
     }
 }
