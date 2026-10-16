@@ -11,7 +11,8 @@ A Spring Cloud microservices application that combines a Spring Authorization Se
 | `gateway-server` | Spring Cloud Gateway (WebFlux) | 8080 | Routes internal resource APIs and supports token enrichment from shared Redis |
 | `auth-server` | Spring Boot + Nuxt/Vue | 9000 | OAuth2 Authorization Server + embedded SPA frontend |
 | `web-client-bff` | Spring Boot + Nuxt/Vue | 8083 | Embedded web-client SPA and BFF; owns browser sessions and OAuth2 tokens in Redis |
-| `account-management-bff` | Spring Boot | 8084 | BFF for the account-management client; stores tokens in Redis under a separate `__Host-AMC_SESSION` session |
+| `account-management-client-bff` | Spring Boot + Nuxt/Vue | 8084 | Embedded account-management SPA and BFF; stores tokens in Redis under a separate `__Host-AMC_SESSION` session |
+| `account-management-bff` | Spring Boot | internal 8084 | Legacy account-management BFF retained as a gateway dependency; its host port is not published |
 | `simple-resource-server` | Spring Boot | 8081 | Example protected resource server with role-based endpoints |
 | `account-management` | Spring Boot | 8082 | Shared-db account CRUD service used for integration fixtures and testing |
 | `web-client` | Nuxt 4 / Vue 3 | 3000 | Standalone browser app |
@@ -28,6 +29,7 @@ The current stack is intended to start in this order:
 6. `account-management-bff`, `simple-resource-server`, and `account-management`
 7. `gateway-server`
 8. `web-client-bff` (waits for healthy gateway-server, auth-server, and shared Redis)
+9. `account-management-client-bff` (waits for healthy gateway-server, auth-server, and shared Redis)
 
 Then separately, as needed:
 
@@ -39,7 +41,7 @@ The architecture has moved beyond a simple auth-server + resource-server pattern
 
 - `auth-server` is the Authorization Server and also serves the embedded Nuxt frontend.
 - `web-client-bff` serves the embedded SPA directly, owns its browser session, and stores access/refresh/id tokens in Redis keyed by the session ID. It does not register with Eureka or sit behind gateway-server; its outbound role calls use the gateway.
-- `account-management-bff` mirrors that pattern for the account-management client, using a separate `__Host-AMC_SESSION` cookie and the `ACCOUNT_MANAGEMENT_CLIENT` / `ACCOUNT_MANAGEMENT_SUPER_CLIENT` confidential PKCE clients.
+- `account-management-client-bff` embeds the account-management SPA and mirrors the web-client BFF flow, using a separate `__Host-AMC_SESSION` cookie and the `ACCOUNT_MANAGEMENT_CLIENT` / `ACCOUNT_MANAGEMENT_SUPER_CLIENT` confidential PKCE clients.
 - `gateway-server` sits in front of downstream services, reads the session's token data from the shared Redis, and attaches bearer tokens before routing requests.
 - `simple-resource-server` and `account-management` validate JWTs from `auth-server` and enforce scope/role checks with `@PreAuthorize`.
 - `account-management` shares the same MySQL schema as `auth-server` (`user_credential` and `role`) and is used for integration fixtures and account lifecycle testing.
@@ -55,7 +57,7 @@ The root `docker-compose.yml` wires up the shared test stack on the `roots_backe
 - `auth-server` exposes port `9000`
 - `account-management` exposes port `8082`
 - `web-client-bff` exposes port `8083`
-- `account-management-bff` exposes port `8084`
+- `account-management-client-bff` exposes port `8084`
 - `gateway-server` exposes port `8080`
 
 The database self-seeds from `auth-server/src/main/resources/initialize_db/` on first startup, and the Compose stack uses `docker compose up -d --wait ...` with health checks in CI and local verification.
@@ -67,7 +69,7 @@ The database self-seeds from `auth-server/src/main/resources/initialize_db/` on 
 - Spring Session uses a secure `__Host-AUTH_SESSION` cookie for the auth-server session, while web-client-bff uses its own `__Host-SESSION` cookie.
 - `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET` is a frontend build-time variable, not a runner-time JVM variable, because the embedded Nuxt app is statically generated.
 - The mail credentials (`SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`) are required in every profile because the `JavaMailSender` is built regardless of profile and its health check opens an SMTP connection.
-- `gateway-server`, `web-client-bff`, and `account-management-bff` all depend on the shared `bff-server-redis` store used by the browser-backed token flow.
+- `gateway-server`, `web-client-bff`, and `account-management-client-bff` all depend on the shared `bff-server-redis` store used by the browser-backed token flow.
 - `account-management-bff` authenticates as the `ACCOUNT_MANAGEMENT_CLIENT` / `ACCOUNT_MANAGEMENT_SUPER_CLIENT` confidential PKCE clients and expects `ACCOUNT_MANAGEMENT_CLIENT_SECRET` to match the seeded `{noop}secret` value in the auth-server DB.
 
 ## Repository layout
@@ -75,7 +77,8 @@ The database self-seeds from `auth-server/src/main/resources/initialize_db/` on 
 - `auth-server/` — OAuth2 Authorization Server and embedded Nuxt frontend
 - `web-client-bff/` — embedded Nuxt SPA and session-backed token broker
 - `bff-server/` — legacy BFF source (no longer deployed by Compose or CI/CD)
-- `account-management-bff/` — session-backed token broker for the account-management client
+- `account-management-client-bff/` — embedded account-management SPA and session-backed token broker
+- `account-management-bff/` — legacy BFF retained as a gateway dependency
 - `gateway-server/` — API gateway and token relay
 - `simple-resource-server/` — sample protected resource app
 - `account-management/` — shared-account CRUD service for testing
@@ -84,13 +87,13 @@ The database self-seeds from `auth-server/src/main/resources/initialize_db/` on 
 
 ## CI and CD
 
-GitHub Actions workflows live in `.github/workflows/` and cover the service-specific CI/CD flows for `auth-server`, `account-management`, `web-client-bff`, `gateway-server`, and `simple-resource-server`.
+GitHub Actions workflows live in `.github/workflows/` and cover the service-specific CI/CD flows for `auth-server`, `account-management`, `web-client-bff`, `account-management-client-bff`, `gateway-server`, and `simple-resource-server`.
 
 The current workflow pattern is:
 
 - PRs run targeted CI: unit checks, local image builds, Docker Compose boot of dependencies, then service-specific integration tests.
 - `main` pushes trigger the release version bump, Jib image push, and the next SNAPSHOT commit.
-- `account-management-bff` also has its own CI workflow (`.github/workflows/account-management-bff-ci.yml`), which boots the service with Redis + auth-server and health-checks the `/actuator/health` endpoint on port `8084`.
+- `account-management-client-bff` CI runs its unit tests, starts the service after gateway-server and auth-server, then health-checks `/actuator/health` on port `8084`.
 
 For service-specific setup, see the README in each service directory.
 
@@ -119,6 +122,7 @@ See the service READMEs for the operational details and workflow-specific instru
 
 - `auth-server/README.md`
 - `web-client-bff/README.md`
+- `account-management-client-bff/README.md`
 - `account-management-bff/README.md`
 - `gateway-server/README.md`
 - `account-management/README.md`

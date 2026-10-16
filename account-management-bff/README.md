@@ -119,7 +119,10 @@ You will also need:
 
 ## Docker Compose
 
-The service is included in the root Compose file and is exposed at port `8084`:
+The service remains in the root Compose file as a gateway dependency, but its host
+port is not published because `account-management-client-bff` now owns host port
+`8084`. To use this legacy BFF directly, run it locally as shown above and stop
+`account-management-client-bff`.
 
 ```bash
 docker compose up -d --wait account-management-bff
@@ -134,15 +137,12 @@ The compose stack sets:
 
 ## CI
 
-The workflow at `.github/workflows/account-management-bff-ci.yml` does the following:
+The workflows retain their existing filenames, but now build
+`account-management-client-bff` instead of this legacy service. Its CI runs the
+client BFF's unit tests, starts it after gateway-server and auth-server, and
+health-checks it on port `8084`.
 
-1. logs in to Docker Hub
-2. builds the `account-management-bff` jar and local image via Jib
-3. starts Redis + auth-server + the service on the shared Docker network
-4. waits for `http://localhost:8084/actuator/health` to report `UP`
-5. dumps container logs on failure
-
-This is a narrow PR-only CI gate for the account-management BFF.
+See `account-management-client-bff/README.md` for the deployed client BFF.
 
 ## Related services
 
