@@ -45,9 +45,23 @@ directly on this service, not through the gateway. The BFF owns
 SPA. Tokens stay in Redis; the browser holds only the secure, HttpOnly,
 SameSite=Lax `__Host-AMC_SESSION` cookie and locally cached login claims.
 
-The existing status/refresh and RP-initiated OIDC logout flows are preserved.
-Back-channel logout is not implemented. This browser-facing app has no Eureka
-dependency or registration and needs no inbound gateway route.
+GET `/api/auth/logout` initiates RP-initiated OIDC logout and invalidates the
+browser session. Like `web-client-bff`, it leaves token cleanup to auth-server's
+form-encoded POST `/api/auth/logout/back-channel/test` (`logout_token` parameter).
+The receiver validates the token's claims, records its `jti` until token expiry
+to detect replay, and clears the three OAuth tokens for the session mapped by `sid`.
+An unknown sid returns 404; rejected claims or replay return 400.
+
+Redis sid mappings use `oidc:<clientId>:sid:<sid>` and replay records use
+`oidc:<clientId>:logout_token:<jti>`, avoiding collisions with `web-client-bff`.
+Mappings expire with the ID token, including when refreshed tokens are stored.
+As in the reference, a missing mapping after expiry prevents back-channel cleanup,
+and the validator checks claims without verifying the JWT signature. This is
+behavioral parity, not a production-ready token-verification boundary.
+The issuer must match `AUTH_SERVER_INTERNAL_LOCATION`.
+
+This browser-facing app has no Eureka dependency or registration and needs no
+inbound gateway route.
 
 ## Configuration
 
@@ -93,6 +107,9 @@ Build the executable JAR, including its frontend:
 `http://localhost:8084/api/auth/callback` for both `ACCOUNT_MANAGEMENT_CLIENT` and
 `ACCOUNT_MANAGEMENT_SUPER_CLIENT`. Both permit `http://localhost:8084/logout` while
 retaining `http://localhost:3001/logout` for the standalone client.
+Only `ACCOUNT_MANAGEMENT_CLIENT` enables back-channel logout, targeting
+`http://localhost:8084/api/auth/logout/back-channel/test`. The URI must be reachable
+from auth-server; change it if auth-server runs in a container or on another host.
 
 Initialization scripts only run for a fresh database. For an existing database,
 apply this targeted update rather than rerunning the destructive seed script:
@@ -105,4 +122,17 @@ SET redirect_uris = 'http://localhost:8084/api/auth/callback',
 WHERE client_id IN ('ACCOUNT_MANAGEMENT_CLIENT', 'ACCOUNT_MANAGEMENT_SUPER_CLIENT')
   AND (post_logout_redirect_uris IS NULL
        OR post_logout_redirect_uris NOT LIKE '%http://localhost:8084/logout%');
+```
+
+For an existing database, also enable the back-channel registration without
+replacing the other client settings:
+
+```sql
+UPDATE oauth2_registered_client
+SET client_settings = JSON_SET(
+    client_settings,
+    '$."settings.client.back-channel-logout-session-required"', TRUE,
+    '$."settings.client.back-channel-logout-uri"',
+    'http://localhost:8084/api/auth/logout/back-channel/test')
+WHERE client_id = 'ACCOUNT_MANAGEMENT_CLIENT';
 ```
