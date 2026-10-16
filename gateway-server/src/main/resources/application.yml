@@ -48,13 +48,13 @@ management:
 
 web:
   client:
-    origin: ${WEB_CLIENT_ORIGIN:http://localhost:3000}
+    origin: ${WEB_CLIENT_ORIGIN:http://localhost:8083}
     id: ${WEB_CLIENT_ID:WEB_CLIENT}
     secret: ${WEB_CLIENT_SECRET:secret}
 
 account-management:
   client:
-    origin: ${ACCOUNT_MANAGEMENT_CLIENT_ORIGIN:http://localhost:3001}
+    origin: ${ACCOUNT_MANAGEMENT_CLIENT_ORIGIN:http://localhost:8084}
     id: ${ACCOUNT_MANAGEMENT_CLIENT_ID:ACCOUNT_MANAGEMENT_CLIENT}
     secret: ${ACCOUNT_MANAGEMENT_CLIENT_SECRET:secret}
 
