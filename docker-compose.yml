@@ -169,15 +169,15 @@ services:
       retries: 10
       start_period: 60s
 
-  account-management-bff:
-    image: ${DOCKERHUB_USERNAME}/account-management-bff:${ACCOUNT_MANAGEMENT_BFF_TAG:-latest}
-    container_name: account-management-bff
+  account-management-client-bff:
+    image: ${DOCKERHUB_USERNAME}/account-management-client-bff:${ACCOUNT_MANAGEMENT_CLIENT_BFF_TAG:-latest}
+    container_name: account-management-client-bff
     ports:
       - "8084:8084"
     networks:
       - roots_backend
     depends_on:
-      eureka-server:
+      gateway-server:
         condition: service_healthy
       bff-server-redis:
         condition: service_healthy
@@ -187,8 +187,7 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
       REDIS_HOST: bff-server-redis
       AUTH_SERVER_INTERNAL_LOCATION: http://auth-server:9000
-      ACCOUNT_MANAGEMENT_CLIENT_SECRET: ${ACCOUNT_MANAGEMENT_CLIENT_SECRET:-secret}
-      EUREKA_SERVER_URL: http://eureka-server:8070/eureka/
+      ACCOUNT_MANAGEMENT_CLIENT_SECRET: ${ACCOUNT_MANAGEMENT_CLIENT_SECRET}
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent localhost:8084/actuator/health | grep UP || exit 1"]
       interval: 15s
