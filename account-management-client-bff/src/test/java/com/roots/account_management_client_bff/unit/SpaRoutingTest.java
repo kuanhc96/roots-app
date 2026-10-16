@@ -7,6 +7,7 @@ import com.roots.account_management_client_bff.service.AuthCallbackService;
 import com.roots.account_management_client_bff.service.AuthStatusService;
 import com.roots.account_management_client_bff.service.AuthorizeService;
 import com.roots.account_management_client_bff.service.LogoutService;
+import com.roots.account_management_client_bff.validator.LogoutTokenValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -108,6 +109,11 @@ class SpaRoutingTest {
         @Bean
         LogoutService logoutService() {
             return mock(LogoutService.class);
+        }
+
+        @Bean
+        LogoutTokenValidator logoutTokenValidator() {
+            return mock(LogoutTokenValidator.class);
         }
     }
 }
