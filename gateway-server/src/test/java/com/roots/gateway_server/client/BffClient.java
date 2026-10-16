@@ -11,22 +11,24 @@ import java.net.http.HttpResponse;
 public class BffClient implements AutoCloseable {
 
     private final HttpClient httpClient;
+    private String baseUrl;
 
-    public BffClient() {
+    public BffClient(String baseUrl) {
         this.httpClient = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
+        this.baseUrl = baseUrl;
     }
 
     public HttpResponse<String> getCallback(String callbackUrl, String sessionCookie) throws Exception {
         return getUrl(callbackUrl, sessionCookie);
     }
 
-    public HttpResponse<String> getLoginStatus(String baseUrl, String sessionCookie) throws Exception {
+    public HttpResponse<String> getLoginStatus(String sessionCookie) throws Exception {
         return getUrl(baseUrl + "/api/auth/status", sessionCookie);
     }
 
-    public HttpResponse<String> getAuthorize(String baseUrl, String sessionCookie) throws Exception {
+    public HttpResponse<String> getAuthorize(String sessionCookie) throws Exception {
         return getUrl(baseUrl + "/api/auth/authorize", sessionCookie);
     }
 

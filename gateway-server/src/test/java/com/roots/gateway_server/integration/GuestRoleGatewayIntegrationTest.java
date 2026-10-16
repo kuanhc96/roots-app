@@ -40,7 +40,7 @@ class GuestRoleGatewayIntegrationTest {
     void setUp() {
         gatewayClient = new GatewayClient(gatewayServerLocation);
         authServerClient = new AuthServerClient(authServerLocation);
-        bffClient = new BffClient();
+        bffClient = new BffClient(bffServerLocation);
     }
 
     @AfterEach
@@ -52,14 +52,14 @@ class GuestRoleGatewayIntegrationTest {
 
     @Test
     void guestLoginFlow_throughWebClientBff_allowsGatewayGuestEndpointAccess() throws Exception {
-        HttpResponse<String> statusBefore = bffClient.getLoginStatus(bffServerLocation, null);
+        HttpResponse<String> statusBefore = bffClient.getLoginStatus(null);
         assertThat(statusBefore.statusCode()).isEqualTo(200);
         assertThat(statusBefore.body()).contains("\"isLoggedIn\":false");
 
         String sessionCookie = extractSessionCookie(statusBefore)
                 .orElseThrow(() -> new IllegalStateException("No __Host-SESSION cookie on status response"));
 
-        HttpResponse<String> authorizeResponse = bffClient.getAuthorize(bffServerLocation, sessionCookie);
+        HttpResponse<String> authorizeResponse = bffClient.getAuthorize(sessionCookie);
         assertThat(authorizeResponse.statusCode()).isEqualTo(302);
         String authorizeLocation = authorizeResponse.headers().firstValue("Location").orElseThrow();
         assertThat(authorizeLocation).startsWith(authServerLocation + "/oauth2/authorize?");
@@ -73,7 +73,7 @@ class GuestRoleGatewayIntegrationTest {
         assertThat(callbackResponse.statusCode()).isEqualTo(302);
         sessionCookie = extractSessionCookie(callbackResponse).orElse(sessionCookie);
 
-        HttpResponse<String> statusAfter = bffClient.getLoginStatus(bffServerLocation, sessionCookie);
+        HttpResponse<String> statusAfter = bffClient.getLoginStatus(sessionCookie);
         assertThat(statusAfter.statusCode()).isEqualTo(200);
         assertThat(statusAfter.body()).contains("\"isLoggedIn\":true");
 
