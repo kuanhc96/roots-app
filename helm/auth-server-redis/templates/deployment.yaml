@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "auth-server-redis.fullname" . }}
+  labels:
+    {{- include "auth-server-redis.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    # Recreate, not the default RollingUpdate. A rolling update would briefly put two
+    # Redis pods behind one Service, so a Google sign-in whose oauth_state was written
+    # to the old pod could be validated against the new one and fail. Recreate trades
+    # that for a few seconds of downtime, which is the honest semantic for a
+    # single-instance store.
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "auth-server-redis.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "auth-server-redis.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: redis
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # `args`, not `command`. Compose's `command:` overrides the image's CMD and
+          # leaves docker-entrypoint.sh in place; Kubernetes' `command:` overrides the
+          # ENTRYPOINT. Using `command:` here would skip the entrypoint script, which
+          # chowns /data and drops to the unprivileged `redis` user via gosu.
+          args:
+            - redis-server
+            - --port
+            - {{ .Values.redis.port | quote }}
+            {{- range .Values.redis.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          ports:
+            - name: redis
+              containerPort: {{ .Values.redis.port }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            # The redis image declares VOLUME /data, and redis-server started without a
+            # config file still carries the compiled-in RDB save rules, so it writes
+            # dump.rdb here. Mounting an emptyDir keeps those writes off the container's
+            # writable layer and mirrors the anonymous volume compose ends up with.
+            # The data itself is expendable — it does not survive a pod restart.
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -p
+                - {{ .Values.redis.port | quote }}
+                - ping
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -p
+                - {{ .Values.redis.port | quote }}
+                - ping
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+      volumes:
+        - name: data
+          emptyDir: {}

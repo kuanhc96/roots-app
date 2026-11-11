@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "auth-server-db.fullname" . }}-initdb
+  labels:
+    {{- include "auth-server-db.labels" . | nindent 4 }}
+data:
+  {{- range $path, $_ := .Files.Glob "files/initdb/*.sql" }}
+  {{ base $path }}: |-
+    {{- $.Files.Get $path | nindent 4 }}
+  {{- end }}

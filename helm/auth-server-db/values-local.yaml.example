@@ -1,0 +1,4 @@
+# Copy this to values-local.yaml (gitignored) and fill in a real password,
+# or just pass --set mysql.rootPassword=... on the command line.
+mysql:
+  rootPassword: "changeme-locally"

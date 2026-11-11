@@ -1,0 +1,45 @@
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: mysql
+  tag: "8"
+  pullPolicy: IfNotPresent
+
+mysql:
+  # Leave blank and pass with --set mysql.rootPassword=... or --set-file,
+  # or better: set existingSecret below to point at a Secret you manage externally.
+  rootPassword: ""
+  database: auth-server-db
+  tcpPort: 3307
+  # If set, the Secret template is skipped and this existing Secret/key is used instead.
+  existingSecret: ""
+  existingSecretPasswordKey: "mysql-root-password"
+
+resources:
+  limits:
+    memory: 500Mi
+  requests:
+    memory: 250Mi
+
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClassName: ""   # "" = use cluster default StorageClass
+
+service:
+  # LoadBalancer, which on Docker Desktop binds to localhost:3307 so a locally-run
+  # auth-server (mvn spring-boot:run) can reach the DB.
+  #
+  # Note this is deliberately MORE exposed than compose, where auth-server-db uses
+  # `expose` rather than `ports` and is therefore unreachable from the host.
+  # Set this to ClusterIP before deploying anywhere non-local — it would otherwise
+  # put a public load balancer in front of the database.
+  type: LoadBalancer
+  port: 3307
+
+healthCheck:
+  initialDelaySeconds: 30   # mirrors start_period: 30s
+  periodSeconds: 10         # interval: 10s
+  timeoutSeconds: 5         # timeout: 5s
+  failureThreshold: 10      # retries: 10
