@@ -60,7 +60,7 @@ export function useOAuth() {
    * which owns the state and every OAuth2 parameter and 302s on to auth-server.
    */
   function authorize() {
-    window.location.href = '/api/auth/authorize'
+    window.location.href = '/oauth2/authorization/account-management-client-registration'
   }
 
   /** The full login flow: check status, and if not logged in, authorize. */

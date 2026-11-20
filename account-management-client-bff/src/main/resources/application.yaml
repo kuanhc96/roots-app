@@ -1,15 +1,31 @@
 spring:
   application:
     name: account-management-client-bff
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
+  security:
+    oauth2:
+      client:
+        registration:
+          account-management-client-registration:
+            client-id: ${account-management.client.id}
+            client-secret: ${account-management.client.secret}
+            authorization-grant-type: authorization_code
+            client-authentication-method: client_secret_basic
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope:
+              - openid
+              - ACCOUNT_MANAGEMENT_CLIENT
+        provider:
+          account-management-client-registration:
+            issuer-uri: ${AUTH_SERVER_ISSUER:${auth-server.internal-location}}
+            authorization-uri: ${AUTH_SERVER_EXTERNAL_LOCATION:http://localhost:9000}/oauth2/authorize
+            token-uri: ${auth-server.internal-location}/oauth2/token
+            jwk-set-uri: ${auth-server.internal-location}/oauth2/jwks
 
 server:
   port: ${SERVER_PORT:8084}
   servlet:
     session:
+      persistent: false
       cookie:
         name: __Host-AMC_SESSION
         secure: true
@@ -29,9 +45,6 @@ account-management:
     id: ${ACCOUNT_MANAGEMENT_CLIENT_ID:ACCOUNT_MANAGEMENT_CLIENT}
     secret: ${ACCOUNT_MANAGEMENT_CLIENT_SECRET}
     origin: ${ACCOUNT_MANAGEMENT_CLIENT_ORIGIN:${account-management-client-bff.external-location}}
-
-token-store:
-  refresh-token-ttl-seconds: ${REFRESH_TOKEN_TTL_SECONDS:3600}
 
 info:
   app:
