@@ -1,13 +1,10 @@
 package com.roots.account_management_client_bff.controller;
 
 import com.roots.account_management_client_bff.dto.response.LoginStatusResponse;
-import com.roots.account_management_client_bff.service.AuthCallbackService;
 import com.roots.account_management_client_bff.service.AuthStatusService;
-import com.roots.account_management_client_bff.service.AuthorizeService;
 import com.roots.account_management_client_bff.service.LogoutService;
 import com.roots.account_management_client_bff.validator.LogoutTokenValidator;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,8 +23,6 @@ import java.net.URI;
 public class AuthController {
 
     private final AuthStatusService authStatusService;
-    private final AuthorizeService authorizeService;
-    private final AuthCallbackService authCallbackService;
     private final LogoutService logoutService;
     private final LogoutTokenValidator logoutTokenValidator;
 
@@ -38,35 +33,6 @@ public class AuthController {
     @GetMapping("/status")
     public LoginStatusResponse getLoginStatus(HttpSession session) {
         return authStatusService.getLoginStatus(session.getId());
-    }
-
-    @Operation(
-            summary = "Start the authorization-code flow",
-            description = "Kicks off the authorization-code flow: 302 to auth-server's /oauth2/authorize with parameters filled in, including a minted state held in Redis under this session."
-    )
-    @GetMapping("/authorize")
-    public ResponseEntity<Void> authorize(HttpSession session) {
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .location(authorizeService.buildAuthorizeRedirect(session.getId()))
-                .build();
-    }
-
-    @Operation(
-            summary = "Authorization-code callback",
-            description = "Auth-server redirects here with the authorization code. Validates state, exchanges the code, stores the tokens, and 302s the browser to the account-management client home page."
-    )
-    @GetMapping("/callback")
-    public ResponseEntity<Void> callback(
-            HttpSession session,
-            @Parameter(description = "Authorization code")
-            @RequestParam(required = false) String code,
-            @Parameter(description = "State value")
-            @RequestParam(required = false) String state,
-            @Parameter(description = "Error code from auth-server")
-            @RequestParam(required = false) String error) {
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .location(authCallbackService.handleCallback(session.getId(), code, state, error))
-                .build();
     }
 
     @Operation(

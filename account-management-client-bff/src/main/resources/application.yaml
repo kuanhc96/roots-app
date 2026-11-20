@@ -5,6 +5,25 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  security:
+    oauth2:
+      client:
+        registration:
+          account-management-client-registration:
+            client-id: ${account-management.client.id}
+            client-secret: ${account-management.client.secret}
+            authorization-grant-type: authorization_code
+            client-authentication-method: client_secret_basic
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope:
+              - openid
+              - ACCOUNT_MANAGEMENT_CLIENT
+        provider:
+          account-management-client-registration:
+            issuer-uri: ${AUTH_SERVER_ISSUER:${auth-server.internal-location}}
+            authorization-uri: ${AUTH_SERVER_EXTERNAL_LOCATION:http://localhost:9000}/oauth2/authorize
+            token-uri: ${auth-server.internal-location}/oauth2/token
+            jwk-set-uri: ${auth-server.internal-location}/oauth2/jwks
 
 server:
   port: ${SERVER_PORT:8084}

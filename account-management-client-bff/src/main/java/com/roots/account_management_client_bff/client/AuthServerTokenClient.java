@@ -44,17 +44,6 @@ public class AuthServerTokenClient {
         return exchange(form, "Refresh token");
     }
 
-    public Optional<TokenResponse> exchangeAuthorizationCode(String code, String redirectUri, String codeVerifier) {
-        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("grant_type", "authorization_code");
-        form.add("code", code);
-        form.add("redirect_uri", redirectUri);
-        form.add("code_verifier", codeVerifier);
-        form.add("client_id", clientId);
-
-        return exchange(form, "Authorization code");
-    }
-
     private Optional<TokenResponse> exchange(MultiValueMap<String, String> form, String grantLabel) {
         try {
             return Optional.ofNullable(restClient.post()
