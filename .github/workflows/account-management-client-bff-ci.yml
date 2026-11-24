@@ -50,7 +50,7 @@ jobs:
         working-directory: account-management-client-bff
         run: mvn jib:dockerBuild -Djib.to.image=${{ secrets.DOCKERHUB_USERNAME }}/account-management-client-bff:ci
 
-      # Start after gateway-server, auth-server and shared Redis; compose --wait
+      # Start after gateway-server and auth-server; this BFF has no Redis connection.
       # blocks until the dependency chain and this service are healthy.
       - name: Start services
         run: docker compose up -d --wait account-management-client-bff

@@ -11,7 +11,7 @@ A Spring Cloud microservices application that combines a Spring Authorization Se
 | `gateway-server` | Spring Cloud Gateway (WebFlux) | 8080 | Routes internal resource APIs and supports token enrichment from shared Redis |
 | `auth-server` | Spring Boot + Nuxt/Vue | 9000 | OAuth2 Authorization Server + embedded SPA frontend |
 | `web-client-bff` | Spring Boot + Nuxt/Vue | 8083 | Embedded web-client SPA and BFF; owns browser sessions and OAuth2 tokens in Redis |
-| `account-management-client-bff` | Spring Boot + Nuxt/Vue | 8084 | Embedded account-management SPA and BFF; stores tokens in Redis under a separate `__Host-AMC_SESSION` session |
+| `account-management-client-bff` | Spring Boot + Nuxt/Vue | 8084 | Embedded account-management SPA and BFF; in-memory Spring Security authorized clients and servlet `__Host-AMC_SESSION` sessions |
 | `account-management-bff` | Spring Boot | internal 8084 | Legacy account-management BFF retained as a gateway dependency; its host port is not published |
 | `simple-resource-server` | Spring Boot | 8081 | Example protected resource server with role-based endpoints |
 | `account-management` | Spring Boot | 8082 | Shared-db account CRUD service used for integration fixtures and testing |
@@ -29,7 +29,7 @@ The current stack is intended to start in this order:
 6. `account-management-bff`, `simple-resource-server`, and `account-management`
 7. `gateway-server`
 8. `web-client-bff` (waits for healthy gateway-server, auth-server, and shared Redis)
-9. `account-management-client-bff` (waits for healthy gateway-server, auth-server, and shared Redis)
+9. `account-management-client-bff` (waits for healthy gateway-server and auth-server; no Redis connection of its own)
 
 Then separately, as needed:
 
@@ -41,7 +41,7 @@ The architecture has moved beyond a simple auth-server + resource-server pattern
 
 - `auth-server` is the Authorization Server and also serves the embedded Nuxt frontend.
 - `web-client-bff` serves the embedded SPA directly, owns its browser session, and stores access/refresh/id tokens in Redis keyed by the session ID. It does not register with Eureka or sit behind gateway-server; its outbound role calls use the gateway.
-- `account-management-client-bff` embeds the account-management SPA and mirrors the web-client BFF flow, using a separate `__Host-AMC_SESSION` cookie and the `ACCOUNT_MANAGEMENT_CLIENT` / `ACCOUNT_MANAGEMENT_SUPER_CLIENT` confidential PKCE clients.
+- `account-management-client-bff` embeds the account-management SPA, uses servlet OAuth2 Login with `ACCOUNT_MANAGEMENT_CLIENT`, and stores authorized clients in memory. Its `OidcUser` and ID token live in an in-memory servlet session under `__Host-AMC_SESSION`; login status is session-based and logout includes Spring Security's back-channel support.
 - `gateway-server` sits in front of downstream services, reads the session's token data from the shared Redis, and attaches bearer tokens before routing requests.
 - `simple-resource-server` and `account-management` validate JWTs from `auth-server` and enforce scope/role checks with `@PreAuthorize`.
 - `account-management` shares the same MySQL schema as `auth-server` (`user_credential` and `role`) and is used for integration fixtures and account lifecycle testing.
@@ -69,7 +69,7 @@ The database self-seeds from `auth-server/src/main/resources/initialize_db/` on 
 - Spring Session uses a secure `__Host-AUTH_SESSION` cookie for the auth-server session, while web-client-bff uses its own `__Host-SESSION` cookie.
 - `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET` is a frontend build-time variable, not a runner-time JVM variable, because the embedded Nuxt app is statically generated.
 - The mail credentials (`SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`) are required in every profile because the `JavaMailSender` is built regardless of profile and its health check opens an SMTP connection.
-- `gateway-server`, `web-client-bff`, and `account-management-client-bff` all depend on the shared `bff-server-redis` store used by the browser-backed token flow.
+- `gateway-server` and `web-client-bff` depend on the shared `bff-server-redis` store. `account-management-client-bff` has no Redis connection; its login state is process-local and lost on restart.
 - `account-management-bff` authenticates as the `ACCOUNT_MANAGEMENT_CLIENT` / `ACCOUNT_MANAGEMENT_SUPER_CLIENT` confidential PKCE clients and expects `ACCOUNT_MANAGEMENT_CLIENT_SECRET` to match the seeded `{noop}secret` value in the auth-server DB.
 
 ## Repository layout
