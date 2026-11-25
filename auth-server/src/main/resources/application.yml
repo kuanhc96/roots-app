@@ -79,6 +79,7 @@ web-client:
 # must byte-for-byte match a redirect URI registered in Google Cloud Console.
 auth-server:
   external-location: ${AUTH_SERVER_EXTERNAL_LOCATION:http://localhost:9000}
+  issuer: ${AUTH_SERVER_ISSUER:}
 
 # Google Sign-In. client-id is the expected `aud` of incoming Google id_tokens
 # (GoogleIdTokenVerifier) and is also sent when kicking off the authorize redirect —

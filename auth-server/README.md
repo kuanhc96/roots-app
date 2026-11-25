@@ -12,6 +12,7 @@ A fullstack Spring Boot + Nuxt/Vue application that handles authentication for t
 | `REDIS_HOST`                      | No | `localhost` | Redis host for Spring Session + Google `oauth_state` store |
 | `REDIS_PORT`                      | No | `6381` | Redis port for Spring Session + Google `oauth_state` store |
 | `SERVER_PORT`                     | No | `9000` | HTTP port the server listens on |
+| `AUTH_SERVER_ISSUER`              | No | Inferred from the request URL | Fixed OAuth/OIDC issuer; Compose uses `http://auth-server:9000` for consistent ID-token and back-channel logout-token validation |
 | `REMEMBER_ME_KEY`                 | No | `dev-remember-me-key-change-in-prod` | Secret key used to sign remember-me cookies; change in production |
 | `REMEMBER_ME_TOKEN_VALIDITY_SECONDS` | No | `1209600` (14 days) | Lifetime of the remember-me cookie in seconds |
 | `LOGOUT_TOKEN_TIME_TO_LIVE_SECONDS` | No | `300` (5 minutes) | Logout token lifetime in seconds (`logout-token.time-to-live-seconds`); `exp` is `iat` plus this value |
@@ -20,6 +21,12 @@ A fullstack Spring Boot + Nuxt/Vue application that handles authentication for t
 | `SPRING_MAIL_PASSWORD`              | Yes (every profile) | — (no default) | Gmail App Password for the above account (not the account password; requires 2FA + App Password in Google Account settings) |
 | `GOOGLE_CLIENT_ID`                  | No | the dev Google OAuth client id | **Server runtime** (normal env/JVM var). Expected `aud` of incoming Google id_tokens (`GoogleIdTokenVerifier` in `GoogleAuthConfig`); property `google.client-id`. The client id is public information, so a checked-in default is safe |
 | `NUXT_PUBLIC_GOOGLE_CLIENT_SECRET`  | Yes, for Google login to work | — (empty) | **Frontend build time — see [Google Sign-In configuration](#google-sign-in-configuration-build-time-vs-runtime) below.** Consumed by `nuxt generate`, not by the JVM: it must be in the environment of the *build* (or in `frontend/.env`), and setting it on the running JAR does nothing |
+
+The fixed issuer applies to discovery metadata, issued tokens, and back-channel
+logout notifications. When browser and server-to-server traffic use different
+hostnames, configure one stable issuer and ensure OIDC clients can reach its
+discovery endpoint. Leaving it unset preserves request-derived issuer behavior
+for local development.
 
 ### Google Sign-In configuration (build time vs runtime)
 
