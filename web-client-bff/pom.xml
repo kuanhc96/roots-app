@@ -37,14 +37,7 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-redis</artifactId>
-        </dependency>
-        <!-- Boot 4 ships session auto-config as its own module; the plain
-             org.springframework.session:spring-session-data-redis jar alone would
-             not activate Redis-backed sessions. -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-session-data-redis</artifactId>
+            <artifactId>spring-boot-starter-oauth2-client</artifactId>
         </dependency>
 
         <dependency>
@@ -69,6 +62,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

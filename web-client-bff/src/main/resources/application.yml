@@ -1,15 +1,31 @@
 spring:
   application:
     name: web-client-bff
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
+  security:
+    oauth2:
+      client:
+        registration:
+          web-client-registration:
+            client-id: ${web.client.id}
+            client-secret: ${web.client.secret}
+            authorization-grant-type: authorization_code
+            client-authentication-method: client_secret_basic
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope:
+              - openid
+              - WEB_CLIENT_READ
+        provider:
+          web-client-registration:
+            issuer-uri: ${AUTH_SERVER_ISSUER:${auth-server.internal-location}}
+            authorization-uri: ${auth-server.external-location}/oauth2/authorize
+            token-uri: ${auth-server.internal-location}/oauth2/token
+            jwk-set-uri: ${auth-server.internal-location}/oauth2/jwks
 
 server:
   port: ${SERVER_PORT:8083}
   servlet:
     session:
+      persistent: false
       cookie:
         name: __Host-SESSION
         secure: true
@@ -18,8 +34,8 @@ server:
         path: /
 
 bff-server:
-  # This server's externally reachable base URL; it serves both the SPA and BFF API.
-  # Used to build the OAuth2 redirect_uri, which must match an auth-server client URI.
+  # Default origin for browser-facing login and logout redirects.
+  # Spring derives the callback URI from the request's public base URL.
   external-location: ${BFF_SERVER_EXTERNAL_LOCATION:http://localhost:8083}
 
 auth-server:
@@ -44,12 +60,7 @@ web:
     # Required: WEB_CLIENT_PKCE is confidential and authenticates with client_secret_basic.
     secret: ${WEB_CLIENT_SECRET}
     # The SPA is served by this app, so callback and logout return to the same origin.
-    origin: ${WEB_CLIENT_ORIGIN:http://localhost:8083}
-
-token-store:
-  # TTL applied to stored refresh tokens. The refresh token is opaque (no readable
-  # exp), so this mirrors auth-server's settings.token.refresh-token-time-to-live.
-  refresh-token-ttl-seconds: ${REFRESH_TOKEN_TTL_SECONDS:3600}
+    origin: ${WEB_CLIENT_ORIGIN:${bff-server.external-location}}
 
 info:
   app:

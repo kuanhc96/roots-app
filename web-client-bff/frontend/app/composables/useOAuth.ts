@@ -1,6 +1,6 @@
 /**
  * Client for the web-client-bff's auth endpoints. The browser never sees tokens or the
- * client secret anymore: the bff holds them in Redis keyed by the SESSION cookie,
+ * client secret anymore: the bff holds them server-side,
  * and this composable only ever handles the id_token *claims* the bff serves from
  * /api/auth/status. The claims are deserialized from that JSON response and stored
  * as three separate sessionStorage keys; `email`'s presence is what "logged in"
@@ -58,7 +58,7 @@ export function useOAuth() {
    * which owns the state and every OAuth2 parameter and 302s on to auth-server.
    */
   function authorize() {
-    window.location.href = '/api/auth/authorize'
+    window.location.href = '/oauth2/authorization/web-client-registration'
   }
 
   /** The full login flow: already logged in? claims are stored and we're done — otherwise authorize. */
@@ -75,7 +75,7 @@ export function useOAuth() {
 
   /**
    * Starts server-side logout: a full browser navigation to the BFF, which deletes
-   * the session's Redis token keys and drives OIDC RP-initiated logout against
+   * the authorized client and session and drives OIDC RP-initiated logout against
    * auth-server with the id_token it holds (the browser no longer has the id_token,
    * so it cannot send id_token_hint itself). auth-server redirects the browser to
    * web-client-bff's /logout page, whose onMounted runs the local `logout()` below to
