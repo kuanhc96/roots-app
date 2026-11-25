@@ -65,6 +65,7 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
+import org.springframework.util.StringUtils;
 
 import javax.sql.DataSource;
 import java.security.KeyPair;
@@ -277,9 +278,13 @@ public class SecurityConfig {
     }
 
     @Bean
-    public AuthorizationServerSettings authorizationServerSettings() {
-        return AuthorizationServerSettings.builder()
-                .build();
+    public AuthorizationServerSettings authorizationServerSettings(
+            @Value("${auth-server.issuer:}") String issuer) {
+        AuthorizationServerSettings.Builder settings = AuthorizationServerSettings.builder();
+        if (StringUtils.hasText(issuer)) {
+            settings.issuer(issuer);
+        }
+        return settings.build();
     }
 
     @Bean

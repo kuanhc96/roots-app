@@ -2,8 +2,8 @@
  * Client for the embedded app's same-origin /api/auth endpoints.
  * 
  * The browser never sees tokens or the client secret — the account-management-client-bff
- * holds them in Redis keyed by the __Host-AMC_SESSION cookie, and this composable
- * only handles the id_token claims the bff serves from /api/auth/status. The claims
+ * holds authorized clients in memory and identity in the __Host-AMC_SESSION session.
+ * This composable only handles the identity claims served from /api/auth/status. The claims
  * are deserialized from the response and stored as sessionStorage keys; `email`'s
  * presence is what "logged in" means to the UI.
  */
@@ -60,7 +60,7 @@ export function useOAuth() {
    * which owns the state and every OAuth2 parameter and 302s on to auth-server.
    */
   function authorize() {
-    window.location.href = '/api/auth/authorize'
+    window.location.href = '/oauth2/authorization/account-management-client-registration'
   }
 
   /** The full login flow: check status, and if not logged in, authorize. */
@@ -76,9 +76,9 @@ export function useOAuth() {
   }
 
   /**
-   * Starts server-side logout: a full browser navigation to the bff, which deletes
-   * the session's Redis token keys and drives OIDC RP-initiated logout against
-   * auth-server with the id_token it holds. auth-server redirects the browser to
+   * Starts server-side logout: a full browser navigation to the bff, which removes
+   * the authorized client, invalidates the session, and drives OIDC RP-initiated logout
+   * against auth-server with the session's id_token. auth-server redirects the browser to
    * account-management-client's /logout landing page.
    */
   function startLogout() {

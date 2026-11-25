@@ -1,20 +1,19 @@
 package com.roots.account_management_client_bff.service;
 
-import com.roots.account_management_client_bff.enums.TokenType;
-import com.roots.account_management_client_bff.util.JwtPayload;
-import lombok.RequiredArgsConstructor;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.io.IOException;
 import java.net.URI;
-import java.util.Optional;
 
 @Service
-@RequiredArgsConstructor
-public class LogoutService {
-
-    private final TokenStoreService tokenStore;
+public class LogoutService implements LogoutSuccessHandler {
 
     @Value("${auth-server.external-location}")
     private String authServerExternalLocation;
@@ -23,21 +22,20 @@ public class LogoutService {
     @Value("${account-management.client.origin}")
     private String accountManagementClientOrigin;
 
-    public URI buildLogoutRedirect(String sessionId) {
-        Optional<String> idToken = tokenStore.find(sessionId, TokenType.ID_TOKEN);
-
+    public URI buildLogoutRedirect(Authentication authentication) {
         UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(authServerExternalLocation)
                 .path("/connect/logout")
                 .queryParam("client_id", clientId)
                 .queryParam("post_logout_redirect_uri", accountManagementClientOrigin + "/logout");
-        idToken.ifPresent(token -> builder.queryParam("id_token_hint", token));
-
+        if (authentication != null && authentication.getPrincipal() instanceof OidcUser user) {
+            builder.queryParam("id_token_hint", user.getIdToken().getTokenValue());
+        }
         return builder.encode().build().toUri();
     }
 
-    public void logout(String logoutToken) {
-        tokenStore.storeLogoutToken(logoutToken);
-        tokenStore.clearTokensBySid(JwtPayload.parse(logoutToken).getSid());
+    @Override
+    public void onLogoutSuccess(HttpServletRequest request, HttpServletResponse response,
+                                Authentication authentication) throws IOException {
+        response.sendRedirect(buildLogoutRedirect(authentication).toString());
     }
-
 }

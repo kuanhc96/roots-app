@@ -81,6 +81,7 @@ services:
       MYSQL_AUTH_SERVER_DB_URL: jdbc:mysql://auth-server-db:3308/auth-server-db
       SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME}
       SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD}
+      AUTH_SERVER_ISSUER: http://auth-server:9000
       REMEMBER_ME_KEY: ${REMEMBER_ME_KEY:-dev-remember-me-key-change-in-prod}
       REDIS_HOST: auth-server-redis
       REDIS_PORT: 6381
@@ -179,13 +180,10 @@ services:
     depends_on:
       gateway-server:
         condition: service_healthy
-      bff-server-redis:
-        condition: service_healthy
       auth-server:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
-      REDIS_HOST: bff-server-redis
       AUTH_SERVER_INTERNAL_LOCATION: http://auth-server:9000
       ACCOUNT_MANAGEMENT_CLIENT_SECRET: ${ACCOUNT_MANAGEMENT_CLIENT_SECRET}
     healthcheck:

@@ -3,11 +3,7 @@ package com.roots.account_management_client_bff.unit;
 import com.roots.account_management_client_bff.config.SpaFallbackConfig;
 import com.roots.account_management_client_bff.controller.AuthController;
 import com.roots.account_management_client_bff.dto.response.LoginStatusResponse;
-import com.roots.account_management_client_bff.service.AuthCallbackService;
 import com.roots.account_management_client_bff.service.AuthStatusService;
-import com.roots.account_management_client_bff.service.AuthorizeService;
-import com.roots.account_management_client_bff.service.LogoutService;
-import com.roots.account_management_client_bff.validator.LogoutTokenValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,21 +11,17 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.junit.jupiter.web.SpringJUnitWebConfig;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
-import java.net.URI;
-
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -40,8 +32,6 @@ class SpaRoutingTest {
     private WebApplicationContext context;
     @Autowired
     private AuthStatusService authStatus;
-    @Autowired
-    private LogoutService logout;
     private MockMvc mvc;
 
     @BeforeEach
@@ -70,21 +60,11 @@ class SpaRoutingTest {
 
     @Test
     void apiControllerTakesPrecedenceOverSpaFallback() throws Exception {
-        when(authStatus.getLoginStatus(anyString())).thenReturn(LoginStatusResponse.notLoggedIn());
+        when(authStatus.getLoginStatus(isNull())).thenReturn(LoginStatusResponse.notLoggedIn());
         mvc.perform(get("/api/auth/status"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(content().json("{\"isLoggedIn\":false}"));
-    }
-
-    @Test
-    void logoutEndpointInvalidatesSessionAndRedirectsRatherThanServingSpa() throws Exception {
-        MockHttpSession session = new MockHttpSession();
-        when(logout.buildLogoutRedirect(session.getId())).thenReturn(URI.create("http://localhost:9000/connect/logout"));
-        mvc.perform(get("/api/auth/logout").session(session))
-                .andExpect(status().isFound())
-                .andExpect(redirectedUrl("http://localhost:9000/connect/logout"));
-        assertThat(session.isInvalid()).isTrue();
     }
 
     @Configuration
@@ -96,24 +76,5 @@ class SpaRoutingTest {
             return mock(AuthStatusService.class);
         }
 
-        @Bean
-        AuthorizeService authorizeService() {
-            return mock(AuthorizeService.class);
-        }
-
-        @Bean
-        AuthCallbackService authCallbackService() {
-            return mock(AuthCallbackService.class);
-        }
-
-        @Bean
-        LogoutService logoutService() {
-            return mock(LogoutService.class);
-        }
-
-        @Bean
-        LogoutTokenValidator logoutTokenValidator() {
-            return mock(LogoutTokenValidator.class);
-        }
     }
 }

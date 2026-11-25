@@ -3,9 +3,9 @@ package com.roots.authserver.component;
 import java.io.IOException;
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
+import org.springframework.security.oauth2.server.authorization.context.AuthorizationServerContextHolder;
 import org.springframework.security.oauth2.server.authorization.oidc.web.authentication.OidcLogoutAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
@@ -37,9 +37,6 @@ public final class BackChannelOidcLogoutAuthenticationSuccessHandler implements 
 
     private String rememberMeCookieName = DEFAULT_REMEMBER_ME_COOKIE_NAME;
 
-    @Value("${auth-server.external-location}")
-    private String iss;
-
     public BackChannelOidcLogoutAuthenticationSuccessHandler(
             CustomJdbcRegisteredClientRepository registeredClientRepository,
             LogoutTokenService logoutTokenService) {
@@ -58,7 +55,8 @@ public final class BackChannelOidcLogoutAuthenticationSuccessHandler implements 
         if (session != null) {
             List<RegisteredClient> registeredClients = registeredClientRepository.findAll();
             // Send back-channel logout notifications asynchronously so slow RPs don't block the redirect
-            logoutTokenService.sendBackChannelLogoutAsync(registeredClients, null, iss, authentication,
+            logoutTokenService.sendBackChannelLogoutAsync(registeredClients, null,
+                    AuthorizationServerContextHolder.getContext().getIssuer(), authentication,
                     session);
         } else {
             log.warn("Session not found during logout; skipping back-channel logout notifications");
