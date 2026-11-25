@@ -34,6 +34,10 @@ jobs:
         working-directory: gateway-server
         run: mvn package -DskipTests
 
+      - name: Verify gateway starts without Redis
+        working-directory: gateway-server
+        run: mvn surefire:test -Dtest="GatewayServerApplicationTests"
+
       - name: Build gateway-server image
         working-directory: gateway-server
         run: mvn jib:dockerBuild -Djib.to.image=${{ secrets.DOCKERHUB_USERNAME }}/gateway-server:ci

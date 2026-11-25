@@ -9,6 +9,7 @@ on:
       - 'web-client-bff/pom.xml'
       - '.github/workflows/web-client-bff-ci.yml'
       - 'docker-compose.yml'
+      - 'auth-server/src/main/resources/initialize_db/create_client_table.sql'
 
 jobs:
   integration-test:
@@ -45,11 +46,15 @@ jobs:
         working-directory: web-client-bff
         run: mvn package -DskipTests
 
+      - name: Run unit tests
+        working-directory: web-client-bff
+        run: mvn surefire:test '-Dtest=%regex[.*unit.*]'
+
       - name: Build web-client-bff image
         working-directory: web-client-bff
         run: mvn jib:dockerBuild -Djib.to.image=${{ secrets.DOCKERHUB_USERNAME }}/web-client-bff:ci
 
-      # The app waits for gateway-server, auth-server and shared Redis to be healthy.
+      # The app waits for gateway-server and auth-server to be healthy.
       - name: Start services
         run: docker compose up -d --wait web-client-bff
 

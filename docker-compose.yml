@@ -149,16 +149,15 @@ services:
     depends_on:
       gateway-server:
         condition: service_healthy
-      bff-server-redis:
-        condition: service_healthy
       auth-server:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
-      REDIS_HOST: bff-server-redis
       # Internal only: the browser-facing AUTH_SERVER_EXTERNAL_LOCATION keeps its
       # localhost:9000 default — the internal hostname doesn't resolve for browsers.
       AUTH_SERVER_INTERNAL_LOCATION: http://auth-server:9000
+      # Discovery and token issuer must match auth-server's configured issuer.
+      AUTH_SERVER_ISSUER: http://auth-server:9000
       GATEWAY_SERVER_INTERNAL_LOCATION: http://gateway-server:8080
       # Must match the WEB_CLIENT_PKCE client_secret seeded in auth-server's DB
       # ({noop}secret in the checked-in seed). Required — no default in the app.
@@ -226,17 +225,12 @@ services:
     depends_on:
       eureka-server:
         condition: service_healthy
-      bff-server-redis:
-        condition: service_healthy
       simple-resource-server:
         condition: service_healthy
       account-management:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
-      REDIS_HOST: bff-server-redis
-      REDIS_PORT: 6379
-      AUTH_SERVER_INTERNAL_LOCATION: http://auth-server:9000
       EUREKA_SERVER_URL: http://eureka-server:8070/eureka/
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent localhost:8080/actuator/health | grep UP || exit 1"]
