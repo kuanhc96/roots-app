@@ -56,15 +56,14 @@ class GuestRoleGatewayIntegrationTest {
         assertThat(statusBefore.statusCode()).isEqualTo(200);
         assertThat(statusBefore.body()).contains("\"isLoggedIn\":false");
 
-        String sessionCookie = extractSessionCookie(statusBefore)
-                .orElseThrow(() -> new IllegalStateException("No __Host-SESSION cookie on status response"));
-
-        HttpResponse<String> authorizeResponse = bffClient.getAuthorize(sessionCookie);
+        HttpResponse<String> authorizeResponse = bffClient.getAuthorize(null);
         assertThat(authorizeResponse.statusCode()).isEqualTo(302);
+        String sessionCookie = extractSessionCookie(authorizeResponse)
+                .orElseThrow(() -> new IllegalStateException("No __Host-SESSION cookie on authorize response"));
         String authorizeLocation = authorizeResponse.headers().firstValue("Location").orElseThrow();
         assertThat(authorizeLocation).startsWith(authServerLocation + "/oauth2/authorize?");
 
-        String callbackPrefix = bffServerLocation + "/api/auth/callback";
+        String callbackPrefix = bffServerLocation + "/login/oauth2/code/web-client-registration";
         String callbackUrl = authServerClient.completeGuestLogin(authorizeLocation, callbackPrefix);
         assertThat(callbackUrl).startsWith(callbackPrefix);
         assertThat(queryParam(callbackUrl, "code")).isNotBlank();

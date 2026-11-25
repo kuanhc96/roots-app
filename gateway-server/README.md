@@ -1,25 +1,23 @@
 # Gateway Server
 
-**Spring Cloud Gateway** (WebFlux) routes requests to downstream resource services and can enrich them with OAuth2 access tokens from shared Redis. web-client-bff serves browser traffic directly and sends its outbound role API calls through the gateway with a bearer token.
+**Spring Cloud Gateway** (WebFlux) routes requests to downstream resource services, preserving caller-supplied bearer tokens. web-client-bff serves browser traffic directly and sends its outbound role API calls through the gateway with a bearer token. The gateway has no Redis connection.
 
 ## Architecture
 
 Gateway-server runs on **port 8080** and acts as a reverse proxy for the entire application:
 
 - web-client-bff's SPA, login lifecycle, and callback are not gateway routes and require no Eureka registration
-- Browser session cookie (`__Host-SESSION`) is preserved through the gateway
-- Gateway reads access tokens from **shared bff-server Redis** (port 6379) using the session ID decoded from the cookie
-- Tokens are attached to upstream requests targeting protected resource servers
-- Gateway is **stateless** — it does not own login/session lifecycle, but it can perform refresh-token exchange with auth-server when only a refresh token is present
+- The BFF owns browser sessions, access tokens, and refresh-token exchange using Spring Security OAuth2 Client
+- The gateway forwards the supplied `Authorization` header to protected resource servers
+- Gateway is **stateless**: it does not resolve session cookies, store tokens, or perform OAuth2 token exchanges
 
-### Token Lookup Flow
+### Bearer Token Flow
 
-1. Browser sends request with `__Host-SESSION` cookie
-2. Gateway decodes the session ID from the cookie
-3. Gateway queries bff-server's Redis: `GET <sessionId>:access_token`
-4. If access token exists, gateway attaches it to the upstream request as a bearer token
-5. If access token is missing but refresh token exists, gateway exchanges it at auth-server `/oauth2/token` and stores new tokens back in Redis
-6. Upstream service validates the token via JWT verification (fetching JWK from auth-server)
+1. Browser calls the BFF with its session cookie.
+2. The BFF resolves or refreshes its authorized client's access token.
+3. The BFF calls the gateway with `Authorization: Bearer <access_token>`, without a browser session cookie.
+4. The gateway routes the request and preserves the bearer header.
+5. The resource server validates the JWT and enforces scope/role checks. A session cookie alone does not grant resource access through the gateway.
 
 ### Routing
 
@@ -27,7 +25,8 @@ Gateway routing behavior:
 
 | Path | Upstream |
 |---|---|
-| `/simple-resource-server/**` | `SIMPLE-RESOURCE-SERVER` via a custom route (`rewritePath` removes the prefix) with `RefreshTokenFilter` then `AccessTokenFilter` |
+| `/roots-app/simple-resource-server/**` | `SIMPLE-RESOURCE-SERVER` via a custom route (prefix rewritten to `/api/`) |
+| `/roots-app/account-management/**` | `ACCOUNT-MANAGEMENT` via a custom route (prefix rewritten to `/api/`) |
 | `/auth-server/**` | `AUTH-SERVER` via discovery-locator route (service-id prefix) |
 | `/account-management/**` | `ACCOUNT-MANAGEMENT` via discovery-locator route (service-id prefix) |
 
@@ -39,10 +38,6 @@ Gateway routing behavior:
 spring:
   application:
     name: gateway-server
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}        # Shared bff-server Redis (compose: bff-server-redis)
-      port: ${REDIS_PORT:6379}             # Default 6379 (not auth-server's 6381)
 
 server:
   port: ${SERVER_PORT:8080}                # Gateway listen port
@@ -85,15 +80,10 @@ This triggers a clean shutdown with proper Eureka de-registration before the pro
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `REDIS_HOST` | `localhost` | Redis hostname (compose: `bff-server-redis`) |
-| `REDIS_PORT` | `6379` | Redis port (shared with bff-server) |
 | `SERVER_PORT` | `8080` | Gateway listen port |
 | `EUREKA_SERVER_URL` | `http://localhost:8070/eureka/` | Eureka registry URL; compose sets `http://eureka-server:8070/eureka/` |
-| `WEB_CLIENT_ORIGIN` | `http://localhost:3000` | Allowed browser origin for CORS |
-| `WEB_CLIENT_ID` | `WEB_CLIENT` | OAuth2 client ID used for refresh-token exchange |
-| `WEB_CLIENT_SECRET` | `secret` | OAuth2 client secret used for refresh-token exchange |
-| `AUTH_SERVER_INTERNAL_LOCATION` | `http://localhost:9000` | Auth-server URL used by gateway for token exchange |
-| `REFRESH_TOKEN_TTL_SECONDS` | `3600` | TTL used when persisting refreshed `refresh_token` |
+| `WEB_CLIENT_ORIGIN` | `http://localhost:8083` | Allowed web-client browser origin for CORS |
+| `ACCOUNT_MANAGEMENT_CLIENT_ORIGIN` | `http://localhost:8084` | Allowed account-management browser origin for CORS |
 | `SPRING_PROFILES_ACTIVE` | _(none)_ | Profile activation (e.g., `test` in CI) |
 
 ## Local Development
@@ -101,14 +91,17 @@ This triggers a clean shutdown with proper Eureka de-registration before the pro
 ```bash
 cd gateway-server
 
-# Start the gateway locally (requires Redis running on localhost:6379)
+# Start the gateway locally (no Redis connection required)
 mvn spring-boot:run
 
 # Build jar + test classes
 mvn package
 
-# Run unit tests
-mvn test
+# Check startup and resource routes without external services
+mvn test -Dtest="GatewayServerApplicationTests"
+
+# Run live integration tests after starting dependencies
+mvn surefire:test -Dtest="GuestRoleGatewayIntegrationTest"
 ```
 
 ## Docker Compose
@@ -116,7 +109,7 @@ mvn test
 Gateway-server is part of the `docker-compose.yml` stack:
 
 ```bash
-# Start gateway + its registry, resource services, shared Redis and auth dependencies
+# Start gateway + its registry, resource services and auth dependencies
 docker compose up -d --wait gateway-server
 
 # Gateway health check
@@ -130,8 +123,9 @@ docker compose logs -f gateway-server
 
 Gateway-server depends on:
 1. `eureka-server` (healthy) — service discovery for `lb://...` targets
-2. `bff-server-redis` (healthy) — the shared token store
-3. `simple-resource-server`, `account-management`, and `account-management-bff` (healthy), which bring in auth-server and its DB/Redis dependencies
+2. `simple-resource-server` and `account-management` (healthy), which bring in auth-server and its DB/Redis dependencies
+
+The gateway itself does not depend on `bff-server-redis`. Auth-server's separate Redis-backed sessions remain unchanged.
 
 There is no startup dependency on web-client-bff. Instead, web-client-bff waits for the gateway to be healthy, avoiding a startup cycle.
 
@@ -143,14 +137,13 @@ There is no startup dependency on web-client-bff. Instead, web-client-bff waits 
 
 **Steps:**
 1. Checkout and setup JDK 21 + Maven cache
-2. Run unit tests first (fast-fail gate): `mvn test -Dtest="GatewayServerApplicationTests,AccessTokenFilterTest,RefreshTokenFilterTest"`
-3. Docker login (pull private `:latest` dependency images, including auth-server)
-4. Build gateway-server jar: `mvn package -DskipTests`
-5. Build gateway-server image: `mvn jib:dockerBuild -Djib.to.image=...:ci`
-6. Build web-client-bff's embedded SPA/JAR and local `:ci` image as the login fixture, then `docker compose up -d --wait web-client-bff` (starts the local gateway image and dependencies first; no initial web-client-bff CD release is required)
-7. Verify health: `curl http://localhost:8080/actuator/health | grep UP`
-8. Run integration tests after the stack is healthy: `mvn surefire:test -Dtest="GuestRoleGatewayIntegrationTest"`
-9. Dump logs on failure
+2. Docker login (pull private `:latest` dependency images, including auth-server)
+3. Build gateway-server jar: `mvn package -DskipTests`, then run `GatewayServerApplicationTests` to confirm startup and routing without Redis
+4. Build gateway-server image: `mvn jib:dockerBuild -Djib.to.image=...:ci`
+5. Build web-client-bff's embedded SPA/JAR and local `:ci` image as the login fixture, then `docker compose up -d --wait web-client-bff` (starts the local gateway image and dependencies first; no initial web-client-bff CD release is required)
+6. Verify health: `curl http://localhost:8080/actuator/health | grep UP`
+7. Run integration tests after the stack is healthy: `mvn surefire:test -Dtest="GuestRoleGatewayIntegrationTest"`
+8. Dump logs on failure
 
 **Required GitHub Secrets:**
 - `DOCKERHUB_USERNAME` — for pulling/building images

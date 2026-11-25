@@ -1,10 +1,6 @@
 spring:
   application:
     name: gateway-server
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
   cloud:
     gateway:
       server:
@@ -49,14 +45,7 @@ management:
 web:
   client:
     origin: ${WEB_CLIENT_ORIGIN:http://localhost:8083}
-    id: ${WEB_CLIENT_ID:WEB_CLIENT}
-    secret: ${WEB_CLIENT_SECRET:secret}
 
 account-management:
   client:
     origin: ${ACCOUNT_MANAGEMENT_CLIENT_ORIGIN:http://localhost:8084}
-    id: ${ACCOUNT_MANAGEMENT_CLIENT_ID:ACCOUNT_MANAGEMENT_CLIENT}
-    secret: ${ACCOUNT_MANAGEMENT_CLIENT_SECRET:secret}
-
-auth-server:
-  internal-location: ${AUTH_SERVER_INTERNAL_LOCATION:http://localhost:9000}

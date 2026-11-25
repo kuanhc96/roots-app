@@ -29,7 +29,7 @@ public class BffClient implements AutoCloseable {
     }
 
     public HttpResponse<String> getAuthorize(String sessionCookie) throws Exception {
-        return getUrl(baseUrl + "/api/auth/authorize", sessionCookie);
+        return getUrl(baseUrl + "/oauth2/authorization/web-client-registration", sessionCookie);
     }
 
     private HttpResponse<String> getUrl(String url, String sessionCookie) throws Exception {
